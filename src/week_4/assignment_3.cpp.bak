@@ -1,0 +1,65 @@
+#include <Arduino.h>
+#include "Uno_I2C.h"
+#include "module/OLED_128x64.h"
+#include "image.h"
+
+// UNO + 128x64 I2C OLED: the photos change by themselves, one every SLIDE_MS
+//   OLED: GND -> GND, VCC -> 5V, SCL -> D13, SDA -> D11
+//
+// the photos are black / white (the OLED has no colors), made by lib/image/source/convert.py
+// (see src/week_4/assignment_1.cpp); the switch of assignment 1 is replaced by a clock:
+// the time is counted from the last change, so drawing does not make the slides drift
+using Bus = Uno::UnoI2C<13, 11>;
+using Screen = SSD1306::OLED128x64<Bus>;
+Screen screen;
+
+constexpr uint16_t SLIDE_MS = 1000;
+
+// ---------- photos ----------
+
+template <class Picture>
+void drawPicture() {
+    image::FlashImage<Screen> pictures(screen);
+    pictures.draw<Picture>(0, 0);
+}
+
+void (*const photos[])() = {
+    drawPicture<picture::sunset_uno_128x64_palette_2>,
+    drawPicture<picture::moon_uno_128x64_palette_2>,
+    drawPicture<picture::city_uno_128x64_palette_2>,
+    drawPicture<picture::logo_uno_mac_128x64_palette_2>,
+};
+constexpr uint8_t PHOTO_COUNT = sizeof(photos) / sizeof(photos[0]);
+
+uint8_t photo = 0;
+uint32_t nextSlideMs = 0;
+
+void showPhoto() {
+    screen.clear();
+    photos[photo]();
+    screen.display();
+}
+
+// ---------- main ----------
+
+// nothing answered at 0x3C: stop (the built-in LED is on SCL, it cannot blink)
+void halt() {
+    while (true) {
+    }
+}
+
+void setup() {
+    if (!screen.init()) {
+        halt();
+    }
+    showPhoto();
+    nextSlideMs = millis() + SLIDE_MS;
+}
+
+void loop() {
+    if ((int32_t)(millis() - nextSlideMs) >= 0) {
+        nextSlideMs += SLIDE_MS;
+        photo = (uint8_t)((photo + 1) % PHOTO_COUNT);
+        showPhoto();
+    }
+}

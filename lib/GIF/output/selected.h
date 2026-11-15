@@ -7,5 +7,6 @@
 #include "orbit_uno_120x120_palette_16.h"
 #include "orbit_mac_120x120_palette_565.h"
 #include "orbit_uno_mac_120x120_palette_16.h"
+#include "orbit_uno_64x64_palette_16_mono.h"
 
 #endif

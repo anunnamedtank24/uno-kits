@@ -7,7 +7,7 @@ import math
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from PIL import Image, ImageSequence
+from PIL import Image, ImageOps, ImageSequence
 
 import check
 
@@ -43,6 +43,8 @@ Colors:
     --palette 256           one palette of up to 256 colors, 2 bytes per run (uno only: palette stays in flash)
     --palette 565           every pixel its own RGB565 color, 3 bytes per run
     --colors N              fewer colors in the palette (16 / 256 only), --dither for gradients
+    --mono                  black and white only (palette 16 with 0x0000 / 0xFFFF), for OLEDs:
+                            gray >= --threshold is white, or --dither; --invert swaps them
 Frame rate:
     --max-fps F             frames closer than 1/F are dropped, their time goes to the frame before
     --min-fps F             lower limit for --max-bytes, and a warning if the board cannot draw that fast
@@ -86,6 +88,9 @@ class Settings:
     palette: int
     colors: int | None
     dither: bool
+    mono: bool
+    threshold: int
+    invert: bool
     background: tuple[int, int, int]
     screen_width: int
     screen_height: int
@@ -241,6 +246,19 @@ def get_palette_and_value_frames(frames: list[Image.Image], settings: Settings) 
         for frame in frames:
             value_frames.append([get_rgb565(*rgb) for rgb in get_pixels(frame)])
         return [], value_frames
+
+    if settings.mono:
+        # black (0) and white (1): an OLED shows color 0 dark and anything else lit
+        value_frames = []
+        for frame in frames:
+            gray = frame.convert("L")
+            if settings.invert:
+                gray = ImageOps.invert(gray)
+            if settings.dither:
+                value_frames.append([1 if value else 0 for value in get_pixels(gray.convert("1", dither=Image.Dither.FLOYDSTEINBERG))])
+            else:
+                value_frames.append([1 if value >= settings.threshold else 0 for value in get_pixels(gray)])
+        return [0x0000, 0xFFFF], value_frames
 
     # quantize every frame stacked together; fast octree keeps small distinct colors
     color_count = min(settings.colors or settings.palette, settings.palette)
@@ -508,6 +526,9 @@ def get_settings_str(settings: Settings, gif_info: str, delays: list[int], palet
     crop = "none" if settings.crop is None else "x {:.1f} y {:.1f} w {:.1f} h {:.1f} (gif px)".format(
         settings.crop[0], settings.crop[1], settings.crop[2] - settings.crop[0], settings.crop[3] - settings.crop[1])
     color_count = "no palette" if settings.palette == 565 else f"{len(palette)} colors used"
+    if settings.mono:
+        way = "dither" if settings.dither else f"threshold {settings.threshold}"
+        color_count = f"mono (black / white), {way}, invert {'on' if settings.invert else 'off'}"
     time_name = "draw" if "uno" in settings.targets else "draw + send"
     target_lines = [f"target      {target}: {TARGETS[target]['note']}" for target in settings.targets]
     lines = target_lines + [
@@ -641,7 +662,8 @@ def get_name(gif_path: Path, settings: Settings) -> str:
         gif_name = "_" + gif_name
     screen_width = settings.stored_width*settings.scale_x
     screen_height = settings.stored_height*settings.scale_y
-    return f"{gif_name}_{get_target_label(settings.targets)}_{screen_width}x{screen_height}_palette_{settings.palette}"
+    mono = "_mono" if settings.mono else ""
+    return f"{gif_name}_{get_target_label(settings.targets)}_{screen_width}x{screen_height}_palette_{settings.palette}{mono}"
 
 
 def get_lib_relative_str(path: Path) -> str:
@@ -691,6 +713,16 @@ def get_color(value: str) -> tuple[int, int, int]:
     return int(text[0:2], 16), int(text[2:4], 16), int(text[4:6], 16)
 
 
+def get_byte(value: str) -> int:
+    try:
+        number = int(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"must be an integer, got {value!r}")
+    if not 0 <= number <= 255:
+        raise argparse.ArgumentTypeError(f"must be 0 ~ 255, got {number}")
+    return number
+
+
 def get_identifier(value: str) -> str:
     if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", value):
         raise argparse.ArgumentTypeError(f"must be a C++ name (letters, digits, _), got {value!r}")
@@ -730,7 +762,10 @@ def get_parser() -> argparse.ArgumentParser:
     color_group = parser.add_argument_group("colors")
     color_group.add_argument("--palette", type=int, choices=PALETTES, help="16 / 256 / 565 (default per target, config.json)")
     color_group.add_argument("--colors", type=get_positive_int, help="at most this many colors in the palette (16 / 256 only)")
-    color_group.add_argument("--dither", action="store_true", help="Floyd-Steinberg dithering (16 / 256): smoother gradients, more data")
+    color_group.add_argument("--dither", action="store_true", help="Floyd-Steinberg dithering (16 / 256 / --mono): smoother gradients, more data")
+    color_group.add_argument("--mono", action="store_true", help="black and white only (palette 16, colors 0x0000 / 0xFFFF): for OLEDs")
+    color_group.add_argument("--threshold", type=get_byte, default=128, help="--mono without --dither: gray >= this is white (default 128)")
+    color_group.add_argument("--invert", action="store_true", help="--mono: black <-> white")
     color_group.add_argument("--background", type=get_color, default=(0, 0, 0), help="color behind transparent pixels (default 000000)")
 
     frame_group = parser.add_argument_group("frames")
@@ -767,6 +802,15 @@ def check_args(parser: argparse.ArgumentParser, args: argparse.Namespace) -> lis
     except OSError as e:
         parser.error(f"not able to read the gif: {e}")
 
+    if args.mono:
+        if args.palette not in (None, 16):
+            parser.error(f"--mono uses --palette 16, got --palette {args.palette}")
+        if args.colors is not None:
+            warnings.append("--colors is ignored with --mono (2 colors)")
+            args.colors = None
+        args.palette = 16
+    elif args.invert or args.threshold != 128:
+        warnings.append("--threshold / --invert are only for --mono")
     if args.palette is None:
         args.palette = target["defaultPalette"]
     if args.palette not in target["palettes"]:
@@ -819,7 +863,8 @@ def get_settings(args: argparse.Namespace, gif_size: tuple[int, int], size_facto
     stored_width, stored_height = get_stored_size(screen_width, screen_height, scale_x, scale_y)
     return Settings(
         targets=args.target, byte_cycles=get_target_config(args.target)["byteCycles"],
-        palette=args.palette, colors=args.colors, dither=args.dither, background=args.background,
+        palette=args.palette, colors=args.colors, dither=args.dither, mono=args.mono, threshold=args.threshold,
+        invert=args.invert, background=args.background,
         screen_width=screen_width, screen_height=screen_height, crop=crop, scale_x=scale_x, scale_y=scale_y,
         stored_width=stored_width, stored_height=stored_height, resample=args.resample,
         max_fps=max_fps, min_fps=args.min_fps, keyframe=args.keyframe, tile=args.tile,

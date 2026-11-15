@@ -1,0 +1,35 @@
+{
+    "note": "ranges and defaults of convert.py / stream.py; hard limits (the format or the board cannot do it) stop with an error, recommended ranges only warn",
+    "board": {
+        "note": "UNO 16 MHz, ST7789 on 8 MHz SPI; a segment = one writeWindow (window + clipping), cycles counted like lib/GIF/source/config.json",
+        "cpuHz": 16000000,
+        "segmentCycles": 900,
+        "pixelCycles": 60
+    },
+    "screen": {
+        "note": "the biggest screen of this project (M130T); pictures are clipped, so bigger is only wasted data",
+        "width": 240,
+        "height": 240
+    },
+    "maxScale": 8,
+    "maxStoredSize": 240,
+    "targets": {
+        "uno": {
+            "note": "pixels in flash (output/*.h), drawn by image::FlashImage",
+            "palettes": [2, 16, 256, 565],
+            "recommendedPalettes": [2, 16, 256],
+            "defaultPalette": 16,
+            "byteCycles": 6,
+            "recommendedMaxBytes": 16000
+        },
+        "mac": {
+            "note": "pixels stay on the computer (output/mac/*.h), stream.py sends them to image::StreamImage; the board only has the size and the path (output/*.h); 256 colors would need 512 B RAM on the board",
+            "palettes": [2, 16, 565],
+            "recommendedPalettes": [2, 16, 565],
+            "defaultPalette": 565,
+            "baud": 1000000,
+            "byteCycles": 176,
+            "recommendedMaxBytes": null
+        }
+    }
+}

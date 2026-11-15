@@ -40,7 +40,7 @@ if (sensor.readRaw(raw) == sensor.OK) {
 }
 ```
 
-完整的例子：[src/test/test_2.cpp](../../src/test/test_2.cpp)，每秒把溫度用文字送到串口。
+完整的例子：`src/week_3/test_2.cpp`（沒在用時被 `hide.py` 改成 `.bak`），每秒把溫度用文字送到串口；接在螢幕上顯示的版本是 `src/week_3/assignment_1.cpp`。
 
 ## 函式
 

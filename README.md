@@ -1,6 +1,6 @@
 # UNO + ST7789
 
-Arduino UNO 驅動 1.3 吋 240×240 ST7789 螢幕（M130T 模組）的函式庫：圖形、文字、GIF 動畫，動畫可以存在 Flash，也可以從電腦串流。
+Arduino UNO 驅動 1.3 吋 240×240 ST7789 螢幕（M130T 模組）的函式庫：圖形、文字、GIF 動畫，動畫可以存在 Flash，也可以從電腦串流。另外有靜態圖片（jpg / png / webp / heic，從 Flash 或 Mac）、I2C OLED（SSD1306）和 DS18B20 溫度感測器；OLED 用同一套圖形、文字和圖片。
 
 - 用 template 做硬體抽象，編譯後跟直接寫暫存器一樣快。
 - 字型和動畫由 Python 工具事先轉好，並依 UNO 的畫圖時間挑最快的畫法。
@@ -18,9 +18,14 @@ Arduino UNO 驅動 1.3 吋 240×240 ST7789 螢幕（M130T 模組）的函式庫�
 │   ├── color/         RGB565 顏色
 │   ├── font/          字型（.ttf → .h）
 │   ├── GIF/           GIF 動畫（.gif → .h，Flash 播放或從電腦串流）
-│   └── temp_sensor/   DS18B20 溫度感測器（1-Wire）
+│   ├── temp_sensor/   DS18B20 溫度感測器（1-Wire）
+│   ├── I2C/           I2C OLED（SSD1306）：指令 + 板子 RAM 裡的畫面
+│   ├── image/         靜態圖片（.jpg / .png / .webp / .heic → .h，Flash 或從 Mac 串流）
+│   └── switch/        開關（GND、VCC、OUT）
 └── src/
-    └── test/          在板子上跑的完整測試，見 src/test/README.md
+    ├── hide.py        只留一個程式，其他的改成 .bak
+    ├── week_3/        M130T 測試、溫度感測器、彩色圖片、作業，見 src/week_3/README.md
+    └── week_4/        OLED、黑白圖片、開關的測試和作業，見 src/week_4/README.md
 ```
 
 ## 開始
@@ -32,8 +37,8 @@ pio run                  # 編譯
 pio run -t upload        # 燒錄
 ```
 
-- `src/` 裡只能有一個程式有 `setup()` / `loop()`，其他的要先移走，或把副檔名改掉。
-- 接線見 [src/test/README.md](src/test/README.md#接線)。
+- `src/` 裡只能有一個程式有 `setup()` / `loop()`，其他的要改成 `.bak`：`python -B src/hide.py week_4/test_1` 只留下那一個。
+- 接線見 [src/week_3/README.md](src/week_3/README.md#接線)（M130T）、[src/week_4/README.md](src/week_4/README.md#接線)（OLED）。
 
 ```cpp
 #include "Uno_ST7789.h"
@@ -69,6 +74,7 @@ pip install pillow pyserial
 |---|---|
 | `lib/font/source/` | [font/source/README.md](lib/font/source/README.md) |
 | `lib/GIF/source/` | [GIF/source/README.md](lib/GIF/source/README.md) |
+| `lib/image/source/` | [image/source/README.md](lib/image/source/README.md)（HEIC 可以另外裝 `pillow-heif`，沒裝就用 macOS 的 `sips`） |
 
 用 `python -B` 執行，不會產生 `__pycache__`。
 
@@ -84,4 +90,8 @@ pip install pillow pyserial
 | [lib/font/README.md](lib/font/README.md) | 字型；[source/](lib/font/source/README.md) 轉換、[output/](lib/font/output/README.md) 格式 |
 | [lib/GIF/README.md](lib/GIF/README.md) | 播放器；[source/](lib/GIF/source/README.md) 轉換和串流協定、[output/](lib/GIF/output/README.md) 格式 |
 | [lib/temp_sensor/README.md](lib/temp_sensor/README.md) | DS18B20 溫度感測器：接線、函式、解析度、錯誤 |
-| [src/test/README.md](src/test/README.md) | 測試清單 |
+| [lib/I2C/README.md](lib/I2C/README.md) | I2C OLED：接線、指令表、為什麼要在 RAM 留畫面、速度 |
+| [lib/image/README.md](lib/image/README.md) | 圖片：支援的檔案、顏色、Flash / 串流、在 OLED 上畫；[source/](lib/image/source/README.md) 轉換和串流協定、[output/](lib/image/output/README.md) 格式 |
+| [src/week_3/README.md](src/week_3/README.md) | M130T 測試、溫度感測器、彩色圖片、作業一～三 |
+| [lib/switch/README.md](lib/switch/README.md) | 開關：接線、去彈跳、`ACTIVE_HIGH` |
+| [src/week_4/README.md](src/week_4/README.md) | OLED、彩色圖片、開關的測試，作業一～三 |

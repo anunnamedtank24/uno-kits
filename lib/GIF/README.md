@@ -97,6 +97,28 @@ while (true) {
 - `UnoSerial` 用 D0/D1，所以不能同時用 Arduino 的 `Serial`，也要先關掉序列監看視窗。
 - `stream.py` 可以一直開著：燒錄時它會自動放開串口。但它打開串口時會讓板子重置，所以要先開 `stream.py`，再燒錄（詳見 [source/README.md](source/README.md#streampy)）。
 
+## 在 OLED 上播
+
+`SSD1306::Frame`（[I2C](../I2C/README.md)）也有 `setWindow`、`writeData16`、`endWrite`，所以 FlashPlayer 可以直接用：
+
+```bash
+python -B source/convert.py assets/orbit.gif output --target uno --fit 64x64 --mono --keyframe 8
+```
+
+```cpp
+SSD1306::OLED128x64<Bus> screen;
+GIF::FlashPlayer<SSD1306::OLED128x64<Bus>> player(screen);
+player.start<animation::orbit_uno_64x64_palette_16_mono>(32, 0);
+while (true) {
+    if (player.update()) {
+        screen.display();    // 畫進 RAM 的畫面，再送出改過的部分
+    }
+}
+```
+
+- `--mono`：OLED 只有亮暗，0 是暗、其他都是亮。
+- 實測 16.7 fps，沒有跳幀。
+
 ## 兩個播放器比較
 
 | | FlashPlayer | StreamPlayer |

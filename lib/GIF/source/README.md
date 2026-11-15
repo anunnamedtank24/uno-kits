@@ -60,6 +60,9 @@ python -B source/stream.py
 | `--colors N` | 調色盤只用 N 色（16 / 256 模式） |
 | `--dither` | 抖色：漸層比較平滑，但 run 變短、資料變大 |
 | `--background` | 透明的地方填什麼顏色，預設 000000 |
+| `--mono` | 只有黑白（16 色模式，調色盤 0x0000、0xFFFF），給 OLED 用：OLED 上 0 是暗、其他都是亮，彩色的動畫會變成全亮。檔名多一個 `_mono` |
+| `--threshold N` | `--mono` 沒有 `--dither` 時，灰階 ≥ N 是白（預設 128） |
+| `--invert` | `--mono`：黑白反過來 |
 
 ### 幀率和大小
 

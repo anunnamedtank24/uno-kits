@@ -1,0 +1,389 @@
+#include <Arduino.h>
+#include "Uno_I2C.h"
+#include "Uno_serial.h"
+#include "module/OLED_128x64.h"
+#include "graphics.h"
+#include "font.h"
+#include "image.h"
+
+// UNO + 0.96" 128x64 I2C OLED (SSD1306, address 0x3C)
+// GND -> GND, VCC -> 5V (or 3.3V), SCL -> D13, SDA -> D11 (bit-banged I2C: any two pins work)
+//
+// every test draws into the RAM copy, then screen.display() sends what changed;
+// tests 6 ~ 13 use the panel's own commands (contrast, scroll, fade, zoom ...)
+// tests 14, 15: pictures of lib/image (black / white, palette 2), 15 needs lib/image/source/stream.py
+using Bus = Uno::UnoI2C<13, 11>;
+using Screen = graphics::Canvas<SSD1306::OLED128x64<Bus>>;
+using Link = Uno::UnoSerial<1000000>;
+using BigPrintable = font::menlo_height_23_first_32_last_126_default_63;  // 8 x 23, ASCII 32 ~ 126
+Screen screen;
+
+constexpr uint16_t ON = 1;
+constexpr uint16_t OFF = 0;
+constexpr uint16_t HOLD_MS = 2000;
+
+// two lines of the 23 px font
+constexpr int16_t LINE_1 = 6;
+constexpr int16_t LINE_2 = 36;
+
+void clear() {
+    screen.clear();
+    screen.display();
+}
+
+// "0x43"
+void hexText(char *text, uint8_t value) {
+    const char DIGITS[] = "0123456789ABCDEF";
+    text[0] = '0';
+    text[1] = 'x';
+    text[2] = DIGITS[value >> 4];
+    text[3] = DIGITS[value & 0x0F];
+    text[4] = '\0';
+}
+
+// ---------- tests ----------
+
+// 0. 1-px border + corner blocks: checks size, mirroring and the init
+//    expected: frame touching all 4 edges, a 6x6 block in each corner,
+//              "128 x 64" upright and readable (not mirrored), pins at the top
+void testBorder() {
+    screen.drawHollowRectSize(0, 0, screen.width(), screen.height(), ON);
+    screen.drawFilledRectSize(0, 0, 6, 6, ON);
+    screen.drawFilledRectSize(screen.width() - 6, 0, 6, 6, ON);
+    screen.drawFilledRectSize(0, screen.height() - 6, 6, 6, ON);
+    screen.drawFilledRectSize(screen.width() - 6, screen.height() - 6, 6, 6, ON);
+    screen.drawTexts(32, 20, ON, screen.width(), " x ", screen.height());
+    screen.display();
+}
+
+// 1. graphics::Shapes on the panel
+//    expected: a fan of lines on the left, hollow / filled rect, circle, triangle on the right
+void testShapes() {
+    for (int16_t y = 0; y < 64; y += 8) {
+        screen.drawLinePoints(0, 63, 40, y, ON);
+    }
+    screen.drawHollowRectSize(46, 4, 24, 24, ON, 2);
+    screen.drawFilledRectSize(76, 4, 24, 24, ON);
+    screen.drawHollowCircleRadius(58, 46, 14, ON);
+    screen.drawFilledCircleRadius(88, 46, 14, ON);
+    screen.drawFilledTrianglePoints(106, 60, 126, 60, 116, 30, ON);
+    screen.drawHollowTrianglePoints(106, 26, 126, 26, 116, 2, ON);
+    screen.display();
+}
+
+// 2. graphics::Text with the 23 px font: letters, then numbers
+//    expected: "Hello, OLED!" / "AaBbCc 123", then "int -1234" / "f 3.14"
+void testText() {
+    screen.drawTexts(0, LINE_1, ON, "Hello, OLED!");
+    screen.drawTexts(0, LINE_2, ON, "AaBbCc 123");
+    screen.display();
+    delay(HOLD_MS);
+    clear();
+    screen.drawTexts(0, LINE_1, ON, "int ", -1234);
+    screen.drawTexts(0, LINE_2, ON, "f ", 3.14f);
+    screen.display();
+}
+
+// 3. black on white: fillWindow with OFF over ON
+//    expected: white top half with black text, black bottom half with white text
+void testOffColor() {
+    screen.drawFilledRectSize(0, 0, 128, 32, ON);
+    screen.drawTexts(8, 4, OFF, "black/white");
+    screen.drawTexts(8, 36, ON, "white/black");
+    screen.display();
+}
+
+// 4. off screen: everything is clipped, nothing wraps around
+//    expected: a quarter circle in each corner, half a rect on the left, text cut on the right
+void testClip() {
+    screen.drawFilledCircleRadius(0, 0, 14, ON);
+    screen.drawFilledCircleRadius(127, 0, 14, ON);
+    screen.drawHollowCircleRadius(0, 63, 14, ON);
+    screen.drawHollowCircleRadius(127, 63, 14, ON);
+    screen.drawFilledRectSize(-20, 24, 40, 16, ON);
+    screen.drawTexts(72, 20, ON, "cut off");
+    screen.display();
+}
+
+// 5. speed: a ball bouncing for 4 s, only the changed columns sent each frame
+//    expected: a smooth ball, then the frame rate and the time of a full display
+void testSpeed() {
+    int16_t x = 10;
+    int16_t y = 10;
+    int16_t dx = 2;
+    int16_t dy = 1;
+    uint16_t frames = 0;
+    uint32_t start = millis();
+    while (millis() - start < 4000) {
+        screen.drawFilledCircleRadius(x, y, 5, OFF);
+        x += dx;
+        y += dy;
+        if (x < 5 || x > 122) {
+            dx = -dx;
+        }
+        if (y < 5 || y > 58) {
+            dy = -dy;
+        }
+        screen.drawFilledCircleRadius(x, y, 5, ON);
+        screen.display();
+        frames++;
+    }
+    uint32_t elapsed = millis() - start;
+    uint32_t fullStart = millis();
+    screen.displayAll();
+    uint32_t fullMs = millis() - fullStart;
+
+    screen.clear();
+    screen.drawTexts(0, LINE_1, ON, "ball ", (uint32_t)frames * 1000 / elapsed, " fps");
+    screen.drawTexts(0, LINE_2, ON, "full ", fullMs, " ms");
+    screen.display();
+}
+
+// 6. setContrast: 0 -> 255 -> 0
+//    expected: the same picture getting brighter, then darker (the value shown)
+void testContrast() {
+    for (int16_t step = 0; step <= 64; step++) {
+        uint8_t contrast = (uint8_t)(step <= 32 ? step * 8 - (step == 32 ? 1 : 0) : (64 - step) * 8);
+        screen.clear();
+        screen.drawFilledRectSize(0, 0, 128, 30, ON);
+        screen.drawTexts(0, LINE_2, ON, "contrast ", contrast);
+        screen.display();
+        screen.setContrast(contrast);
+        delay(60);
+    }
+    screen.setContrast(0xCF);
+}
+
+// 7. setInverse and setEntireDisplayOn: the RAM stays the same
+//    expected: text black on white, back to normal; then every dot on, back to normal
+void testInverse() {
+    screen.drawTexts(20, 20, ON, "inverse");
+    screen.display();
+    delay(800);
+    screen.setInverse(true);
+    delay(1000);
+    screen.setInverse(false);
+    delay(800);
+    screen.setEntireDisplayOn(true);
+    delay(1000);
+    screen.setEntireDisplayOn(false);
+}
+
+// 8. setDisplayOn and readStatus: status bit 6 = 1 while the display is off
+//    expected: off for 1 s, then the two status bytes: off 0x43 (bit 6 set), on 0x03
+void testStatus() {
+    uint8_t offStatus = 0xFF;
+    uint8_t onStatus = 0xFF;
+    screen.setDisplayOn(false);
+    screen.readStatus(offStatus);
+    delay(1000);
+    screen.setDisplayOn(true);
+    screen.readStatus(onStatus);
+
+    char text[5];
+    hexText(text, offStatus);
+    screen.drawTexts(0, LINE_1, ON, "off ", text);
+    hexText(text, onStatus);
+    screen.drawTexts(0, LINE_2, ON, "on  ", text);
+    screen.display();
+}
+
+// 9. horizontal and diagonal scrolling (the panel moves the picture by itself)
+//    expected: right 2 s, left 2 s, diagonal 2 s, then the picture back in place
+void testScroll() {
+    screen.drawTexts(0, LINE_1, ON, "scroll");
+    screen.drawHollowRectSize(10, 34, 40, 26, ON);
+    screen.drawFilledCircleRadius(90, 46, 12, ON);
+    screen.display();
+
+    screen.setupHorizontalScroll(false, 0, SSD1306::SCROLL_2_FRAMES, 7);
+    screen.activateScroll();
+    delay(2000);
+    screen.deactivateScroll();
+    screen.setupHorizontalScroll(true, 0, SSD1306::SCROLL_2_FRAMES, 7);
+    screen.activateScroll();
+    delay(2000);
+    screen.deactivateScroll();
+    screen.setVerticalScrollArea(0, 64);
+    screen.setupDiagonalScroll(false, 0, SSD1306::SCROLL_3_FRAMES, 7, 1);
+    screen.activateScroll();
+    delay(2000);
+    screen.deactivateScroll();
+    // the datasheet: rewrite the RAM after scrolling
+    screen.displayAll();
+}
+
+// 10. setStartLine: the picture rolls up through all 64 rows
+//     expected: one full roll, then back in place
+void testStartLine() {
+    screen.drawTexts(0, LINE_1, ON, "start line");
+    screen.drawFilledRectSize(0, 44, 128, 4, ON);
+    screen.display();
+    for (uint8_t line = 0; line < 64; line++) {
+        screen.setStartLine(line);
+        delay(30);
+    }
+    screen.setStartLine(0);
+}
+
+// 11. setSegmentRemap / setComScanRemap: mirror left-right, up-down, both (= 180°)
+//     expected: "mirror" mirrored left-right, then up-down, then upside down, then normal
+void testMirror() {
+    screen.drawTexts(24, 20, ON, "mirror");
+    screen.drawFilledRectSize(0, 0, 10, 10, ON);
+    screen.display();
+    delay(700);
+    screen.setSegmentRemap(false);
+    delay(1000);
+    screen.setSegmentRemap(true);
+    screen.setComScanRemap(false);
+    delay(1000);
+    screen.setSegmentRemap(false);
+    delay(1000);
+    screen.setSegmentRemap(true);
+    screen.setComScanRemap(true);
+}
+
+// 12. setFadeBlink: blinking, then fading out
+//     expected: blinks for 4 s, fades out (stays dark), then back
+void testFadeBlink() {
+    screen.drawTexts(0, LINE_1, ON, "fade");
+    screen.drawTexts(0, LINE_2, ON, "blink");
+    screen.display();
+    screen.setFadeBlink(SSD1306::BLINK, 0);
+    delay(4000);
+    screen.setFadeBlink(SSD1306::FADE_OUT, 1);
+    delay(2500);
+    screen.setFadeBlink(SSD1306::FADE_BLINK_OFF, 0);
+}
+
+// 13. setZoomIn: the top half fills the panel
+//     expected: "zoom" twice as tall for 2 s (the bottom half "hidden" not shown), then normal
+void testZoom() {
+    screen.drawTexts(40, 4, ON, "zoom");
+    screen.drawTexts(32, 38, ON, "hidden");
+    screen.display();
+    delay(800);
+    screen.setZoomIn(true);
+    delay(2000);
+    screen.setZoomIn(false);
+}
+
+// 14. image::FlashImage on the OLED: pictures in flash, black / white (palette 2)
+//     expected: a ring with a lightning bolt and three bars (logo), then a dithered sunset
+//               with hills; half of the sunset off the right edge for a moment (clipped)
+void testFlashImage() {
+    image::FlashImage<Screen> pictures(screen);
+    pictures.draw<picture::logo_uno_mac_128x64_palette_2>(0, 0);
+    screen.display();
+    delay(HOLD_MS);
+    screen.clear();
+    pictures.draw<picture::sunset_uno_mac_96x64_palette_2>(16, 0);
+    screen.display();
+    delay(HOLD_MS);
+    screen.clear();
+    pictures.draw<picture::sunset_uno_mac_96x64_palette_2>(80, 0);
+    screen.display();
+}
+
+// 15. image::StreamImage on the OLED: the same logo sent by lib/image/source/stream.py
+//     expected (stream.py running): the logo and "ms" of the transfer at the bottom right
+//                                  (stream.py prints the bytes and seconds);
+//     without stream.py: "no answer" after 3 s
+void testStreamImage() {
+    image::StreamImage<Screen, Link> pictures(screen);
+    uint32_t start = millis();
+    uint8_t result = pictures.draw<picture::logo_uno_mac_128x64_palette_2>(0, 0);
+    uint32_t elapsed = millis() - start;
+    if (result == pictures.OK) {
+        screen.drawFilledRectSize(80, 44, 48, 20, OFF);
+        screen.drawTexts(80, 41, ON, elapsed);
+    } else {
+        screen.clear();
+        screen.drawTexts(0, LINE_1, ON, result == pictures.ERROR_NO_ANSWER ? "no answer" : "error ");
+        screen.drawTexts(0, LINE_2, ON, "code ", result);
+    }
+    screen.display();
+}
+
+void (*const tests[])() = {
+    testBorder,
+    testShapes,
+    testText,
+    testOffColor,
+    testClip,
+    testSpeed,
+    testContrast,
+    testInverse,
+    testStatus,
+    testScroll,
+    testStartLine,
+    testMirror,
+    testFadeBlink,
+    testZoom,
+    testFlashImage,
+    testStreamImage,
+};
+
+using Test = void (*)();
+
+constexpr uint16_t TITLE_MS = 800;
+
+// the test's index in tests[] (also for selectedTests), -1 if it is not there
+int16_t testIndex(Test test) {
+    for (uint8_t i = 0; i < sizeof(tests) / sizeof(tests[0]); i++) {
+        if (tests[i] == test) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+// "test {n}" in the middle of the panel for TITLE_MS
+void showTitle(Test test) {
+    screen.clear();
+    screen.drawTexts(28, 20, ON, "test ", testIndex(test));
+    screen.display();
+    delay(TITLE_MS);
+    clear();
+}
+
+// runs every test of a list: its title first, HOLD_MS after it
+template <size_t N>
+void testAll(const Test (&list)[N]) {
+    for (size_t i = 0; i < N; i++) {
+        showTitle(list[i]);
+        list[i]();
+        delay(HOLD_MS);
+    }
+}
+
+// nothing answered at 0x3C: the built-in LED (D13 = SCL) cannot be used, so just stop here
+void halt() {
+    while (true) {
+    }
+}
+
+void setup() {
+    if (!screen.init()) {
+        halt();
+    }
+    screen.setFont<BigPrintable>();
+}
+
+void (*const selectedTests[])() = {
+    tests[14],
+    tests[15],
+};
+
+// #define SELECTED
+
+void loop() {
+    #ifdef SELECTED
+    testAll(selectedTests);
+    #else
+    testAll(tests);
+    #endif
+}
+
+#undef SELECTED

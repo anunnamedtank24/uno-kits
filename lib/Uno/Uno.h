@@ -8,6 +8,8 @@
 // interfaces (include the ones you use, each includes this file):
 //   Uno_ST7789.h  Uno::UnoST7789<DC, RES, ...>  Bus for ST7789 screens
 //   Uno_serial.h  Uno::UnoSerial<BAUD>          Link over USB serial (D0 / D1), e.g. for GIF::StreamPlayer
+//   Uno_one_wire.h  Uno::UnoOneWire<PIN>        Wire for 1-Wire devices, e.g. temp_sensor::DS18B20
+//   Uno_I2C.h     Uno::UnoI2C<SCL, SDA>         Bus for I2C devices on any pins, e.g. SSD1306 OLEDs
 // this file:     Uno::                         pins, SPI, UART, PWM, flash, time, pin checks
 //
 // pins are Arduino numbers: D0 ~ D13 = 0 ~ 13, A0 ~ A5 = 14 ~ 19
