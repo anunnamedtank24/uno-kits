@@ -5,7 +5,7 @@
 
 namespace Uno {
     // Link over USB serial: USART0 on D0 (RX) / D1 (TX), 8N1, polling (no interrupt, no buffer)
-    // used by GIF::StreamPlayer to talk to lib/GIF/source/stream.py on the computer
+    // used by video::StreamPlayer to talk to lib/video/source/stream.py on the computer
     //
     // BAUD: 1000000 (default) and 2000000 are exact at 16 MHz, 115200 is 2.1 % off (warning)
     //

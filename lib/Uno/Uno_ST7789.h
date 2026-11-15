@@ -72,7 +72,7 @@ namespace Uno {
             Uno::delayMs(ms);
         }
 
-        // ms since power on, used by GIF players for frame timing
+        // ms since power on, used by video players for frame timing
         static inline uint32_t nowMs() {
             return Uno::nowMs();
         }

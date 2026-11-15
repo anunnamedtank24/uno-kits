@@ -14,7 +14,7 @@ namespace SSD1306 {
     //
     // color: 0 = dot off, anything else = dot on (e.g. color::RGB565::BLACK / WHITE)
     // fillWindow / writeWindow are clipped to the panel, so graphics::Shapes / Text work on top
-    // setWindow / writeData16 / endWrite stream pixels like an ST7789 window (for GIF::FlashPlayer):
+    // setWindow / writeData16 / endWrite stream pixels like an ST7789 window (for video::FlashPlayer):
     // here they fill the RAM copy, pixels off the panel are dropped
     //
     // needs horizontal addressing (setAddressingMode(ADDRESSING_HORIZONTAL)): the modules' init() sets it
@@ -46,7 +46,7 @@ namespace SSD1306 {
         // every dot off
         inline void clear();
 
-        // ---------- streaming (the same calls as ST7789::Window, e.g. for GIF players) ----------
+        // ---------- streaming (the same calls as ST7789::Window, e.g. for video players) ----------
 
         // window (inclusive): the next writeData16() calls fill it row by row, from the top left
         inline void setWindow(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1);

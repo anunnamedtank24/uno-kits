@@ -2,6 +2,8 @@
 
 `source/convert.py` 產生的圖片，`namespace picture`。除了 `selected.h` 可以手動改，其他檔案都不要手動編輯，要改就重新轉換。
 
+## 檔案
+
 ```
 output/
 ├── selected.h     程式裡能用的圖片，image.h 會 include 它
@@ -60,7 +62,7 @@ namespace picture {
   - `// source: … sha256 …`：原始圖片和它的 hash。
   - `// settings:`：所有設定，包括原本的指令、裁切範圍、實際尺寸、顏色、編碼、資料量、估計的時間。
 
-## 像素格式（format 1）
+## 格式（format 1）
 
 `decoder.h` 解碼，`convert.py` 編碼；`convert.py` 裡也有 Python 版的解碼器（`get_decoded_values`），轉換後自我檢查、`stream.py` 檢查檔案都用它。Flash 和串流共用這個格式。
 
@@ -84,4 +86,4 @@ namespace picture {
 | `COLORS_256` | 2 bytes：[n − 1][顏色編號]（1 ～ 256） |
 | `COLORS_565` | 3 bytes：[n − 1][RGB565 低位][RGB565 高位]（1 ～ 256） |
 
-`COLORS_16`、`COLORS_256`、`COLORS_565` 的 runs 跟 GIF 的格式（format 3）相同。
+`COLORS_16`、`COLORS_256`、`COLORS_565` 的 runs 跟 video 的格式（format 3）相同。

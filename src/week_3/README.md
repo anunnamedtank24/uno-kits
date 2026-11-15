@@ -11,7 +11,7 @@ python -B src/hide.py 'w*3*as*1'              # "*" 分段比對，要加引號
 
 | 檔案 | 內容 | 需要的硬體 |
 |---|---|---|
-| `test_1.cpp` | 螢幕、圖形、文字、GIF 的完整測試 | M130T |
+| `test_1.cpp` | 螢幕、圖形、文字、動畫的完整測試 | M130T |
 | `test_2.cpp` | DS18B20 溫度，每秒用文字送到串口 | DS18B20 |
 | `test_3.cpp` | 彩色圖片（[lib/image](../../lib/image/README.md)）：16 / 256 / 565 / 2 色、裁切、從 Mac 串流 240×240 全彩 | M130T |
 | `assignment_1.cpp` | 作業一：溫度、raw 值、幀率顯示在螢幕上，用顏色表示變化 | M130T + DS18B20 |
@@ -65,8 +65,8 @@ DS18B20（`test_2`、`assignment_1`）：
 | 15 | `testTextDefault` | 字型範圍外的字元畫成 `?` |
 | 16 | `testTextLayout` | 透明背景、回傳的 x、`fontHeight`、`F()`、貼著邊緣的文字 |
 | 17 | `testTextLineBreak` | `setAutoLineBreak`、`setLineSpacing` |
-| 18 | `testGifFlash` | `GIF::FlashPlayer`：播 4 秒，再故意停 1 秒，看它跳到 I 幀追上 |
-| 19 | `testGifStream` | `GIF::StreamPlayer`：播放、暫停、跳轉、2 倍速、關循環播到結尾 |
+| 18 | `testVideoFlash` | `video::FlashPlayer`：播 4 秒，再故意停 1 秒，看它跳到 I 幀追上 |
+| 19 | `testVideoStream` | `video::StreamPlayer`：播放、暫停、跳轉、2 倍速、關循環播到結尾 |
 | 20 | `testOffScreen` | 部分畫出螢幕外的圖形和文字：只看到螢幕上的部分，不能繞到另一邊 |
 
 ## 只跑部分測試
@@ -76,10 +76,10 @@ DS18B20（`test_2`、`assignment_1`）：
 
 ## tests[19]：串流
 
-需要電腦端的 `stream.py`，詳見 [lib/GIF/README.md](../../lib/GIF/README.md#streamplayer)：
+需要電腦端的 `stream.py`，詳見 [lib/video/README.md](../../lib/video/README.md#streamplayer)：
 
 ```bash
-cd lib/GIF
+cd lib/video
 python -B source/stream.py      # pip install pillow pyserial；先關序列監看視窗
 ```
 
@@ -235,7 +235,7 @@ UNO 只有 2 KB RAM，整個螢幕要 112 KB，所以不能在記憶體裡畫好
 | 設定 | 目前 | 說明 |
 |---|---|---|
 | `M`、`N` | 2.0、1.0 | 兩條的斜率 |
-| `START_RANGE` | 125 | ⚠️ 要 ≤ 120：中心到邊緣只有 120 px，超過時起點可能在螢幕外 |
+| `START_RANGE` | 125 | 超過 119 時夾到 119（`START_LIMIT`）：中心到邊緣只有 120 px，起點在螢幕外的話，往外的射線長度會是負的 |
 | `SPEED_MID` ± `SPEED_SPAN` | 60 ± 45 px/s | 速度的重心和範圍（`PARAM_RADIUS` = 0.8 時實際 24 ～ 96） |
 | `WAIT_MID` ± `WAIT_SPAN` | 1500 ± 1300 ms | 等待的重心和範圍（實際 460 ～ 2540） |
 | `PARAM_RADIUS` | 0.8 | 兩點分開多遠：0 = 一樣，1 = 差最多 |

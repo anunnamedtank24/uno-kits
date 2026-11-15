@@ -1,0 +1,183 @@
+#include <Arduino.h>
+#include "Uno_serial.h"
+#include "Uno_tone.h"
+#include "module/passive_buzzer.h"
+#include "audio.h"
+
+// UNO + passive buzzer (two legs, silent on DC: the board sends the pitch)
+// + -> D9, - -> GND (a 100 Ω resistor in series is safer for a magnetic one, see lib/buzzer)
+// what each test should sound like, and the frequency measured on the pin, go to the USB serial:
+//   pio device monitor        (platformio.ini: monitor_speed = 1000000)
+//
+// D9 / D10: Timer1 flips the pin itself; any other pin works too (an interrupt flips it)
+// the measurement reads the pin back, so it works with nothing connected as well
+constexpr uint8_t BUZZER_PIN = 9;
+using Tone = Uno::UnoTone<BUZZER_PIN>;
+using Link = Uno::UnoSerial<1000000>;
+using Speaker = buzzer::PassiveBuzzer<Tone>;
+audio::Player<Speaker> speaker;
+
+constexpr uint16_t PAUSE_MS = 1000;
+constexpr uint32_t MEASURE_US = 200000;
+
+// ---------- text over the serial link ----------
+
+void printText(const char *text) {
+    while (*text) {
+        Link::write8((uint8_t)*text);
+        text++;
+    }
+}
+
+void printNumber(uint32_t value) {
+    char digits[11];
+    uint8_t i = sizeof(digits) - 1;
+    digits[i] = '\0';
+    do {
+        i--;
+        digits[i] = (char)('0' + value % 10);
+        value /= 10;
+    } while (value > 0);
+    printText(&digits[i]);
+}
+
+// update() until the sound is over: the player itself never waits
+void waitDone() {
+    while (speaker.isPlaying()) {
+        speaker.update();
+    }
+}
+
+// the frequency on the pin: rising edges for MEASURE_US, timed from the first to the last
+uint32_t measureHz() {
+    uint32_t start = micros();
+    uint32_t firstUs = 0;
+    uint32_t lastUs = 0;
+    uint32_t edges = 0;
+    bool last = Uno::pinRead<BUZZER_PIN>();
+    while (micros() - start < MEASURE_US) {
+        bool level = Uno::pinRead<BUZZER_PIN>();
+        if (level && !last) {
+            lastUs = micros();
+            if (edges == 0) {
+                firstUs = lastUs;
+            }
+            edges++;
+        }
+        last = level;
+    }
+    if (edges < 2) {
+        return 0;
+    }
+    return ((edges - 1) * 1000000UL + (lastUs - firstUs) / 2) / (lastUs - firstUs);
+}
+
+// "440 Hz: plays 440, measured 440"
+void printCheck(uint16_t hz) {
+    printNumber(hz);
+    printText(" Hz: plays ");
+    printNumber(Speaker::realHz());
+    printText(", measured ");
+    printNumber(measureHz());
+}
+
+// ---------- tests ----------
+
+// 0. one pitch: A4 = 440 Hz for 1 s
+void testA4() {
+    printText("A4 1 s, ");
+    speaker.tone(audio::noteHz(audio::A, 4));
+    printCheck(audio::noteHz(audio::A, 4));
+    delay(1000 - MEASURE_US / 1000);
+    speaker.stop();
+}
+
+// 1. low to high, 0.4 s each: loudest near the buzzer's resonance (often 2 ~ 4 kHz)
+//    expected: measured within 1 % of the asked hz (the measuring loop limits it above ~15 kHz)
+void testRange() {
+    const uint16_t HZ[] = { 50, 100, 262, 440, 1000, 2000, 3000, 4000, 8000, 15000 };
+    printText("range");
+    for (uint16_t hz : HZ) {
+        printText("\r\n  ");
+        speaker.tone(hz);
+        printCheck(hz);
+        delay(200);
+    }
+    speaker.stop();
+}
+
+// 2. C major scale C5 ~ C6 and back
+void testScale() {
+    printText("scale C5 ~ C6 ~ C5");
+    speaker.play<melody::scale_semitone>();
+    waitDone();
+}
+
+// 3. slide(): a smooth siren up 200 ~ 3000 Hz in 1.5 s, then down
+void testSlide() {
+    printText("siren up, then down");
+    speaker.slide(200, 3000, 1500);
+    waitDone();
+    speaker.slide(3000, 200, 1500);
+    waitDone();
+}
+
+// 4. beeps(): 3 high beeps at 2 kHz
+void testBeeps() {
+    printText("3 beeps at 2 kHz");
+    speaker.beeps(2000, 3, 120, 120);
+    waitDone();
+}
+
+// 5. the cues of lib/audio/output: startup (up), success (short, up), error (low, down)
+void testCues() {
+    printText("startup, success, error");
+    speaker.play<melody::startup_semitone>();
+    waitDone();
+    delay(500);
+    speaker.play<melody::success_semitone>();
+    waitDone();
+    delay(500);
+    speaker.play<melody::error_semitone>();
+    waitDone();
+}
+
+// 6. two melodies: Twinkle Twinkle, then Ode to Joy (the repeated notes must be separate)
+void testMelodies() {
+    printText("Twinkle Twinkle, Ode to Joy");
+    speaker.play<melody::twinkle_star_semitone>();
+    waitDone();
+    delay(500);
+    speaker.play<melody::ode_to_joy_semitone>();
+    waitDone();
+}
+
+void (*const tests[])() = {
+    testA4,
+    testRange,
+    testScale,
+    testSlide,
+    testBeeps,
+    testCues,
+    testMelodies,
+};
+constexpr uint8_t TEST_COUNT = sizeof(tests) / sizeof(tests[0]);
+
+void setup() {
+    Link::init();
+    speaker.init();
+    printText("\r\npassive buzzer on D");
+    printNumber(BUZZER_PIN);
+    printText(BUZZER_PIN == 9 || BUZZER_PIN == 10 ? " (Timer1 output)\r\n" : " (Timer1 interrupt)\r\n");
+}
+
+void loop() {
+    for (uint8_t i = 0; i < TEST_COUNT; i++) {
+        printText("test ");
+        printNumber(i);
+        printText(": ");
+        tests[i]();
+        printText("\r\n");
+        delay(PAUSE_MS);
+    }
+}

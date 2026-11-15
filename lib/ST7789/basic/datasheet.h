@@ -13,7 +13,7 @@
 //   void delayMs(uint16_t ms)
 //   uint8_t readFlash8(const uint8_t *)     PROGMEM read (used by graphics::Text)
 //   uint16_t readFlash16(const uint16_t *)  PROGMEM read (used by graphics::Text)
-//   uint32_t nowMs()                        ms since power on (used by GIF players)
+//   uint32_t nowMs()                        ms since power on (used by video players)
 //   void cmdMode()                DC low
 //   void dataMode()               DC high
 //   void select()                 CS low  (empty if no CS)

@@ -7,9 +7,12 @@
 // Arduino UNO (ATmega328P), register level: the helpers every interface below is built on
 // interfaces (include the ones you use, each includes this file):
 //   Uno_ST7789.h  Uno::UnoST7789<DC, RES, ...>  Bus for ST7789 screens
-//   Uno_serial.h  Uno::UnoSerial<BAUD>          Link over USB serial (D0 / D1), e.g. for GIF::StreamPlayer
+//   Uno_serial.h  Uno::UnoSerial<BAUD>          Link over USB serial (D0 / D1), e.g. for video::StreamPlayer
 //   Uno_one_wire.h  Uno::UnoOneWire<PIN>        Wire for 1-Wire devices, e.g. temp_sensor::DS18B20
 //   Uno_I2C.h     Uno::UnoI2C<SCL, SDA>         Bus for I2C devices on any pins, e.g. SSD1306 OLEDs
+//   Uno_pin.h     Uno::UnoPin<PIN>              Pin to read, e.g. switches::Switch
+//                 Uno::UnoOutputPin<PIN>        Pin to drive, e.g. buzzer::ActiveBuzzer
+//   Uno_tone.h    Uno::UnoTone<PIN>             square wave on any pin (Timer1), e.g. buzzer::PassiveBuzzer
 // this file:     Uno::                         pins, SPI, UART, PWM, flash, time, pin checks
 //
 // pins are Arduino numbers: D0 ~ D13 = 0 ~ 13, A0 ~ A5 = 14 ~ 19

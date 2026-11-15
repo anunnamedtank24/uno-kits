@@ -22,7 +22,7 @@ Usage:
     pip install pyserial
     python source/stream.py                         finds the board by itself, waits until one is plugged in
     python source/stream.py --port /dev/cu.usbmodem1101 --baud 1000000
-    (close the PlatformIO serial monitor and lib/GIF/source/stream.py first: only one program can use the port)
+    (close the PlatformIO serial monitor and lib/video/source/stream.py first: only one program can use the port)
     uploads: while avrdude or "pio run -t upload" runs, the port is released, then taken again
     opening the port resets the board (macOS raises DTR on open, the UNO resets on it)
 Files:

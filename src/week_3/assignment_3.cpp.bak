@@ -40,6 +40,8 @@ constexpr int16_t CENTER = SIZE / 2;
 constexpr float M = 2.0f;               // slope of the first ray
 constexpr float N = 1.0f;              // slope of the second ray
 constexpr int16_t START_RANGE = 125;     // start points: center +- this, px
+// a start off the screen would give a ray of negative length: kept to the screen (0 ~ SIZE - 1)
+constexpr int16_t START_LIMIT = START_RANGE < CENTER ? START_RANGE : CENTER - 1;
 constexpr int16_t DOT_RADIUS = 2;       // the start point
 
 // parameter space: speed (px of length per second) and wait at the edge (ms),
@@ -185,8 +187,8 @@ void drawRay(const Ray &ray, uint16_t color) {
 }
 
 void startRay(Ray &ray, uint32_t now) {
-    float x0 = (float)(CENTER + random(-START_RANGE, START_RANGE + 1));
-    float y0 = (float)(CENTER + random(-START_RANGE, START_RANGE + 1));
+    float x0 = (float)(CENTER + random(-START_LIMIT, START_LIMIT + 1));
+    float y0 = (float)(CENTER + random(-START_LIMIT, START_LIMIT + 1));
     // direction (1, slope) as in math, one of its two ways by chance; y turned over for the screen
     float norm = sqrtf(1.0f + ray.slope * ray.slope);
     float way = random(2) ? 1.0f : -1.0f;

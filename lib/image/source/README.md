@@ -1,6 +1,8 @@
 # image/source
 
-在電腦上跑的工具。需要 Python 3、`pip install pillow pyserial`。HEIC 可以另外裝 `pillow-heif`，沒裝的話 macOS 會用內建的 `sips`。都在 `lib/image` 裡執行：
+在電腦上跑的工具。需要 Python 3、`pip install pillow pyserial`。HEIC 可以另外裝 `pillow-heif`，沒裝的話 macOS 會用內建的 `sips`。都在 `lib/image` 裡執行，加 `-B` 不產生 `__pycache__`。
+
+## 檔案
 
 | 檔案 | 作用 |
 |---|---|
@@ -9,6 +11,8 @@
 | `check.py` | 檢查 `output/selected.h` |
 | `stream.py` | 不用參數：自動找板子，板子要哪張圖就送哪張 |
 
+## 用法
+
 ```bash
 cd lib/image
 python -B source/convert.py assets/sunset.jpg output --target uno --fit 120x80 --scale 2 --palette 16
@@ -16,11 +20,9 @@ python -B source/check.py
 python -B source/stream.py
 ```
 
-`-B`：不產生 `__pycache__`。
-
 ## convert.py
 
-### 檔案
+### 支援的檔案
 
 | 副檔名 | 怎麼讀 |
 |---|---|
@@ -44,9 +46,9 @@ python -B source/stream.py
 
 ### 尺寸（解析度）
 
-所有尺寸都是指「螢幕上」的大小，也就是放大之後。跟 `lib/GIF/source/convert.py` 一樣：
+所有尺寸都是指「螢幕上」的大小，也就是放大之後。跟 `lib/video/source/convert.py` 一樣：
 
-| 參數 | 意思 |
+| 參數 | 說明 |
 |---|---|
 | （都不給） | 圖片原本的大小（存的寬高都必須 ≤ 240，照片通常要給尺寸） |
 | `--width W` 或 `--height H` | 只給一個：維持比例 |
@@ -62,7 +64,7 @@ python -B source/stream.py
 
 ### 顏色
 
-| 參數 | 意思 |
+| 參數 | 說明 |
 |---|---|
 | `--palette 2` | 黑白，1 bit。灰階 ≥ `--threshold`（預設 128）是白；`--dither` 用 Floyd–Steinberg 抖色；`--invert` 黑白反過來 |
 | `--palette 16` | 調色盤最多 16 色（median cut），4 bits |
@@ -76,7 +78,7 @@ python -B source/stream.py
 
 ### 編碼和大小
 
-| 參數 | 意思 |
+| 參數 | 說明 |
 |---|---|
 | `--encoding auto` | raw 和 runs 都算，用比較小的（預設；一樣大時用 raw） |
 | `--encoding raw` | 每個像素照原樣（1 / 4 / 8 / 16 bits） |
@@ -84,10 +86,7 @@ python -B source/stream.py
 | `--max-bytes N` | 資料超過 N 就把尺寸乘 0.85 重做，直到放得下；小到 4 px 還放不下就報錯 |
 | `--name` | 自訂檔名和 struct 名稱 |
 
-- **預設檔名**：`{檔名}_{uno|mac|uno_mac}_{寬}x{高}_palette_{2|16|256|565}.h`，struct 同名。
-- **自我檢查**：編碼完會用 Python 版的解碼器解回來比對，不一致就報錯，不會產生檔案。
-- **錯誤**：超過硬限制（格式或板子做不到的）時，不產生檔案。
-- **警告**：超出 `config.json` 的建議範圍。
+- **檔名**：`{檔名}_{uno|mac|uno_mac}_{寬}x{高}_palette_{2|16|256|565}.h`，struct 同名。
 
 ### 流程
 
@@ -104,9 +103,20 @@ python -B source/stream.py
 
 產生的檔案格式見 [output/README.md](../output/README.md)。
 
+### 錯誤和警告
+
+| 情況 | 處理 |
+|---|---|
+| 檔案不存在、副檔名不支援、讀不出來 | 錯誤，不產生檔案 |
+| 超過格式或板子的硬限制（存的寬高 ≤ 240、scale ≤ 8） | 錯誤，並提示可以調哪個參數 |
+| 編碼後用 Python 版的解碼器解回來不一致 | 錯誤（程式的問題），不產生檔案 |
+| `--max-bytes` 小到 4 px 還放不下 | 錯誤 |
+| 螢幕上超過 240×240 | 警告：會裁切，多的資料是浪費 |
+| 超出 `config.json` 的建議範圍 | 警告 |
+
 ## check.py
 
-跟 `lib/GIF/source/check.py` 一樣的規則，只是 namespace 是 `picture`、看的是 `getPixels()`：
+跟 `lib/video/source/check.py` 一樣的規則，只是 namespace 是 `picture`、看的是 `getPixels()`：
 
 | 類型 | 項目 |
 |---|---|
@@ -124,15 +134,15 @@ python -B source/stream.py
 - **不用參數**：自動找 `/dev/cu.usbmodem*` 等串口，沒插板子就等，拔掉重插也會自己接回。
 - **選用參數**：`--port`、`--baud`（預設讀 `config.json`）。
 - **安全**：只開 `lib/image` 裡面的 `.h`。
-- **燒錄時自動放開串口**：跟 GIF 的一樣，每 0.3 秒檢查有沒有 avrdude 或 `pio run -t upload` 在跑。
-- **打開串口會讓板子重置**：建議先開 `stream.py`，再燒錄（詳見 [GIF/source/README.md](../../GIF/source/README.md#streampy)）。
-- **跟 GIF 的 `stream.py` 二選一**：兩個都要用同一個串口。
+- **燒錄時自動放開串口**：跟 video 的一樣，每 0.3 秒檢查有沒有 avrdude 或 `pio run -t upload` 在跑。
+- **打開串口會讓板子重置**：建議先開 `stream.py`，再燒錄（詳見 [video/source/README.md](../../video/source/README.md#streampy)）。
+- **跟 video 的 `stream.py` 二選一**：兩個都要用同一個串口。
 - **檢查檔案**：讀進來時會把像素解碼一次，壞掉的檔案直接回答錯誤，不會送到一半。
 - **每張都印出來**：送了幾個 byte、花幾秒。
 
 ### 串流協定
 
-跟 GIF 一樣的原則：**Mac 主動送的資料永遠不超過 1 byte**（UNO 的 UART 只能暫存 2 個 byte）。
+跟 video 一樣的原則：**Mac 主動送的資料永遠不超過 1 byte**（UNO 的 UART 只能暫存 2 個 byte）。
 
 | 方向 | 內容 |
 |---|---|
