@@ -21,7 +21,8 @@ namespace GIF {
     public:
         inline explicit FlashPlayer(Screen &screen);
 
-        // top-left at (x, y); false if it does not fit the screen (nothing will be drawn)
+        // top-left at (x, y); false if it does not fit the screen, or a scaled row is wider than
+        // MAX_SCALED_WIDTH (nothing will be drawn; animations are not clipped)
         template <class Animation>
         inline bool start(int16_t x, int16_t y);
 

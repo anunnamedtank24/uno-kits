@@ -5,7 +5,9 @@
 
 namespace ST7789 {
     // window = the area set by CASET + RASET, written with RAMWR
-    // coordinates are screen coordinates: offset applied, clipped to width() / height()
+    // coordinates are screen coordinates (offset applied)
+    // fillWindow / writeWindow are clipped to the screen: every shape and text is drawn through them,
+    // so clipping here is enough for all of graphics (setWindow itself is not clipped)
     template <class Bus>
     class Window : public Datasheet<Bus> {
     public:
@@ -14,14 +16,14 @@ namespace ST7789 {
         // window (inclusive) then RAMWR: stream pixels with writeData16(), then endWrite()
         inline void setWindow(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1);
 
-        // solid color, clipped to the screen
+        // solid color, clipped to the screen; w <= 0 or h <= 0 draws nothing
         inline void fillWindow(int16_t x, int16_t y, int16_t w, int16_t h, uint16_t color);
 
-        // color list (w * h colors, row by row), clipped to the screen
+        // color list (w * h colors, row by row), clipped to the screen: the colors of cut parts are skipped
         inline void writeWindow(int16_t x, int16_t y, int16_t w, int16_t h, const uint16_t *colors);
 
     private:
-        // clip a rectangle to the screen, false if nothing is left
+        // the part of a rectangle on the screen, false if nothing is left
         inline bool clip(int16_t &x, int16_t &y, int16_t &w, int16_t &h) const;
     };
 
@@ -74,6 +76,7 @@ namespace ST7789 {
         if (w <= 0 || h <= 0) {
             return false;
         }
+        // cut the left / top part: move the start to 0, shorten by the cut
         if (x < 0) {
             w += x;
             x = 0;
@@ -82,6 +85,7 @@ namespace ST7789 {
             h += y;
             y = 0;
         }
+        // cut the right / bottom part
         if ((int32_t)x + w > this->width()) {
             w = this->width() - x;
         }

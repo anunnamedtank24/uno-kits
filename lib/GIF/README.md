@@ -1,6 +1,12 @@
 # GIF
 
-在 ST7789 螢幕上播放 GIF 動畫，`namespace GIF`（播放器）和 `namespace animation`（產生的動畫）。資料格式和串流協定寫在 [format.md](format.md)。
+在 ST7789 螢幕上播放 GIF 動畫，`namespace GIF`（播放器）和 `namespace animation`（產生的動畫）。
+
+| 文件 | 內容 |
+|---|---|
+| 這份 | 資料夾、三種目標、兩個播放器的用法 |
+| [source/README.md](source/README.md) | `convert.py` 的參數和流程、`check.py`、`stream.py` 和串流協定 |
+| [output/README.md](output/README.md) | `selected.h`、產生的 struct、幀格式 |
 
 ## 資料夾
 
@@ -11,15 +17,8 @@ lib/GIF/
 ├── flash_player.h     GIF::FlashPlayer<Screen>：播放 Flash 裡的幀（--target uno）
 ├── stream_player.h    GIF::StreamPlayer<Screen, Link, CHUNK>：播放 Mac 傳來的幀（--target mac）
 ├── assets/            原始 .gif
-├── output/
-│   ├── selected.h     程式裡能用的動畫（convert.py 自動加，可以手動刪）
-│   ├── *.h            給板子的檔案：uno 有幀資料，mac 只有尺寸和路徑
-│   └── mac/*.h        mac 的幀資料，只有 stream.py 會讀，永遠不會被 include
-└── source/
-    ├── config.json    兩個目標的參數範圍和預設值
-    ├── convert.py     .gif → output/*.h
-    ├── check.py       檢查 selected.h
-    └── stream.py      不用參數：自動找板子，板子要哪個檔案就送哪個（需要 pip install pyserial）
+├── output/            產生的動畫
+└── source/            電腦上的工具：config.json、convert.py、check.py、stream.py
 ```
 
 ## 三種目標
@@ -27,13 +26,10 @@ lib/GIF/
 | | `--target uno` | `--target mac` | `--target uno mac` |
 |---|---|---|---|
 | 幀資料在哪 | `output/x.h`，燒進 Flash | `output/mac/x.h`，留在 Mac | `output/x.h` |
-| `output/x.h` 裡有什麼 | 幀資料 + 路徑 | 只有尺寸、時間、路徑（很小） | 幀資料 + 路徑 |
 | 能用的播放器 | FlashPlayer（StreamPlayer 也行，會警告） | StreamPlayer | 兩個都可以 |
-| 顏色（`--palette`） | 16（預設）、256、565（警告） | 16、565（預設） | 16（預設）、565（警告） |
-| 範圍 | uno 的 | mac 的 | 兩者都允許的（交集） |
+| 適合 | 小、色少、不需要電腦 | 大、全彩、長 | 兩種都想用 |
 
-- `output/x.h` 三種都會加進 `selected.h`。
-- mac 的描述檔只有幾十 bytes，好幾 MB 的幀資料在 `output/mac/`，不會被 include，也不會拖慢編譯。
+- `output/x.h` 三種都會加進 `selected.h`。mac 的只有幾十 bytes，幀資料在 `output/mac/`，不會被 include，也不會拖慢編譯。
 - 沒被程式用到的動畫，就算在 `selected.h` 裡也不佔 Flash，編譯器會丟掉。
 
 **用錯會被抓到**：
@@ -45,13 +41,13 @@ lib/GIF/
 
 ```bash
 cd lib/GIF
-python source/convert.py assets/orbit.gif output --target uno --width 120 --scale 2 --palette 16 --colors 8 --keyframe 8
+python -B source/convert.py assets/orbit.gif output --target uno --width 120 --scale 2 --palette 16 --colors 8 --keyframe 8
 ```
 
 ```cpp
 #include "GIF.h"
 GIF::FlashPlayer<Screen> player(screen);
-if (player.start<animation::orbit_uno_120x120_palette_16>(60, 40)) {   // 放不下就回傳 false
+if (player.start<animation::orbit_uno_120x120_palette_16>(60, 40)) {   // 放不下螢幕就回傳 false（動畫不裁切）
     while (true) {
         player.update();   // 時間到了才畫下一幀
     }
@@ -59,16 +55,20 @@ if (player.start<animation::orbit_uno_120x120_palette_16>(60, 40)) {   // 放不
 ```
 
 - `frame()` 是目前的幀，`skippedFrames()` 是為了追時間跳過的幀數。
+- **時間控制**：第 0 幀在 `update()` 第一次被呼叫時畫出，之後每一幀在「前面所有幀的延遲加總」時到期。
+- **落後超過一幀時**：
+  - 中間有 I 幀：跳到最後一個已經到期的 I 幀，跳過的幀數累加到 `skippedFrames()`。
+  - 中間沒有 I 幀：照順序畫下一幀，並從現在重新計時。動畫會變慢，但不會畫錯。
 - `--keyframe N`：每 N 幀放一個 I 幀。間隔越短，落後時越快追上，但資料越大。
 
 ## StreamPlayer
 
 **Mac**：只要執行一次，不用參數。它會自動找板子，拔掉、重插、板子重置都會自己接回。
 ```bash
-pip install pyserial
+pip install pillow pyserial
 cd lib/GIF
-python source/convert.py assets/orbit.gif output --target mac --fit 120x120 --palette 565
-python source/stream.py
+python -B source/convert.py assets/orbit.gif output --target mac --fit 120x120 --palette 565
+python -B source/stream.py
 ```
 
 **UNO**：記得要播哪個檔案。路徑在 `animation::xxx::getPath()` 裡，`open` 時傳給 Mac。
@@ -91,65 +91,49 @@ while (true) {
 | `close()` | 不再要幀 |
 | `isConnected()`、`isPlaying()`、`isEnded()` | 狀態 |
 | `positionMs()`、`frame()`、`durationMs()`、`frameCount()` | 目前位置、目前幀、總長、總幀數 |
-| `drawnCount()`、`error()` | 畫了幾幀；錯誤代碼：找不到檔案、讀不懂、256 色、放不下螢幕、沒有回應 |
+| `drawnCount()`、`error()` | 畫了幾幀；錯誤代碼：找不到檔案、讀不懂、256 色、放不下螢幕（或放大後一列超過 120 點）、沒有回應 |
 
 - 控制指令會立刻送出，等 Mac 回答才返回（最多 1 秒），回傳 true 表示 Mac 收到了。
-- **先關監看視窗**：PlatformIO 的序列監看視窗也會佔用串口，執行 `stream.py` 前要先關掉。
-- **啟動順序**：打開串口會讓板子重置，`stream.py` 先開或後開都可以，板子會一直重試。
+- `UnoSerial` 用 D0/D1，所以不能同時用 Arduino 的 `Serial`，也要先關掉序列監看視窗。
+- `stream.py` 可以一直開著：燒錄時它會自動放開串口。但它打開串口時會讓板子重置，所以要先開 `stream.py`，再燒錄（詳見 [source/README.md](source/README.md#streampy)）。
 
-## 尺寸參數
+## 兩個播放器比較
 
-所有尺寸都是指「螢幕上」的大小，也就是放大之後：
+| | FlashPlayer | StreamPlayer |
+|---|---|---|
+| 幀資料 | Flash（燒進 UNO） | Mac，經 USB 串口 |
+| 需要電腦 | 不用 | 要開 `stream.py` |
+| 顏色 | 16、256、565 | 16、565（256 色的調色盤要 512 B RAM，放不下） |
+| 誰計時 | 板子（`millis`） | Mac；板子只照 Mac 給的位置畫 |
+| 落後時 | 跳到已經到期的 I 幀，沒有 I 幀就照順序畫、重新計時 | Mac 直接送該顯示的幀和螢幕上那幀的差異，不需要 I 幀 |
+| 控制 | 只有 `start`、`update`（沒有暫停、跳轉） | 播放、暫停、停止、跳轉、速度、循環 |
+| RAM（AVR 實測） | 309 B | 392 B（CHUNK = 64；CHUNK = 16 時 344 B） |
+| `update()` 會等多久 | 只有畫一幀的時間 | 畫一幀 + 收資料；一塊資料最多等 200 ms |
+| 控制指令會等多久 | — | 等 Mac 回答，最多 1 秒 |
+| 斷線 | — | 3 秒沒回應就重新開啟，從原本的位置繼續；`error()` = 5 |
+| 同時用幾個 | 幾個都可以（各自佔 RAM） | 一個（只有一條串口） |
 
-| 參數 | 意思 |
-|---|---|
-| （都不給） | GIF 原本的大小 |
-| `--width W` 或 `--height H` | 只給一個：維持比例 |
-| `--width W --height H` | 兩個都給：剛好這個大小（會拉伸） |
-| `--resize F` / `--resize FXxFY` | GIF 原尺寸的倍數，可以是小數，x 和 y 可以不同，例如 `0.75` 或 `1.5x1` |
-| `--fit WxH` | 維持比例，塞進 W×H 的框裡，盡量大 |
-| `--fill WxH` | 維持比例，蓋滿 W×H，超出的部分從中間裁掉 |
-| `--scale N` / `--scale NXxNY` | 板子把每個點重複畫 NX×NY 次，只能是整數。資料只存「螢幕大小 ÷ scale」 |
-| `--resample` | 縮放方法：`nearest`（像素風用）、`bilinear`、`bicubic`、`lanczos`（預設） |
+## 使用注意
 
-- 非整數倍的放大用 `--resize` 或 `--width`，在轉換時重新取樣；`--scale` 只負責整數倍、省資料。
-- 尺寸不是 scale 的整數倍時會四捨五入，並印警告說實際大小。
-- 硬限制：螢幕上最大 240×240；有放大時，存的寬度最多 120（板子只有一行的緩衝）。
+- **`update()` 要一直呼叫**：兩個播放器都不用中斷，`update()` 被呼叫時才會畫。中間做別的事太久，FlashPlayer 會跳幀追時間，StreamPlayer 會讓 Mac 跳幀。
+- **不要在動畫範圍內畫別的東西**：P 幀只畫有變化的地方，假設螢幕上還是上一幀。
+  - FlashPlayer：被蓋掉的地方要等到下一個 I 幀才會恢復。
+  - StreamPlayer：Mac 不知道螢幕被改了，被蓋掉的地方會一直錯，直到那裡的像素又變化；要重畫就重新 `open`。
+- **動畫不裁切**：整個動畫（放大後）要在螢幕上，不然 `start` 回傳 false，或 `error()` = 4，什麼都不畫。
+- **開始的第一幀**：FlashPlayer 在第一次 `update()` 時畫第 0 幀（I 幀）；StreamPlayer 連上後先送整張畫面。
 
-## 顏色參數
+## 輸入限制
 
-| 參數 | 意思 |
-|---|---|
-| `--palette 16` | 共用調色盤，最多 16 色，每個 run 1 byte。適合扁平色塊、像素風 |
-| `--palette 256` | 共用調色盤，最多 256 色，每個 run 2 bytes。只有 uno：調色盤直接從 Flash 讀 |
-| `--palette 565` | 每個像素自己的 RGB565 顏色，每個 run 3 bytes。適合照片、漸層 |
-| `--colors N` | 調色盤只用 N 色（16 / 256 模式） |
-| `--dither` | 抖色：漸層比較平滑，但 run 變短、資料變大 |
-| `--background` | 透明的地方填什麼顏色，預設 000000 |
-
-## 幀率和大小參數
-
-| 參數 | 意思 |
-|---|---|
-| `--max-fps F` | 間隔小於 1/F 的幀丟掉，時間加給前一幀，整段動畫總長不變 |
-| `--min-fps F` | `--max-bytes` 降幀率時的下限；估計板子達不到這個 fps 時也會警告 |
-| `--max-bytes N` | 資料超過 N 就自動降，直到放得下為止；降不下來就報錯 |
-| `--reduce fps` / `size` | `--max-bytes` 先降幀率還是先降尺寸（預設 size），一邊到下限就換另一邊 |
-| `--keyframe N` | uno：每 N 幀一個 I 幀（只有 mac 時忽略：Mac 直接送差異） |
-| `--tile N` | 找變化區域用的小方塊大小，預設 8 |
-| `--name` | 自訂檔名和 struct 名稱 |
-
-## 檔名和檔案內容
-
-- **預設檔名**：`{gif}_{target}_{寬}x{高}_palette_{16|256|565}.h`，target 是 `uno`、`mac` 或 `uno_mac`，struct 同名。
-- **檔案開頭**：不管檔名寫了多少，每個設定都會寫在檔案開頭的 `// settings:` 區塊，包括原本的指令、裁切範圍、實際尺寸、顏色、幀率、資料量、估計可達到的 fps。
-- **轉換時會檢查的事**：
-  - 超過硬限制（格式或板子做不到的）：報錯，不產生檔案。
-  - 超出 `config.json` 的建議範圍：警告。
-  - 估計板子達不到 GIF 的 fps、或低於 `--min-fps`：警告。
+| 參數 | 型別 | 範圍 | 超出時 |
+|---|---|---|---|
+| `start` / `open` 的 x、y | `int16_t` | 整個動畫（放大後）在螢幕上：x ≥ 0、x + 寬 ≤ 240，y 也一樣 | 不畫：`start` 回傳 false、`error()` = 4（動畫直接串流進一個窗口，不經過裁切） |
+| `Animation` | `animation::*` | `output/selected.h` 裡的 struct | 編譯錯誤 |
+| 放大後的一列 | — | 有放大時，存的寬度 ≤ 120（板子的一列緩衝） | `start` 回傳 false、`error()` = 4，不畫（`convert.py` 已經保證） |
+| `seek(ms)` | `uint32_t` | 0 ～ 總長；超過時循環取餘數，不循環停在結尾 | — |
+| `setSpeed(percent)` | `uint16_t` | 1 ～ 1000 | Mac 端限制在這個範圍 |
+| `CHUNK` | `uint8_t` | 1 ～ 255，佔用同樣多的 RAM | — |
 
 ## 其他限制
 
 - M130T 沒有 TE 腳，大面積變化時可能看到畫面撕裂。
-- GIF 裡小於 20 ms 的延遲會當成 100 ms，跟瀏覽器的做法一樣。
-- 畫圖時間是用 UNO 的週期數估算的（`config.json` 的 `board`），實際會有些差距。
+- 時間的精度是 `millis`（1 ms），延遲是 GIF 裡的值（小於 20 ms 的當成 100 ms）。

@@ -5,6 +5,7 @@ import argparse
 import bisect
 import glob
 import re
+import subprocess
 import time
 from pathlib import Path
 
@@ -23,10 +24,12 @@ Usage:
     python source/stream.py                         finds the board by itself, waits until one is plugged in
     python source/stream.py --port /dev/cu.usbmodem1101 --baud 1000000
     (close the PlatformIO serial monitor first: only one program can use the port)
+    uploads: while avrdude or "pio run -t upload" runs, the port is released, then taken again
+    opening the port resets the board (macOS raises DTR on open, the UNO resets on it; tested, no way around it)
 Files:
     the board sends Animation::getPath() (made by convert.py, relative to lib/GIF), only files inside lib/GIF
     are opened; --target mac files and uno files both work, palette 256 does not (512 B RAM on the board)
-Protocol (board -> computer: commands; computer -> board: at most 1 byte unasked), see lib/GIF/format.md:
+Protocol (board -> computer: commands; computer -> board: at most 1 byte unasked), see lib/GIF/source/README.md:
     'O' open (chunk, flags, speed, start, path)   'N' next frame   'P' play   'S' pause
     'J' seek (uint32_t ms)   'V' speed (uint16_t %)   'L' loop (0 / 1)   'R' next chunk
     'D' an answer is ready (the board pulls it with 'R')
@@ -43,6 +46,9 @@ KEEPALIVE_S = 1.0
 STATUS_S = 5.0
 POLL_S = 0.005
 PORT_PATTERNS = ("/dev/cu.usbmodem*", "/dev/cu.usbserial*", "/dev/cu.wchusbserial*", "/dev/cu.SLAB_USBtoUART*")
+UPLOAD_CHECK_S = 0.3
+# avrdude itself, or PlatformIO starting an upload (released before it even builds)
+UPLOAD_PATTERN = re.compile(r"\bavrdude\b|\b(platformio|pio)\b.*(-t|--target)[ =]?upload\b")
 LIB_DIR_PATH = Path(__file__).resolve().parent.parent # lib/GIF
 PALETTES = {0: 16, 1: 256, 2: 565} # colorMode -> palette
 
@@ -54,6 +60,18 @@ OPEN_LOOP = 2
 ERROR_NOT_FOUND = 1
 ERROR_UNREADABLE = 2
 ERROR_NOT_STREAMABLE = 3
+
+
+class UploadRunning(Exception):
+    pass
+
+
+def is_uploading() -> bool:
+    try:
+        lines = subprocess.run(["ps", "-axo", "command="], capture_output=True, text=True, timeout=2).stdout.splitlines()
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return any(UPLOAD_PATTERN.search(line) for line in lines)
 
 
 class Animation:
@@ -360,12 +378,27 @@ class Session:
         self.status_skipped = 0
 
     def run(self):
+        next_check = 0.0
         while True:
+            # an upload needs the port: give it up at once
+            now = time.perf_counter()
+            if now >= next_check:
+                next_check = now + UPLOAD_CHECK_S
+                if is_uploading():
+                    raise UploadRunning()
             command = self.port.read(1)
             if command:
                 self.on_command(command)
             if self.animation is not None:
                 self.serve_next()
+
+
+def wait_for_upload():
+    print("[Info] An upload is running: the port is released until it ends")
+    while is_uploading():
+        time.sleep(UPLOAD_CHECK_S)
+    # at once: the reset of opening the port then falls on the board's first moments
+    print("[Info] Upload done, taking the port again")
 
 
 def find_port() -> str | None:
@@ -406,6 +439,9 @@ def main():
     waiting_printed = False
     try:
         while True:
+            if is_uploading():
+                wait_for_upload()
+                continue
             port_name = args.port or find_port()
             if port_name is None:
                 if not waiting_printed:
@@ -425,6 +461,10 @@ def main():
             print(f"[Info] Connected to {port_name} at {args.baud} baud, waiting for the board to open an animation")
             try:
                 Session(port, args.tile, byte_cycles).run()
+            except UploadRunning:
+                port.close()
+                wait_for_upload()
+                continue
             except (serial.SerialException, OSError) as e:
                 print(f"[Info] {port_name} is gone ({e}), waiting again")
             finally:

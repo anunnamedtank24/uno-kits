@@ -14,7 +14,7 @@ namespace GIF {
     //   init(), available(), read8(uint8_t &byte, uint16_t timeoutMs), write8(uint8_t), clearInput()
     // CHUNK: bytes received at a time (RAM), 16 ~ 255
     //
-    // protocol (full description: lib/GIF/format.md)
+    // protocol (full description: lib/GIF/source/README.md)
     //   board -> computer, commands:
     //     'O' open: chunk, flags (bit 0 play, bit 1 loop), speed (uint16_t %), start (uint32_t ms), path length, path
     //     'N' next frame (answered when one is due)   'P' play   'S' pause
@@ -40,7 +40,7 @@ namespace GIF {
         static constexpr uint8_t ERROR_NOT_FOUND = 1; // stream.py: no such file (or outside lib/GIF)
         static constexpr uint8_t ERROR_UNREADABLE = 2; // stream.py: not a file made by convert.py
         static constexpr uint8_t ERROR_NOT_STREAMABLE = 3; // stream.py: palette 256
-        static constexpr uint8_t ERROR_TOO_BIG = 4; // does not fit the screen at (x, y): read, not drawn
+        static constexpr uint8_t ERROR_TOO_BIG = 4; // not on the screen at (x, y), or scaled rows wider than MAX_SCALED_WIDTH: read, not drawn
         static constexpr uint8_t ERROR_NO_ANSWER = 5; // stream.py not running, or the link broke
 
         inline explicit StreamPlayer(Screen &screen);

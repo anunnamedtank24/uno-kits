@@ -4,7 +4,7 @@
 #include <stdint.h>
 
 namespace GIF {
-    // frame format (format 2), made by lib/GIF/source/convert.py, little endian:
+    // frame format (format 3, see lib/GIF/output/README.md), made by lib/GIF/source/convert.py, little endian:
     //   uint16_t delay (ms), uint8_t type (TYPE_P / TYPE_I), uint8_t window count
     //   every window: x, y, w, h (uint8_t, animation pixels before scale), then runs until w * h pixels
     //   run, by color mode:
@@ -114,6 +114,8 @@ namespace GIF {
         _height = height;
         _scaleX = scaleX;
         _scaleY = scaleY;
+        // frames are streamed into one window (not through fillWindow): not clipped, so the whole animation
+        // must be on the screen; a scaled row also has to fit the row buffer
         int32_t right = (int32_t)x + (int32_t)width * scaleX;
         int32_t bottom = (int32_t)y + (int32_t)height * scaleY;
         bool isScaled = scaleX != 1 || scaleY != 1;

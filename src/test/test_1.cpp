@@ -22,35 +22,40 @@ Screen screen;
 constexpr uint16_t HOLD_MS = 1000;
 
 void clear() {
-    screen.fillScreen(RGB565::BLACK);
+    screen.drawFilledScreen(RGB565::BLACK);
 }
 
 // ---------- tests ----------
 
-// 1. solid colors: checks init, RGB/BGR order and inversion
+// 0. solid colors: checks init, RGB/BGR order and inversion
 //    expected: red -> green -> blue -> white -> black
 void testColors() {
     const uint16_t colors[] = {
-        RGB565::RED, RGB565::GREEN, RGB565::BLUE, RGB565::WHITE, RGB565::BLACK
+        RGB565::RED, 
+        RGB565::GREEN, 
+        RGB565::BLUE, 
+        RGB565::WHITE, 
+        RGB565::BLACK, 
+        RGB565::YELLOW,
     };
     for (uint8_t i = 0; i < sizeof(colors) / sizeof(colors[0]); i++) {
-        screen.fillScreen(colors[i]);
+        screen.drawFilledScreen(colors[i]);
     }
 }
 
-// 2. 1-px border + corner marks: checks size and offset
+// 1. 1-px border + corner marks: checks size and offset
 //    expected: white frame touching all 4 edges, red/green/blue/yellow corners
 void testBorder() {
-    screen.drawRectSize(0, 0, screen.width(), screen.height(), RGB565::WHITE);
-    screen.fillRectSize(0, 0, 10, 10, RGB565::RED);
-    screen.fillRectSize(screen.width() - 10, 0, 10, 10, RGB565::GREEN);
-    screen.fillRectSize(0, screen.height() - 10, 10, 10, RGB565::BLUE);
-    screen.fillRectSize(screen.width() - 10, screen.height() - 10, 10, 10, RGB565::YELLOW);
+    screen.drawHollowRectSize(0, 0, screen.width(), screen.height(), RGB565::WHITE);
+    screen.drawFilledRectSize(0, 0, 10, 10, RGB565::RED);
+    screen.drawFilledRectSize(screen.width() - 10, 0, 10, 10, RGB565::GREEN);
+    screen.drawFilledRectSize(0, screen.height() - 10, 10, 10, RGB565::BLUE);
+    screen.drawFilledRectSize(screen.width() - 10, screen.height() - 10, 10, 10, RGB565::YELLOW);
 }
 
-// 3. ST7789::Window::fillWindow and ST7789::Window::writeWindow
+// 2. ST7789::Window::fillWindow and ST7789::Window::writeWindow
 //    expected: 3 solid rects on top, 4 gradient tiles below,
-//              3 cut tiles at the left, right and bottom edges (visible part only)
+//              3 tiles touching the left, right and bottom edges
 uint16_t gradient[16 * 16];
 
 void testRamRect() {
@@ -67,12 +72,12 @@ void testRamRect() {
     for (uint8_t i = 0; i < 4; i++) {
         screen.writeWindow(20 + i * 56, 80, 16, 16, gradient);
     }
-    screen.writeWindow(-8, 140, 16, 16, gradient);
-    screen.writeWindow(232, 140, 16, 16, gradient);
-    screen.writeWindow(112, 232, 16, 16, gradient);
+    screen.writeWindow(0, 140, 16, 16, gradient);
+    screen.writeWindow(224, 140, 16, 16, gradient);
+    screen.writeWindow(112, 224, 16, 16, gradient);
 }
 
-// 4. point
+// 3. point
 //    expected: dotted grid every 10 px
 void testPoint() {
     for (int16_t y = 5; y < (int16_t)screen.height(); y += 10) {
@@ -82,7 +87,7 @@ void testPoint() {
     }
 }
 
-// 5. horizontal / vertical lines, 3 forms each
+// 4. horizontal / vertical lines, 3 forms each
 //    expected: each group of 3 lines (red / green / blue) is identical: x 20..119
 void testHVLines() {
     // horizontal: x 20 ~ 119
@@ -95,7 +100,7 @@ void testHVLines() {
     screen.drawVLineCenter(40, 170, 100, RGB565::BLUE);
 }
 
-// 6. lines, 3 forms
+// 5. lines, 3 forms
 //    expected: left fan (Points), middle star (Angle, every 30 deg), right box X (Delta)
 void testLines() {
     for (int16_t y = 0; y < 240; y += 24) {
@@ -109,52 +114,74 @@ void testLines() {
     screen.drawLineDelta(230, 90, -60, 60, RGB565::MAGENTA);
 }
 
-// 7. rectangles, 3 forms
+// 6. rectangles, 3 forms
 //    expected: top row outline, bottom row filled; in each row the 3 shapes have the same size
 void testRects() {
-    screen.drawRectSize(10, 20, 60, 80, RGB565::RED);
-    screen.drawRectPoints(149, 99, 90, 20, RGB565::GREEN);  // reversed corners on purpose
-    screen.drawRectCenter(200, 60, 60, 80, RGB565::BLUE);
+    screen.drawHollowRectSize(10, 20, 60, 80, RGB565::RED);
+    screen.drawHollowRectPoints(149, 99, 90, 20, RGB565::GREEN);  // reversed corners on purpose
+    screen.drawHollowRectCenter(200, 60, 60, 80, RGB565::BLUE);
 
-    screen.fillRectSize(10, 140, 60, 80, RGB565::RED);
-    screen.fillRectPoints(149, 219, 90, 140, RGB565::GREEN);
-    screen.fillRectCenter(200, 180, 60, 80, RGB565::BLUE);
+    screen.drawFilledRectSize(10, 140, 60, 80, RGB565::RED);
+    screen.drawFilledRectPoints(149, 219, 90, 140, RGB565::GREEN);
+    screen.drawFilledRectCenter(200, 180, 60, 80, RGB565::BLUE);
 }
 
-// 8. triangles, 3 forms
+// 7. triangles, 3 forms
 //    expected: top row outline, bottom row filled
 void testTriangles() {
-    screen.drawTrianglePoints(10, 100, 40, 20, 70, 90, RGB565::CYAN);
-    screen.drawTriangleSize(90, 20, 60, 80, RGB565::YELLOW);
-    screen.drawTriangleCenter(200, 60, 60, 80, RGB565::MAGENTA);
+    screen.drawHollowTrianglePoints(10, 100, 40, 20, 70, 90, RGB565::CYAN);
+    screen.drawHollowTriangleSize(90, 20, 60, 80, RGB565::YELLOW);
+    screen.drawHollowTriangleCenter(200, 60, 60, 80, RGB565::MAGENTA);
 
-    screen.fillTrianglePoints(10, 220, 40, 140, 70, 210, RGB565::CYAN);
-    screen.fillTriangleSize(90, 140, 60, 80, RGB565::YELLOW);
-    screen.fillTriangleCenter(200, 180, 60, 80, RGB565::MAGENTA);
-    screen.drawTriangleCenter(200, 180, 60, 80, RGB565::WHITE); // outline must sit on the fill edge
+    screen.drawFilledTrianglePoints(10, 220, 40, 140, 70, 210, RGB565::CYAN);
+    screen.drawFilledTriangleSize(90, 140, 60, 80, RGB565::YELLOW);
+    screen.drawFilledTriangleCenter(200, 180, 60, 80, RGB565::MAGENTA);
+    screen.drawHollowTriangleCenter(200, 180, 60, 80, RGB565::WHITE); // outline must sit on the fill edge
 }
 
-// 9. circles, 2 forms
+// 8. circles, 2 forms
 //    expected: left column Radius, right column Points (same size); small white dot = the given point
 void testCircles() {
-    screen.drawCircleRadius(60, 60, 40, RGB565::GREEN);
-    screen.drawCirclePoints(180, 60, 204, 92, RGB565::GREEN); // distance = 40
+    screen.drawHollowCircleRadius(60, 60, 40, RGB565::GREEN);
+    screen.drawHollowCirclePoints(180, 60, 204, 92, RGB565::GREEN); // distance = 40
     screen.drawPoint(204, 92, RGB565::WHITE);
 
-    screen.fillCircleRadius(60, 180, 40, RGB565::ORANGE);
-    screen.fillCirclePoints(180, 180, 180, 140, RGB565::ORANGE); // distance = 40
-    screen.drawCircleRadius(180, 180, 40, RGB565::WHITE);       // outline must sit on the fill edge
+    screen.drawFilledCircleRadius(60, 180, 40, RGB565::ORANGE);
+    screen.drawFilledCirclePoints(180, 180, 180, 140, RGB565::ORANGE); // distance = 40
+    screen.drawHollowCircleRadius(180, 180, 40, RGB565::WHITE);       // outline must sit on the fill edge
 }
 
-// 10. clipping: shapes partly off screen must not wrap around
-//     expected: cut shapes at the edges, nothing on the opposite side
+// 9. border width of hollow shapes: (x, y, w, h) / corners / radius are the outer edge, the border grows inward
+//     expected: 3 columns: border 1, 6, and 40 (wider than half: solid)
+//               rows: rectangles, triangles, circles
+//               each one is drawn over a gray filled shape of the same size: no gray outside the colored border
+void testBorders() {
+    const int16_t borders[] = { 1, 6, 40 };
+    for (uint8_t i = 0; i < 3; i++) {
+        int16_t x = 10 + i * 78;
+        screen.drawFilledRectSize(x, 8, 64, 64, RGB565::GRAY);
+        screen.drawHollowRectSize(x, 8, 64, 64, RGB565::RED, borders[i]);
+
+        screen.drawFilledTrianglePoints(x, 150, x + 20, 80, x + 63, 140, RGB565::GRAY);
+        screen.drawHollowTrianglePoints(x, 150, x + 20, 80, x + 63, 140, RGB565::GREEN, borders[i]);
+
+        screen.drawFilledCircleRadius(x + 32, 196, 32, RGB565::GRAY);
+        screen.drawHollowCircleRadius(x + 32, 196, 32, RGB565::CYAN, borders[i]);
+    }
+}
+
+// 10. screen edges: shapes touching the edges exactly (0 and 239), nothing may be cut
+//     expected: red square at the top-left corner, green half disc on the right edge,
+//               blue triangle with its tip on the top edge, yellow ring on the bottom edge,
+//               white line from the left edge (y 180) to the right edge (y 40), gray line on the bottom row;
+//               nothing wraps around
 void testClip() {
-    screen.fillRectSize(-30, 100, 60, 40, RGB565::RED);
-    screen.fillCircleRadius(240, 120, 40, RGB565::GREEN);
-    screen.fillTrianglePoints(100, -40, 160, -40, 130, 40, RGB565::BLUE);
-    screen.drawCircleRadius(120, 250, 40, RGB565::YELLOW);
-    screen.drawLinePoints(-50, -50, 300, 300, RGB565::WHITE);
-    screen.drawHLineCenter(0, 230, 100, RGB565::GRAY);
+    screen.drawFilledRectSize(0, 0, 40, 40, RGB565::RED);
+    screen.drawFilledCircleRadius(199, 120, 40, RGB565::GREEN);
+    screen.drawFilledTrianglePoints(130, 0, 100, 60, 160, 60, RGB565::BLUE);
+    screen.drawHollowCircleRadius(120, 199, 40, RGB565::YELLOW);
+    screen.drawLinePoints(0, 180, 239, 40, RGB565::WHITE);
+    screen.drawHLineSize(0, 239, 240, RGB565::GRAY);
 }
 
 // ---------- text tests (font SmallPrintable: 8 x 23, 30 chars x 10 lines) ----------
@@ -177,24 +204,20 @@ void testTextChars() {
 
 // 12. value types: strings, char, every integer type
 //     expected (each line):
-//       const char*: abc        char[]: buffer          String: Arduino
+//       const char*: abc        char[]: buffer          F(): Arduino
 //       char: Az                int8/uint8: -5 200      int: -123 65535 true
 //       long: -2147483648       ulong: 4294967295
-//       ll:-9223372036854775808 ull:18446744073709551615
 void testTextTypes() {
     char buffer[] = "buffer";
-    String arduinoString("Arduino");
 
     screen.drawTexts(0, LINE * 0, RGB565::WHITE, "const char*: ", "abc");
     screen.drawTexts(0, LINE * 1, RGB565::WHITE, "char[]: ", buffer);
-    screen.drawTexts(0, LINE * 2, RGB565::WHITE, "String: ", arduinoString);
+    screen.drawTexts(0, LINE * 2, RGB565::WHITE, "F(): ", F("Arduino"));
     screen.drawTexts(0, LINE * 3, RGB565::WHITE, "char: ", 'A', 'z');
     screen.drawTexts(0, LINE * 4, RGB565::WHITE, "int8/uint8: ", (int8_t)-5, ' ', (uint8_t)200);
     screen.drawTexts(0, LINE * 5, RGB565::WHITE, "int: ", -123, ' ', 65535U, ' ', true);
     screen.drawTexts(0, LINE * 6, RGB565::WHITE, "long: ", -2147483647L - 1);
     screen.drawTexts(0, LINE * 7, RGB565::WHITE, "ulong: ", 4294967295UL);
-    screen.drawTexts(0, LINE * 8, RGB565::WHITE, "ll:", -9223372036854775807LL - 1);
-    screen.drawTexts(0, LINE * 9, RGB565::WHITE, "ull:", 18446744073709551615ULL);
 }
 
 // 13. float / double, setDecimals
@@ -262,10 +285,10 @@ void testTextDefault() {
 //       red "ABC" and green "ABC" 2 px apart: both visible
 //       "x=123" then a magenta bar right after it, then "(x)" with its value
 //       "empty ok", "fontHeight=23", "F() in flash false" 
-//       text cut at the left, right and bottom edges, nothing wraps around
+//       "left edge" at x 0, "right edge" ending at x 239, "bottom" on the last text line (y 217)
 void testTextLayout() {
-    screen.fillRectSize(0, 0, 120, 30, RGB565::BLUE);
-    screen.fillRectSize(120, 0, 120, 30, RGB565::RED);
+    screen.drawFilledRectSize(0, 0, 120, 30, RGB565::BLUE);
+    screen.drawFilledRectSize(120, 0, 120, 30, RGB565::RED);
     screen.drawTexts(40, 4, RGB565::WHITE, "transparent text");
 
     screen.drawTexts(10, 34, RGB565::RED, "ABC");
@@ -273,7 +296,7 @@ void testTextLayout() {
 
     int16_t x = screen.drawTexts(10, 64, RGB565::WHITE, "x=");
     x = screen.drawTexts(x, 64, RGB565::CYAN, 123);
-    screen.fillRectSize(x, 64, 3, screen.fontHeight(), RGB565::MAGENTA);
+    screen.drawFilledRectSize(x, 64, 3, screen.fontHeight(), RGB565::MAGENTA);
     screen.drawTexts(x + 6, 64, RGB565::WHITE, "(", x, ")");
 
     int16_t empty = screen.drawTexts(50, 94, RGB565::WHITE);
@@ -281,9 +304,9 @@ void testTextLayout() {
     screen.drawTexts(10, 124, RGB565::WHITE, "fontHeight=", screen.fontHeight());
     screen.drawTexts(10, 190, RGB565::WHITE, F("F() in flash"), ' ', false);
 
-    screen.drawTexts(-12, 160, RGB565::YELLOW, "clipped left");
-    screen.drawTexts(150, 160, RGB565::YELLOW, "clipped right");
-    screen.drawTexts(10, 228, RGB565::YELLOW, "bottom cut");
+    screen.drawTexts(0, 160, RGB565::YELLOW, "left edge");
+    screen.drawTexts(240 - 10 * 8, 160, RGB565::YELLOW, "right edge");
+    screen.drawTexts(10, 240 - 23, RGB565::YELLOW, "bottom");
 }
 
 // 17. setAutoLineBreak, setLineSpacing
@@ -292,18 +315,18 @@ void testTextLayout() {
 //       y 72  "this sentence is too long for" / "one line" + magenta bar after it (returned x)
 //       y 124 "start x 120 wra" / "ps" both starting at x 120
 //       y 170 "gap 20" / "gap 20" with a 20 px gap
-//       top right: 'A' and 'B' on 2 lines, both cut at the right edge (drawn anyway, no endless wrap)
+//       top right: 'A' and 'B' on 2 lines, both ending at x 239 (a char that fits is never wrapped)
 void testTextLineBreak() {
     screen.setAutoLineBreak(true);
 
     screen.drawTexts(0, 0, RGB565::WHITE, "line 1\nline 2\n", 3, " follows");
 
     int16_t x = screen.drawTexts(0, 72, RGB565::YELLOW, "this sentence is too long for one line");
-    screen.fillRectSize(x, 72 + screen.fontHeight(), 3, screen.fontHeight(), RGB565::MAGENTA);
+    screen.drawFilledRectSize(x, 72 + screen.fontHeight(), 3, screen.fontHeight(), RGB565::MAGENTA);
 
     screen.drawTexts(120, 124, RGB565::CYAN, "start x 120 wraps");
 
-    screen.drawTexts(236, 0, RGB565::MAGENTA, "AB");
+    screen.drawTexts(232, 0, RGB565::MAGENTA, "AB");
 
     screen.setLineSpacing(20);
     screen.drawTexts(0, 170, RGB565::GREEN, "gap 20\ngap 20");
@@ -345,7 +368,7 @@ void testGifFlash() {
 //       6 ~ 9 s   loop off at 100 %: stops at the last frame, "ended"
 //     (opening the port resets the board: start stream.py first, it waits for the board)
 void showStreamStatus(GIF::StreamPlayer<Screen, Link, 64> &player, const char *step) {
-    screen.fillRectSize(0, 170, screen.width(), 70, RGB565::BLACK);
+    screen.drawFilledRectSize(0, 170, screen.width(), 70, RGB565::BLACK);
     if (!player.isConnected()) {
         screen.drawTexts(10, 170, RGB565::YELLOW, "waiting for stream.py");
         screen.drawTexts(10, 194, RGB565::WHITE, "error ", player.error());
@@ -373,7 +396,7 @@ void testGifStream() {
 
     // each step: what to send at its start, then frames for its time, the status shown every 500 ms
     const char *const steps[] = { "play", "pause", "seek 720 ms", "speed 200 %", "loop off" };
-    const uint16_t stepMs[] = { 3000, 1000, 10, 2000, 3000 };
+    const uint16_t stepMs[] = { 3000, 3000, 3000, 3000, 3000 };
     for (uint8_t i = 0; i < 5; i++) {
         if (i == 1) {
             player.pause();
@@ -400,6 +423,19 @@ void testGifStream() {
     player.close();
 }
 
+// 20. clipping: shapes partly off the screen (fillWindow cuts every window to the screen)
+//     expected: only the parts on the screen, nothing wraps to the other side or lands somewhere else
+//     shapes: red rect past the left edge, green disc past the right edge, blue triangle past the top,
+//             yellow ring past the bottom, white line past the left and right edges, magenta text past the right edge
+void testOffScreen() {
+    screen.drawFilledRectSize(-30, 100, 60, 40, RGB565::RED);
+    screen.drawFilledCircleRadius(230, 120, 40, RGB565::GREEN);
+    screen.drawFilledTrianglePoints(100, -40, 160, -40, 130, 40, RGB565::BLUE);
+    screen.drawHollowCircleRadius(120, 230, 40, RGB565::YELLOW);
+    screen.drawLinePoints(-40, 200, 280, 20, RGB565::WHITE);
+    screen.drawTexts(200, 60, RGB565::MAGENTA, "off screen");
+}
+
 void (*const tests[])() = {
     testColors,
     testBorder,
@@ -410,6 +446,7 @@ void (*const tests[])() = {
     testRects,
     testTriangles,
     testCircles,
+    testBorders,
     testClip,
     testTextChars,
     testTextTypes,
@@ -420,22 +457,39 @@ void (*const tests[])() = {
     testTextLineBreak,
     testGifFlash,
     testGifStream,
+    testOffScreen,
 };
 
-void (*const selectedTests[])() = {
-    tests[17]
-};
-
-// runs every test of a list, HOLD_MS after each
-// the list is taken by reference so its length N is known here
 using Test = void (*)();
 
-template <size_t N>
-void testAll(const Test (&list)[N], bool doClear = true) {
-    for (size_t i = 0; i < N; i++) {
-        if (doClear) {
-            clear();
+constexpr uint16_t TITLE_MS = 1000;
+
+// the test's index in tests[] (also for selectedTests), -1 if it is not there
+int16_t testIndex(Test test) {
+    for (uint8_t i = 0; i < sizeof(tests) / sizeof(tests[0]); i++) {
+        if (tests[i] == test) {
+            return i;
         }
+    }
+    return -1;
+}
+
+// "test {n}" in the middle of the screen for TITLE_MS, then erased
+void showTitle(Test test) {
+    const int16_t x = 88;
+    const int16_t y = (240 - 23) / 2;
+    int16_t end = screen.drawTexts(x, y, RGB565::WHITE, "test ", testIndex(test));
+    delay(TITLE_MS);
+    screen.drawFilledRectSize(x, y, end - x, screen.fontHeight(), RGB565::BLACK);
+}
+
+// runs every test of a list: its title first, HOLD_MS after it
+// the list is taken by reference so its length N is known here
+template <size_t N>
+void testAll(const Test (&list)[N]) {
+    for (size_t i = 0; i < N; i++) {
+        clear();
+        showTitle(list[i]);
         list[i]();
         delay(HOLD_MS);
     }
@@ -443,10 +497,15 @@ void testAll(const Test (&list)[N], bool doClear = true) {
 
 void setup() {
     screen.init();
+    clear();
     screen.setFont<SmallPrintable>();
 }
 
-#define SELECTED
+void (*const selectedTests[])() = {
+    tests[20]
+};
+
+// #define SELECTED
 
 void loop() {
     #ifdef SELECTED
