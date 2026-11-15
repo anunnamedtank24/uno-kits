@@ -13,5 +13,6 @@
 #include "moon_uno_128x64_palette_2.h"
 #include "sunset_uno_128x64_palette_2.h"
 #include "city_uno_128x64_palette_2.h"
+#include "treble_clef_uno_15x40_palette_2.h"
 
 #endif

@@ -1,5 +1,5 @@
-#ifndef I2C_FRAME_H
-#define I2C_FRAME_H
+#ifndef SSD1306_FRAME_H
+#define SSD1306_FRAME_H
 
 #include "datasheet.h"
 

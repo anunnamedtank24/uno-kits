@@ -1,7 +1,7 @@
 #include <Arduino.h>
 #include "Uno_I2C.h"
 #include "Uno_pin.h"
-#include "module/OLED_128x64.h"
+#include "SSD1306.h"
 #include "image.h"
 #include "switch.h"
 
@@ -16,7 +16,7 @@ using Bus = Uno::UnoI2C<13, 11>;
 using Screen = SSD1306::OLED128x64<Bus>;
 using SwitchPin = Uno::UnoPin<2>;
 Screen screen;
-switches::Switch<SwitchPin> button;   // ACTIVE_HIGH: see src/week_4/test_2.cpp
+switches::Switch3Pins<SwitchPin> button;   // ACTIVE_HIGH: see src/week_4/test_2.cpp
 
 // ---------- photos ----------
 

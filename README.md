@@ -1,6 +1,6 @@
 # UNO + ST7789
 
-Arduino UNO 驅動 1.3 吋 240×240 ST7789 螢幕（M130T 模組）的函式庫：圖形、文字、動畫和影片（gif / mp4 / mov / webm…），動畫可以存在 Flash，也可以從電腦串流。另外有靜態圖片（jpg / png / webp / heic，從 Flash 或 Mac）、I2C OLED（SSD1306）、DS18B20 溫度感測器、開關、蜂鳴器和旋律（從 wav / mp3 / m4a / ogg 等音檔轉）；OLED 用同一套圖形、文字、圖片和動畫。
+Arduino UNO 驅動 1.3 吋 240×240 ST7789 螢幕（M130T 模組）的函式庫：圖形、文字、動畫和影片（gif / mp4 / mov / webm…），動畫可以存在 Flash，也可以從電腦串流。另外有靜態圖片（jpg / png / webp / heic，從 Flash 或 Mac）、I2C OLED（SSD1306）、DS18B20 溫度感測器、開關、蜂鳴器和旋律（從 wav / mp3 / m4a / ogg 等音檔轉）、紅外線遙控器、LED；OLED 用同一套圖形、文字、圖片和動畫。
 
 - 用 template 做硬體抽象，編譯後跟直接寫暫存器一樣快。
 - 字型、動畫、圖片、旋律由 Python 工具事先轉好；動畫和圖片依 UNO 的畫圖時間挑最快的畫法。
@@ -12,22 +12,25 @@ Arduino UNO 驅動 1.3 吋 240×240 ST7789 螢幕（M130T 模組）的函式庫�
 .
 ├── platformio.ini     PlatformIO 設定（Arduino UNO，C++17）
 ├── lib/               函式庫，見 lib/README.md
-│   ├── Uno/           ATmega328P：SPI 螢幕 Bus、USB 串口、1-Wire、軟體 I2C、輸入 / 輸出腳、方波
+│   ├── Uno/           ATmega328P：SPI 螢幕 Bus、USB 串口、1-Wire、軟體 I2C、輸入 / 輸出 / PWM / 中斷腳、方波
 │   ├── ST7789/        ST7789 驅動 + 模組（M130T）
 │   ├── graphics/      圖形和文字
 │   ├── color/         RGB565 顏色
 │   ├── font/          字型（.ttf → .h）
 │   ├── video/         動畫和影片（.gif / .mp4 / .mov / .webm … → .h，Flash 播放或從電腦串流）
-│   ├── temp_sensor/   DS18B20 溫度感測器（1-Wire）
-│   ├── I2C/           I2C OLED（SSD1306）：指令 + 板子 RAM 裡的畫面
+│   ├── DS18B20/       DS18B20 溫度感測器（1-Wire）
+│   ├── SSD1306/       I2C OLED（SSD1306）：指令 + 板子 RAM 裡的畫面
 │   ├── image/         靜態圖片（.jpg / .png / .webp / .heic → .h，Flash 或從 Mac 串流）
 │   ├── switch/        開關（GND、VCC、OUT）
 │   ├── audio/         旋律（.wav / .mp3 / .m4a / .ogg … → .h）和播放器
-│   └── buzzer/        有源 / 無源蜂鳴器
+│   ├── buzzer/        有源 / 無源蜂鳴器
+│   ├── NEC/           紅外線遙控器的 NEC 協定：接收器（HX1838）、按鍵、17 鍵遙控器
+│   └── LED/           LED（PWM）：一顆、RGB
 └── src/
     ├── hide.py        只留一個程式，其他的改成 .bak
     ├── week_3/        M130T 測試、溫度感測器、彩色圖片、作業，見 src/week_3/README.md
-    └── week_4/        OLED、黑白圖片、開關、蜂鳴器的測試和作業，見 src/week_4/README.md
+    ├── week_4/        OLED、黑白圖片、開關、蜂鳴器的測試和作業，見 src/week_4/README.md
+    └── week_5/        紅外線遙控器的測試，RGB LED、移動方塊、五線譜的作業，見 src/week_5/README.md
 ```
 
 ## 開始
@@ -40,11 +43,11 @@ pio run -t upload        # 燒錄
 ```
 
 - `src/` 裡只能有一個程式有 `setup()` / `loop()`，其他的要改成 `.bak`：`python -B src/hide.py week_4/test_1` 只留下那一個。
-- 接線見 [src/week_3/README.md](src/week_3/README.md#接線)（M130T）、[src/week_4/README.md](src/week_4/README.md#接線)（OLED、開關、蜂鳴器）。
+- 接線見 [src/week_3/README.md](src/week_3/README.md#接線)（M130T）、[src/week_4/README.md](src/week_4/README.md#接線)（OLED、開關、蜂鳴器）、[src/week_5/README.md](src/week_5/README.md#接線)（紅外線接收器、RGB LED）。
 
 ```cpp
 #include "Uno_ST7789.h"
-#include "module/M130T.h"
+#include "ST7789.h"
 #include "graphics.h"
 #include "color.h"
 #include "font.h"
@@ -93,11 +96,14 @@ brew install ffmpeg      # 影片、音檔的解碼（音檔沒有它時，macOS
 | [lib/color/README.md](lib/color/README.md) | 顏色 |
 | [lib/font/README.md](lib/font/README.md) | 字型；[source/](lib/font/source/README.md) 轉換、[output/](lib/font/output/README.md) 格式 |
 | [lib/video/README.md](lib/video/README.md) | 動畫、影片的播放器；[source/](lib/video/source/README.md) 轉換和串流協定、[output/](lib/video/output/README.md) 格式 |
-| [lib/temp_sensor/README.md](lib/temp_sensor/README.md) | DS18B20 溫度感測器：接線、函式、解析度、錯誤 |
-| [lib/I2C/README.md](lib/I2C/README.md) | I2C OLED：接線、指令表、為什麼要在 RAM 留畫面、速度 |
+| [lib/DS18B20/README.md](lib/DS18B20/README.md) | DS18B20 溫度感測器：接線、函式、解析度、錯誤 |
+| [lib/SSD1306/README.md](lib/SSD1306/README.md) | I2C OLED：接線、指令表、為什麼要在 RAM 留畫面、速度 |
 | [lib/image/README.md](lib/image/README.md) | 圖片：支援的檔案、顏色、Flash / 串流、在 OLED 上畫；[source/](lib/image/source/README.md) 轉換和串流協定、[output/](lib/image/output/README.md) 格式 |
 | [lib/switch/README.md](lib/switch/README.md) | 開關：接線、去彈跳、`ACTIVE_HIGH` |
 | [lib/audio/README.md](lib/audio/README.md) | 旋律和播放器；[source/](lib/audio/source/README.md) 音檔轉換、[output/](lib/audio/output/README.md) 格式 |
 | [lib/buzzer/README.md](lib/buzzer/README.md) | 蜂鳴器：有源和無源、接線、電流、不能做的事 |
+| [lib/NEC/README.md](lib/NEC/README.md) | 紅外線遙控器：零件名稱、NEC 協定、遙控器的指令碼、連按 |
+| [lib/LED/README.md](lib/LED/README.md) | LED：接線、電阻、共陰 / 共陽、PWM 和眼睛的亮度 |
 | [src/week_3/README.md](src/week_3/README.md) | M130T 測試、溫度感測器、彩色圖片、作業一～三 |
 | [src/week_4/README.md](src/week_4/README.md) | OLED、黑白圖片、開關、蜂鳴器的測試，作業一～四 |
+| [src/week_5/README.md](src/week_5/README.md) | 紅外線遙控器的測試，作業一～三（RGB LED、移動方塊、五線譜） |

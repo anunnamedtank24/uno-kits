@@ -1,6 +1,6 @@
 #include <Arduino.h>
 #include "Uno_I2C.h"
-#include "module/OLED_128x64.h"
+#include "SSD1306.h"
 #include "image.h"
 
 // UNO + 128x64 I2C OLED: the photos change by themselves, one every SLIDE_MS

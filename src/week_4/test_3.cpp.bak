@@ -1,7 +1,7 @@
 #include <Arduino.h>
 #include "Uno_serial.h"
 #include "Uno_pin.h"
-#include "module/active_buzzer.h"
+#include "buzzer.h"
 #include "audio.h"
 
 // UNO + active buzzer (two legs, it beeps by itself when powered)
@@ -11,11 +11,10 @@
 //
 // tests run one after another, 1 s apart, then start over
 // silent all the time: + and - swapped (or it is a passive buzzer: try test_4)
-// sounds when it should be quiet: + is on 5V and - on the pin, set ACTIVE_HIGH to false
-constexpr bool ACTIVE_HIGH = true;
+// a 3-pin module (VCC, I/O, GND): I/O -> D8, VCC -> 5V, and buzzer::ActiveBuzzer3Pins<BuzzerPin> below
 using BuzzerPin = Uno::UnoOutputPin<8>;
 using Link = Uno::UnoSerial<1000000>;
-using Beeper = buzzer::ActiveBuzzer<BuzzerPin, ACTIVE_HIGH>;
+using Beeper = buzzer::ActiveBuzzer2Pins<BuzzerPin>;
 audio::Player<Beeper> beeper;
 
 constexpr uint16_t PAUSE_MS = 1000;
@@ -115,9 +114,7 @@ constexpr uint8_t TEST_COUNT = sizeof(tests) / sizeof(tests[0]);
 void setup() {
     Link::init();
     beeper.init();
-    printText("\r\nactive buzzer on D8, ACTIVE_HIGH = ");
-    printText(ACTIVE_HIGH ? "true" : "false");
-    printText("\r\n");
+    printText("\r\nactive buzzer (2 pins) on D8\r\n");
 }
 
 void loop() {

@@ -30,8 +30,9 @@ output/
 | `sunset_uno_128x64_palette_2.h` | sunset.heic（`--fill`、`--dither`） | 128×64 | 2 | raw | 1028 B |
 | `moon_uno_128x64_palette_2.h` | moon.jpg（`--fill`、`--dither`） | 128×64 | 2 | raw | 1028 B |
 | `city_uno_128x64_palette_2.h` | city.png（`--fill`、`--threshold 100`） | 128×64 | 2 | raw | 1028 B |
+| `treble_clef_uno_15x40_palette_2.h` | treble_clef.png | 15×40 | 2 | raw | 75 B |
 
-`assets/` 的圖片是用 Pillow 畫的：漸層天空、太陽、三層山（sunset）、星空和月亮（moon）、亮著窗戶的大樓（city），以及透明背景的圖示（logo）。後面三張 128×64 的是 `src/week_4` 作業一、三的照片。sunset 另外存成 jpg、webp，再用 `sips` 轉成 heic，四種格式都測得到。
+`assets/` 的圖片是用 Pillow 畫的：漸層天空、太陽、三層山（sunset）、星空和月亮（moon）、亮著窗戶的大樓（city），以及透明背景的圖示（logo）。後面三張 128×64 的是 `src/week_4` 作業一、三的照片。treble_clef 是高音譜記號：用 Pillow 把 macOS 字型 Apple Symbols 的 𝄞（U+1D11E）畫成 40 px 高的黑白圖，給 `src/week_5/assignment_3` 的五線譜用（漩渦的中心在第 25 列，對齊 G4 線）。sunset 另外存成 jpg、webp，再用 `sips` 轉成 heic，四種格式都測得到。
 
 ## 產生的 struct
 

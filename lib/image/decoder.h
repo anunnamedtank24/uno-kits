@@ -41,7 +41,7 @@ namespace image {
     // a row is cut into pieces of SEGMENT screen pixels, each sent with writeWindow():
     // clipped (any x, y works, the part off the screen is skipped), and any Screen with
     // writeWindow works: ST7789 (lib/ST7789/basic/window.h) or the RAM picture of an OLED
-    // (lib/I2C/basic/frame.h, then display())
+    // (lib/SSD1306/basic/frame.h, then display())
     //
     // Screen: provides writeWindow(x, y, w, h, colors) clipped, BusType::readFlash16 (COLORS_256)
     // Reader: anything with uint8_t read8() giving the next byte of the pixel data

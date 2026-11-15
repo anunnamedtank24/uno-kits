@@ -1,6 +1,6 @@
 # ST7789/module
 
-一個檔案對應一種螢幕模組。模組是 `ST7789.h` 的父集：程式只要 include 模組，就有 ST7789 的全部。
+一個檔案對應一種螢幕模組（實際買到的板子）。模組只 include 它需要的 `basic/`、`tool/`；`ST7789.h` 再把所有模組 include 進來，所以程式只要 `#include "ST7789.h"`。
 
 ## 檔案
 
@@ -17,7 +17,9 @@ module/
 #ifndef ST7789_XXX_H
 #define ST7789_XXX_H
 
-#include "../ST7789.h"   // 父集：include 這個檔案就夠了
+#include "../basic/datasheet.h"
+#include "../basic/window.h"
+#include "../tool/init.h"
 
 namespace ST7789 {
     template <class Bus>
@@ -49,6 +51,8 @@ namespace ST7789 {
 
 #endif
 ```
+
+加好之後在 `ST7789.h` 最後加一行 `#include "module/XXX.h"`。
 
 ## 注意事項
 

@@ -1,6 +1,6 @@
 # week_4
 
-I2C OLED（SSD1306，0.96 吋 128×64）、OLED 上的黑白圖片（[lib/image](../../lib/image/README.md)；彩色圖片的測試在 [week_3/test_3](../week_3/README.md#test_3cpp)）、開關（[lib/switch](../../lib/switch/README.md)）、蜂鳴器（[lib/buzzer](../../lib/buzzer/README.md)、旋律在 [lib/audio](../../lib/audio/README.md)）的測試，以及四個作業。OLED 函式庫見 [lib/I2C/README.md](../../lib/I2C/README.md)。
+I2C OLED（SSD1306，0.96 吋 128×64）、OLED 上的黑白圖片（[lib/image](../../lib/image/README.md)；彩色圖片的測試在 [week_3/test_3](../week_3/README.md#test_3cpp)）、開關（[lib/switch](../../lib/switch/README.md)）、蜂鳴器（[lib/buzzer](../../lib/buzzer/README.md)、旋律在 [lib/audio](../../lib/audio/README.md)）的測試，以及四個作業。OLED 函式庫見 [lib/SSD1306/README.md](../../lib/SSD1306/README.md)。
 
 全部的檔案現在都是 `.bak`，要跑哪個就留下哪個：
 
@@ -101,7 +101,7 @@ python -B source/stream.py     # 先開它，再燒錄；video 的 stream.py 要
 | 現象 | 可能的原因 |
 |---|---|
 | 一片黑 | `init()` 失敗：VCC / GND、SCL / SDA 接反，或位址是 0x3D（改成 `Screen screen(0x3D);`） |
-| 只有上半部、每隔一列 | 其實是 128×32 的面板：改用 `module/OLED_128x32.h` 的 `OLED128x32` |
+| 只有上半部、每隔一列 | 其實是 128×32 的面板：改用 `SSD1306::OLED128x32`（`SSD1306.h` 已經包含） |
 | 左右或上下鏡像 | 模組裝反了：`init(true)` 轉 180° |
 | 右邊有 2 欄雜點、整體偏移 | 控制器其實是 SH1106（132 欄），這個函式庫不支援 |
 | 偶爾亂掉 | 線太長或上拉太弱：降低速度 `Uno::UnoI2C<13, 11, true, 100>` |
@@ -123,7 +123,7 @@ off (level LOW), presses 1, was on for 180 ms
 ```
 
 - **實測**：D2 沒按時是 `level LOW`、`off`。按下的部分我沒辦法測，請你按按看。
-- **按著卻顯示 `off`**：你的模組是按下時輸出 LOW，把檔案開頭的 `ACTIVE_HIGH` 改成 `false`。`assignment_1` 也要改。
+- **按著卻顯示 `off`**：你的模組是按下時輸出 LOW，把檔案開頭的 `ACTIVE_HIGH` 改成 `false`（`switches::Switch3Pins<SwitchPin, false>`）。`assignment_1` 也要改。
 - **串口**：用 `Uno::UnoSerial<1000000>`，所以不能同時用 Arduino 的 `Serial`。
 
 # test_3.cpp
@@ -141,7 +141,7 @@ off (level LOW), presses 1, was on for 180 ms
 
 - **實測**：`testNoWait` 印出 58758 圈，播放器不會讓程式停下來等。其他測試我聽不到，請你聽聽看。
 - **一直不響**：+、- 接反，或其實是無源的（換跑 `test_4`）。
-- **該安靜時在響**：+ 接 5V、- 接腳位的接法，把 `ACTIVE_HIGH` 改成 `false`。
+- **該安靜時在響**：可能是三隻腳的模組（VCC、I/O、GND，LOW 才響）。I/O 接 D8、VCC 接 5V，把 `Beeper` 改成 `buzzer::ActiveBuzzer3Pins<BuzzerPin>`（見 [lib/buzzer](../../lib/buzzer/README.md#兩隻腳和三隻腳)）。
 
 # test_4.cpp
 

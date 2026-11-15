@@ -1,9 +1,9 @@
-#ifndef TEMP_SENSOR_H
-#define TEMP_SENSOR_H
+#ifndef DS18B20_H
+#define DS18B20_H
 
 #include <stdint.h>
 
-namespace temp_sensor {
+namespace DS18B20 {
     // DS18B20 commands (datasheet: ROM commands, function commands)
     constexpr uint8_t SKIP_ROM         = 0xCC;
     constexpr uint8_t CONVERT_T        = 0x44;
@@ -16,7 +16,7 @@ namespace temp_sensor {
     // the temperature register before the first conversion: 85.0 °C
     constexpr int16_t POWER_ON_RAW = 0x0550;
 
-    // DS18B20 digital thermometer (VCC, DQ, GND), one sensor on the wire (Skip ROM)
+    // Thermometer: the DS18B20 digital thermometer (VCC, DQ, GND; the bare part, the waterproof probe and KY-001 alike), one sensor on the wire (Skip ROM)
     // powered from VCC (3.0 ~ 5.5 V); parasite power (VCC tied to GND) is not supported
     //
     // Wire: a struct of static functions (see lib/Uno/Uno_one_wire.h)
@@ -30,7 +30,7 @@ namespace temp_sensor {
     // raw value: signed, 1/16 °C per step (-55 ~ +125 °C = -880 ~ 2000)
     // functions return a result: OK or one of the errors below
     template <class Wire>
-    class DS18B20 {
+    class Thermometer {
     public:
         static constexpr uint8_t OK = 0;
         static constexpr uint8_t ERROR_NO_SENSOR = 1;  // no presence pulse: wiring, pull-up, power
@@ -85,13 +85,13 @@ namespace temp_sensor {
     // ================= definitions =================
 
     template <class Wire>
-    inline uint8_t DS18B20<Wire>::init(uint8_t bits) {
+    inline uint8_t Thermometer<Wire>::init(uint8_t bits) {
         Wire::init();
         return setResolution(bits);
     }
 
     template <class Wire>
-    inline uint8_t DS18B20<Wire>::setResolution(uint8_t bits) {
+    inline uint8_t Thermometer<Wire>::setResolution(uint8_t bits) {
         if (bits < 9 || bits > 12) {
             return ERROR_RESOLUTION;
         }
@@ -115,18 +115,18 @@ namespace temp_sensor {
     }
 
     template <class Wire>
-    inline uint8_t DS18B20<Wire>::resolution() const {
+    inline uint8_t Thermometer<Wire>::resolution() const {
         return _bits;
     }
 
     template <class Wire>
-    inline uint16_t DS18B20<Wire>::conversionMs() const {
+    inline uint16_t Thermometer<Wire>::conversionMs() const {
         // 750 ms at 12 bits, halved per bit less (rounded up)
         return (uint16_t)((750 + (1 << (12 - _bits)) - 1) >> (12 - _bits));
     }
 
     template <class Wire>
-    inline uint8_t DS18B20<Wire>::startConversion() {
+    inline uint8_t Thermometer<Wire>::startConversion() {
         uint8_t result = select();
         if (result != OK) {
             return result;
@@ -136,12 +136,12 @@ namespace temp_sensor {
     }
 
     template <class Wire>
-    inline bool DS18B20<Wire>::isConversionDone() {
+    inline bool Thermometer<Wire>::isConversionDone() {
         return Wire::readBit();
     }
 
     template <class Wire>
-    inline uint8_t DS18B20<Wire>::readRaw(int16_t &raw) {
+    inline uint8_t Thermometer<Wire>::readRaw(int16_t &raw) {
         uint8_t data[SCRATCHPAD_SIZE];
         uint8_t result = readScratchpad(data);
         if (result != OK) {
@@ -154,7 +154,7 @@ namespace temp_sensor {
     }
 
     template <class Wire>
-    inline uint8_t DS18B20<Wire>::readCentiCelsius(int16_t &centiCelsius) {
+    inline uint8_t Thermometer<Wire>::readCentiCelsius(int16_t &centiCelsius) {
         uint8_t result = startConversion();
         if (result != OK) {
             return result;
@@ -175,7 +175,7 @@ namespace temp_sensor {
     }
 
     template <class Wire>
-    inline int16_t DS18B20<Wire>::toCentiCelsius(int16_t raw) {
+    inline int16_t Thermometer<Wire>::toCentiCelsius(int16_t raw) {
         // raw * 100 / 16 = raw * 25 / 4, rounded half away from zero
         int32_t scaled = (int32_t)raw * 25;
         scaled += scaled >= 0 ? 2 : -2;
@@ -183,12 +183,12 @@ namespace temp_sensor {
     }
 
     template <class Wire>
-    inline float DS18B20<Wire>::toCelsius(int16_t raw) {
+    inline float Thermometer<Wire>::toCelsius(int16_t raw) {
         return raw / 16.0f;
     }
 
     template <class Wire>
-    inline uint8_t DS18B20<Wire>::crc8(const uint8_t *data, uint8_t length) {
+    inline uint8_t Thermometer<Wire>::crc8(const uint8_t *data, uint8_t length) {
         uint8_t crc = 0;
         for (uint8_t i = 0; i < length; i++) {
             uint8_t byte = data[i];
@@ -205,7 +205,7 @@ namespace temp_sensor {
     }
 
     template <class Wire>
-    inline uint8_t DS18B20<Wire>::select() {
+    inline uint8_t Thermometer<Wire>::select() {
         if (!Wire::reset()) {
             return ERROR_NO_SENSOR;
         }
@@ -214,7 +214,7 @@ namespace temp_sensor {
     }
 
     template <class Wire>
-    inline uint8_t DS18B20<Wire>::readScratchpad(uint8_t *data) {
+    inline uint8_t Thermometer<Wire>::readScratchpad(uint8_t *data) {
         uint8_t result = select();
         if (result != OK) {
             return result;

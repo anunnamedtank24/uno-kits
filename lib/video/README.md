@@ -63,7 +63,7 @@ while (true) {
 
 ### 在 OLED 上播
 
-`SSD1306::Frame`（[I2C](../I2C/README.md)）也有 `setWindow`、`writeData16`、`endWrite`，所以 `FlashPlayer` 可以直接用：
+`SSD1306::Frame`（[SSD1306](../SSD1306/README.md)）也有 `setWindow`、`writeData16`、`endWrite`，所以 `FlashPlayer` 可以直接用：
 
 ```bash
 python -B source/convert.py assets/orbit.gif output --target uno --fit 64x64 --mono --keyframe 8

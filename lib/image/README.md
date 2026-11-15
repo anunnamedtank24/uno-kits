@@ -13,7 +13,7 @@ lib/image/
 ├── decoder.h          Decoder<Screen, SEGMENT>：像素格式，畫一張圖
 ├── flash_image.h      FlashImage<Screen, SEGMENT>：畫 Flash 裡的圖（--target uno）
 ├── stream_image.h     StreamImage<Screen, Link, CHUNK, SEGMENT>：畫 Mac 傳來的圖（--target mac）
-├── assets/            原始圖片（sunset.jpg / .png / .webp / .heic、logo.png、moon.jpg、city.png）
+├── assets/            原始圖片（sunset.jpg / .png / .webp / .heic、logo.png、moon.jpg、city.png、treble_clef.png）
 ├── source/            config.json、convert.py、check.py、stream.py，見 source/README.md
 └── output/            產生的圖片和 selected.h，見 output/README.md
 ```
@@ -56,7 +56,7 @@ if (result != pictures.OK) {
 
 ### 在 OLED 上畫
 
-`Decoder` 只透過 `writeWindow` 畫，所以 OLED（[I2C](../I2C/README.md)）也能用：
+`Decoder` 只透過 `writeWindow` 畫，所以 OLED（[SSD1306](../SSD1306/README.md)）也能用：
 
 ```bash
 python -B source/convert.py assets/logo.png output --target uno mac --fit 128x64 --palette 2

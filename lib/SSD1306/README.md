@@ -1,4 +1,4 @@
-# I2C
+# SSD1306
 
 I2C 介面的 OLED 螢幕驅動，控制器是 SSD1306，`namespace SSD1306`。只依賴一個 Bus（例如 `Uno::UnoI2C<SCL, SDA>`），換主板只要換 Bus。它本身就是 Screen，`graphics`、`image`、`video` 的函式跟 ST7789 完全一樣。
 
@@ -7,8 +7,8 @@ I2C 介面的 OLED 螢幕驅動，控制器是 SSD1306，`namespace SSD1306`。�
 ## 檔案
 
 ```
-lib/I2C/
-├── I2C.h               入口（沒有對應的模組時）：basic/
+lib/SSD1306/
+├── SSD1306.h           入口：basic/ + 所有模組（程式只 include 它）
 ├── basic/
 │   ├── datasheet.h     Datasheet<Bus>：Table 9-1 的所有指令，照 datasheet 的分類和順序；charge pump、讀狀態
 │   └── frame.h         Frame<Bus, WIDTH, HEIGHT>：板子 RAM 裡的整張畫面、fillWindow、writeWindow、display
@@ -36,7 +36,7 @@ lib/I2C/
 
 ```cpp
 #include "Uno_I2C.h"
-#include "module/OLED_128x64.h"   // 有對應的模組：只 include 模組，它包含 I2C.h 的全部
+#include "SSD1306.h"              // 只 include 入口，它包含 basic/ 和所有模組
 #include "graphics.h"
 #include "font.h"
 
@@ -210,7 +210,7 @@ void setup() {
 | 情況 | 結果 | 做法 |
 |---|---|---|
 | 一片黑 | `init()` 失敗 | 檢查 VCC / GND、SCL / SDA 接反；位址可能是 0x3D |
-| 只有上半部、每隔一列 | 其實是 128×32 的面板 | 改用 `module/OLED_128x32.h` |
+| 只有上半部、每隔一列 | 其實是 128×32 的面板 | 改用 `SSD1306::OLED128x32` |
 | 左右或上下鏡像 | 模組裝反了 | `init(true)` 轉 180° |
 | 右邊有 2 欄雜點、整體偏移 | 控制器其實是 SH1106（1.3 吋常見，132 欄、沒有 20h ～ 22h） | 不支援 |
 | 偶爾亂掉 | 線太長或上拉太弱 | 降低速度：`Uno::UnoI2C<13, 11, true, 100>` |

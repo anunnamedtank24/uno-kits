@@ -40,6 +40,22 @@ namespace Uno {
         static inline uint16_t readFlash16(const uint16_t *address);
     };
 
+    // one PWM output pin (3, 5, 6, 9, 10, 11), e.g. an LED (LED::SingleLED, LED::RGBLED): LOW after init()
+    // ~976 Hz, duty 0 ~ 255 (see Uno::pwmSet): D9 / D10 use Timer1 (not with UnoTone), D3 / D11 Timer2,
+    // D5 / D6 Timer0 (shared with millis, fine for LEDs)
+    template <uint8_t PIN>
+    struct UnoPwmPin {
+        static_assert(exists(PIN), "UnoPwmPin: PIN must be 0 ~ 19");
+        static_assert(has(PIN, function::PWM), "UnoPwmPin: PIN must be a PWM pin (3, 5, 6, 9, 10, 11)");
+
+        // ---------- Pwm functions ----------
+
+        static inline void init();
+
+        // 0 = LOW all the time, 255 = HIGH all the time
+        static inline void write(uint8_t duty);
+    };
+
     // ================= definitions =================
 
     template <uint8_t PIN, bool INTERNAL_PULLUP>
@@ -80,6 +96,16 @@ namespace Uno {
     template <uint8_t PIN>
     inline uint16_t UnoOutputPin<PIN>::readFlash16(const uint16_t *address) {
         return Uno::readFlash16(address);
+    }
+
+    template <uint8_t PIN>
+    inline void UnoPwmPin<PIN>::init() {
+        pwmSet<PIN>(0);
+    }
+
+    template <uint8_t PIN>
+    inline void UnoPwmPin<PIN>::write(uint8_t duty) {
+        pwmSet<PIN>(duty);
     }
 }
 

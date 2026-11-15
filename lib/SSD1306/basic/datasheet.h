@@ -1,5 +1,5 @@
-#ifndef I2C_DATASHEET_H
-#define I2C_DATASHEET_H
+#ifndef SSD1306_DATASHEET_H
+#define SSD1306_DATASHEET_H
 
 #include <stdint.h>
 

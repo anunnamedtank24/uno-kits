@@ -2,16 +2,27 @@
 
 開關，`namespace switches`（`switch` 是 C++ 的關鍵字，不能當 namespace）。只依賴一個 Pin（例如 `Uno::UnoPin<PIN>`），換主板只要換 Pin。
 
-能用的開關：
-- 三隻腳的模組（GND、VCC、OUT）：按鈕、觸摸、傾斜、磁簧等。
-- 直接接到 GND 的裸按鈕：開 Pin 的內部上拉。
-
 ## 檔案
 
 ```
 lib/switch/
-└── switch.h    Switch<Pin, ACTIVE_HIGH, DEBOUNCE_MS>：去彈跳、按下 / 放開、次數、時間
+├── switch.h              入口：全部（程式只 include 它）
+├── debounced_switch.h    DebouncedSwitch<Pin, ACTIVE_HIGH, DEBOUNCE_MS>：去彈跳、按下 / 放開、次數、時間（模組共用的核心）
+└── module/               實際買到的零件
+    ├── switch_2_pins.h   Switch2Pins<Pin>：兩隻腳的裸開關，接腳位和 GND（開內部上拉，按下是 LOW）
+    └── switch_3_pins.h   Switch3Pins<Pin, ACTIVE_HIGH>：三隻腳的模組（GND、VCC、OUT）
 ```
+
+## 兩隻腳和三隻腳
+
+| 零件 | 例子 | 接法 | 用 |
+|---|---|---|---|
+| 兩隻腳的裸開關 | 按鈕、磁簧開關、傾斜開關（滾珠） | 一隻接腳位、一隻接 GND | `Switch2Pins<Uno::UnoPin<PIN, true>>`：內部上拉，沒按 HIGH、按下 LOW |
+| 四隻腳的輕觸按鈕 | 麵包板常用的方形按鈕 | 四隻腳兩兩相通，**取對角的兩隻**當兩隻腳 | 同上 |
+| 三隻腳的模組（GND、VCC、OUT） | 按鈕模組、TTP223 觸摸、傾斜、磁簧、霍爾模組 | OUT 接腳位，模組自己輸出高低 | `Switch3Pins<Uno::UnoPin<PIN>>`，不開上拉；按下是 LOW 的模組加 `false` |
+
+- **兩隻腳一定要上拉**：開關打開時沒有東西推腳位，不開上拉會讀到亂跳的雜訊。
+- **三隻腳的 ACTIVE_HIGH**：觸摸模組和大部分按鈕模組按下是 HIGH（預設）；有些按鈕、傾斜、霍爾模組按下是 LOW。不確定就跑 `src/week_4/test_2.cpp`。
 
 ## 接線
 
@@ -21,7 +32,7 @@ lib/switch/
 | VCC | 5V |
 | OUT | 任何數位腳，例如 D2 |
 
-裸按鈕：一邊接腳位、一邊接 GND，用 `Uno::UnoPin<2, true>`（內部上拉）和 `ACTIVE_HIGH = false`。
+兩隻腳的裸開關：一邊接腳位、一邊接 GND，用 `Switch2Pins<Uno::UnoPin<2, true>>`。
 
 ## 用法
 
@@ -29,8 +40,8 @@ lib/switch/
 #include "Uno_pin.h"
 #include "switch.h"
 
-using SwitchPin = Uno::UnoPin<2>;                 // OUT 接 D2
-switches::Switch<SwitchPin> button;               // OUT 在開的時候是 HIGH（預設）
+switches::Switch3Pins<Uno::UnoPin<2>> button;     // 三隻腳的模組，OUT 接 D2
+// switches::Switch2Pins<Uno::UnoPin<2, true>> button;   // 兩隻腳的裸按鈕，接 D2 和 GND
 
 void setup() {
     button.init();
@@ -69,8 +80,8 @@ void loop() {
 
 | 參數 | 預設 | 說明 |
 |---|---|---|
-| `Pin` | — | `Uno::UnoPin<PIN, INTERNAL_PULLUP>` |
-| `ACTIVE_HIGH` | `true` | 開的時候 OUT 是 HIGH。觸摸模組和大部分按鈕模組是 HIGH；裸按鈕接 GND、有些模組是 LOW，要設成 `false` |
+| `Pin` | — | 兩隻腳：`Uno::UnoPin<PIN, true>`（上拉）；三隻腳：`Uno::UnoPin<PIN>` |
+| `ACTIVE_HIGH`（`Switch3Pins`） | `true` | 開的時候 OUT 是 HIGH。觸摸模組和大部分按鈕模組是 HIGH；有些模組是 LOW，要設成 `false`（`Switch2Pins` 固定是 LOW） |
 | `DEBOUNCE_MS` | 20 | 去彈跳：新的電位要維持這麼久才算數 |
 
 不知道 `ACTIVE_HIGH` 要設多少：跑 `src/week_4/test_2.cpp`，沒按的時候顯示 `on`，就改成 `false`。

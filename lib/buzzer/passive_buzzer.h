@@ -10,12 +10,12 @@ namespace buzzer {
     // Tone: a struct providing these static functions (e.g. Uno::UnoTone of lib/Uno/Uno_tone.h)
     //   void init()
     //   void start(uint16_t hz)     square wave, hz > 0; called again to change it without a click
-    //   void stop()                 pin LOW
+    //   void stop()                 pin at its idle level (no current through the buzzer)
     //   uint16_t realHz()           the frequency really played, 0 if stopped
     //   uint32_t nowMs()
     //   uint16_t readFlash16(const uint16_t *address)
     //
-    // stop() leaves the pin LOW: a magnetic buzzer must not get DC for long (its coil heats up)
+    // stop() leaves no current through the buzzer: a magnetic buzzer must not get DC for long (its coil heats up)
     // only one at a time: a Tone usually owns a timer (Uno::UnoTone: Timer1)
     template <class Tone>
     struct PassiveBuzzer {
@@ -27,7 +27,7 @@ namespace buzzer {
         // square wave at hz, or change it while playing
         static inline void start(uint16_t hz);
 
-        // silent, pin LOW
+        // silent, pin at the Tone's idle level
         static inline void stop();
 
         static inline uint32_t nowMs();

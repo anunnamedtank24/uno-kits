@@ -1,12 +1,12 @@
-# temp_sensor
+# DS18B20
 
-DS18B20 數位溫度感測器（三隻腳：VCC、DQ、GND），`namespace temp_sensor`。只依賴一個 Wire（1-Wire 匯流排，例如 `Uno::UnoOneWire<PIN>`），換主板只要換 Wire。
+DS18B20 數位溫度感測器（三隻腳：VCC、DQ、GND），`namespace DS18B20`，類別 `DS18B20::Thermometer`。資料夾用晶片命名：裸的 TO-92、防水探頭、KY-001 模組裡面都是同一顆 DS18B20，程式一樣，所以不分 `module/`。只依賴一個 Wire（1-Wire 匯流排，例如 `Uno::UnoOneWire<PIN>`），換主板只要換 Wire。
 
 ## 檔案
 
 ```
-lib/temp_sensor/
-└── temp_sensor.h    DS18B20<Wire>：解析度、轉換、讀取、CRC
+lib/DS18B20/
+└── DS18B20.h        Thermometer<Wire>：解析度、轉換、讀取、CRC
 ```
 
 ## 接線
@@ -24,10 +24,10 @@ lib/temp_sensor/
 
 ```cpp
 #include "Uno_one_wire.h"
-#include "temp_sensor.h"
+#include "DS18B20.h"
 
 using SensorWire = Uno::UnoOneWire<2>;            // DQ 接 D2
-temp_sensor::DS18B20<SensorWire> sensor;
+DS18B20::Thermometer<SensorWire> sensor;
 
 sensor.init(12);                                  // 12 bits：0.0625 °C，一次 750 ms
 int16_t centi;

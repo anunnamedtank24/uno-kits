@@ -1,7 +1,7 @@
 #include <Arduino.h>
 #include <stdio.h>
 #include "Uno_ST7789.h"
-#include "module/M130T.h"
+#include "ST7789.h"
 #include "graphics.h"
 #include "color.h"
 #include "font.h"

@@ -1,7 +1,7 @@
 #include <Arduino.h>
 #include "Uno_serial.h"
 #include "Uno_one_wire.h"
-#include "temp_sensor.h"
+#include "DS18B20.h"
 
 // UNO + DS18B20 temperature sensor (VCC, DQ, GND)
 // VCC -> 5V, DQ -> D2, GND -> GND; DQ needs a 4.7 kΩ pull-up to VCC (most modules have one)
@@ -9,7 +9,7 @@
 //   pio device monitor -b 1000000
 using SensorWire = Uno::UnoOneWire<2>;
 using Link = Uno::UnoSerial<1000000>;
-temp_sensor::DS18B20<SensorWire> sensor;
+DS18B20::Thermometer<SensorWire> sensor;
 
 constexpr uint16_t PERIOD_MS = 1000;
 
@@ -55,7 +55,7 @@ void printCentiCelsius(int16_t centiCelsius) {
 }
 
 void printResult(uint8_t result) {
-    using Sensor = temp_sensor::DS18B20<SensorWire>;
+    using Sensor = DS18B20::Thermometer<SensorWire>;
     if (result == Sensor::ERROR_NO_SENSOR) {
         printText("error: no sensor (check DQ on D2, the pull-up, VCC / GND)");
     } else if (result == Sensor::ERROR_CRC) {
@@ -76,7 +76,7 @@ void setup() {
     Link::init();
     printText("\r\nDS18B20 on D2\r\n");
     uint8_t result = sensor.init(12);
-    if (result != temp_sensor::DS18B20<SensorWire>::OK) {
+    if (result != DS18B20::Thermometer<SensorWire>::OK) {
         printResult(result);
         printText("\r\n");
         return;
@@ -93,23 +93,23 @@ void loop() {
 
     int16_t raw = 0;
     uint8_t result = sensor.startConversion();
-    if (result == temp_sensor::DS18B20<SensorWire>::OK) {
+    if (result == DS18B20::Thermometer<SensorWire>::OK) {
         // the sensor answers 0 while converting
         bool done = false;
         while (!done && millis() - startMs < (uint32_t)sensor.conversionMs() + 50) {
             done = sensor.isConversionDone();
         }
-        result = done ? sensor.readRaw(raw) : temp_sensor::DS18B20<SensorWire>::ERROR_TIMEOUT;
+        result = done ? sensor.readRaw(raw) : DS18B20::Thermometer<SensorWire>::ERROR_TIMEOUT;
     }
 
-    if (result == temp_sensor::DS18B20<SensorWire>::OK) {
-        printCentiCelsius(temp_sensor::DS18B20<SensorWire>::toCentiCelsius(raw));
+    if (result == DS18B20::Thermometer<SensorWire>::OK) {
+        printCentiCelsius(DS18B20::Thermometer<SensorWire>::toCentiCelsius(raw));
         printText(" C (raw ");
         printNumber(raw);
         printText(", ");
         printNumber(millis() - startMs);
         printText(" ms)");
-        if (raw == temp_sensor::POWER_ON_RAW) {
+        if (raw == DS18B20::POWER_ON_RAW) {
             printText("  85.00 is also the power-on value: the conversion may not have run");
         }
     } else {

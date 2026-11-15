@@ -14,7 +14,7 @@
 constexpr bool ACTIVE_HIGH = true;
 using SwitchPin = Uno::UnoPin<2>;
 using Link = Uno::UnoSerial<1000000>;
-switches::Switch<SwitchPin, ACTIVE_HIGH> button;
+switches::Switch3Pins<SwitchPin, ACTIVE_HIGH> button;
 
 constexpr uint16_t STATUS_MS = 1000;
 uint32_t nextStatusMs = 0;

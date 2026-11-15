@@ -1,17 +1,17 @@
-#ifndef I2C_OLED_128X64_H
-#define I2C_OLED_128X64_H
+#ifndef SSD1306_OLED_128X32_H
+#define SSD1306_OLED_128X32_H
 
-// a superset of I2C.h: including this file is enough
-#include "../I2C.h"
+#include "../basic/datasheet.h"
+#include "../basic/frame.h"
 
 namespace SSD1306 {
-    // the common 0.96" 128x64 I2C OLED module (GND, VCC, SCL, SDA), SSD1306 with charge pump
+    // the 0.91" 128x32 I2C OLED module (GND, VCC, SCL, SDA), SSD1306 with charge pump
     // init: the datasheet's software initialization flow (Rev 1.1, application example),
-    // with the COM pins of a 128x64 panel (alternative) and the pre-charge for the charge pump
+    // with the COM pins of a 128x32 panel (sequential) and the pre-charge for the charge pump
     template <class Bus>
-    class OLED128x64 : public Frame<Bus, 128, 64> {
+    class OLED128x32 : public Frame<Bus, 128, 32> {
     public:
-        using Frame<Bus, 128, 64>::Frame;
+        using Frame<Bus, 128, 32>::Frame;
 
         // composite: Bus init + the init sequence + a cleared panel, then display on
         // flip: false = pins at the top; true = turned 180° (pins at the bottom)
@@ -22,19 +22,19 @@ namespace SSD1306 {
     // ================= definitions =================
 
     template <class Bus>
-    inline bool OLED128x64<Bus>::init(bool flip) {
+    inline bool OLED128x32<Bus>::init(bool flip) {
         Bus::init();
         this->setDisplayOn(false);
         if (!this->ok()) {
             return false;
         }
-        this->setMultiplexRatio(64);
+        this->setMultiplexRatio(32);
         this->setDisplayOffset(0);
         this->setStartLine(0);
         this->setSegmentRemap(!flip);
         this->setComScanRemap(!flip);
-        this->setComPins(true, false);
-        this->setContrast(0xCF);
+        this->setComPins(false, false);
+        this->setContrast(0x8F);
         this->setEntireDisplayOn(false);
         this->setInverse(false);
         this->setClock(1, 8);

@@ -5,7 +5,7 @@
 
 namespace Uno {
     // 1-Wire bus on one pin (e.g. the DQ pin of a DS18B20), bit-banged with the standard timings
-    // used by temp_sensor::DS18B20
+    // used by DS18B20::Thermometer
     //
     // the line is open drain: LOW = driven by the board, HIGH = released and pulled up
     // it needs a pull-up to VCC: 4.7 kΩ (most 3-pin modules have one on the board);

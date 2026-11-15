@@ -1,6 +1,6 @@
 # Uno
 
-Arduino UNO（ATmega328P）的暫存器層，`namespace Uno`。提供其他函式庫需要的介面（Bus、Link、Wire、Pin、Tone）的 UNO 版本；只依賴 Arduino 的 `millis()`。
+Arduino UNO（ATmega328P）的暫存器層，`namespace Uno`。提供其他函式庫需要的介面（Bus、Link、Wire、Pin、Pwm、InterruptPin、Tone）的 UNO 版本；只依賴 Arduino 的 `millis()`。
 
 ## 檔案
 
@@ -13,7 +13,9 @@ lib/Uno/
 ├── Uno_one_wire.h   UnoOneWire<PIN, INTERNAL_PULLUP>      Wire：1-Wire 匯流排
 ├── Uno_pin.h        UnoPin<PIN, INTERNAL_PULLUP>          Pin：一隻輸入腳
 │                    UnoOutputPin<PIN>                     Pin：一隻輸出腳
-└── Uno_tone.h       UnoTone<PIN>                          Tone：方波（Timer1）
+│                    UnoPwmPin<PIN>                        Pwm：一隻 PWM 腳（調亮度）
+├── Uno_interrupt_pin.h UnoInterruptPin<PIN, INTERNAL_PULLUP> InterruptPin：電位改變就呼叫函式（腳位改變中斷）
+└── Uno_tone.h       UnoTone<PIN, IDLE_HIGH>               Tone：方波（Timer1）
 ```
 
 ## 用法
@@ -25,7 +27,8 @@ lib/Uno/
 #include "Uno_I2C.h"      // I2C 裝置（OLED）
 #include "Uno_serial.h"   // 從 Mac 串流圖片、影片
 #include "Uno_one_wire.h" // 1-Wire 感測器
-#include "Uno_pin.h"      // 開關、有源蜂鳴器
+#include "Uno_pin.h"      // 開關、有源蜂鳴器、LED
+#include "Uno_interrupt_pin.h" // 紅外線接收器（只能在一個 .cpp 裡 include）
 #include "Uno_tone.h"     // 無源蜂鳴器（只能在一個 .cpp 裡 include）
 
 using Bus = Uno::UnoST7789<8, 10, Uno::NONE, 9>;    // DC = D8、RES = D10、沒有 CS、BLK = D9
@@ -135,17 +138,56 @@ using BuzzerPin = Uno::UnoOutputPin<8>;    // 有源蜂鳴器接 D8
 | `UnoOutputPin::write(high)` | 設定電位 |
 | `nowMs`、`readFlash16`（輸出腳） | 給上層計時、讀 Flash |
 
-### UnoTone：方波的 Tone
+### UnoPwmPin：一隻 PWM 腳的 Pwm
 
 ```cpp
-using Tone = Uno::UnoTone<9>;              // start(440) 送 440 Hz，stop() 停止並拉 LOW
+using RedPin = Uno::UnoPwmPin<3>;          // LED 接 D3
 ```
 
 | 函式 | 說明 |
 |---|---|
-| `init()` | 停止計時器，腳位設成輸出、LOW |
+| `init()` | 設成輸出、LOW |
+| `write(duty)` | 設定工作週期（`pwmSet`）：0 = 一直 LOW、255 = 一直 HIGH、中間約 976 Hz 的 PWM |
+
+- **只能用 PWM 腳**：3、5、6、9、10、11，其他腳編譯錯誤。
+- **計時器**：D5、D6 是 Timer0（跟 `millis` 共用，只開關輸出，LED 沒問題）；D9、D10 是 Timer1（不能跟 `UnoTone` 一起用）；D3、D11 是 Timer2。
+
+### UnoInterruptPin：腳位改變中斷的 InterruptPin
+
+```cpp
+using IrPin = Uno::UnoInterruptPin<2>;     // 紅外線接收器的 OUT 接 D2
+IrPin::init(&onChange);                    // 每次 D2 的電位改變，就在中斷裡呼叫 onChange()
+```
+
+| 函式 | 說明 |
+|---|---|
+| `init(onChange)` | 設成輸入（`INTERNAL_PULLUP` 時開內部上拉），開腳位改變中斷 |
+| `read()` | 回傳電位，true = HIGH |
+| `nowUs()` | 回傳開機後的 µs（`micros`，每 4 µs 一格），中斷裡也能用 |
+| `nowMs()` | 回傳開機後的 ms |
+| `stopInterrupts()`、`restoreInterrupts(saved)` | 關中斷、恢復：一次讀完中斷寫的資料 |
+
+- **腳位改變中斷（PCINT）**：每隻腳都能用，但腳位分三組共用三個中斷：D0 ～ D7、D8 ～ D13、A0 ～ A5。**一組只能有一個 `UnoInterruptPin`**，第二個會蓋掉第一個的函式。
+- **為什麼不用輪詢**：紅外線的訊號最短 0.56 ms，OLED 的 `display()` 一次要 64 ms，輪詢一定會漏。
+- **中斷定義在標頭檔**：跟 `Uno_tone.h` 一樣，只能在一個 .cpp 裡 include。
+
+### UnoTone：方波的 Tone
+
+```cpp
+using Tone = Uno::UnoTone<9>;              // start(440) 送 440 Hz，stop() 停止並拉 LOW
+using Tone = Uno::UnoTone<9, true>;        // 安靜時 HIGH：三隻腳的無源蜂鳴器模組（PNP，LOW 才通）
+```
+
+| 參數 | 預設 | 說明 |
+|---|---|---|
+| `PIN` | — | 任何腳；D9 / D10 不佔 CPU |
+| `IDLE_HIGH` | `false` | 安靜時（`init`、`stop` 後）腳位的電位；也是常數 `IDLE_LEVEL_HIGH`，給 `buzzer` 的模組檢查 |
+
+| 函式 | 說明 |
+|---|---|
+| `init()` | 停止計時器，腳位設成輸出、安靜的電位（預設 LOW） |
 | `start(hz)` | 開始送方波，或在播放中直接改頻率（不會停頓，滑音用）；0 = `stop()` |
-| `stop()` | 停止計時器，腳位拉 LOW |
+| `stop()` | 停止計時器，腳位回到安靜的電位 |
 | `realHz()` | 回傳實際播出的頻率（tick 是整數），停止時是 0 |
 | `nowMs`、`readFlash16` | 給上層計時、讀 Flash |
 
@@ -184,6 +226,7 @@ using Tone = Uno::UnoTone<9>;              // start(440) 送 440 Hz，stop() 停
 | 項目 | 範圍 | 超出時 |
 |---|---|---|
 | 腳位（template） | 0 ～ 19，或 `Uno::NONE`（只有選填的腳） | 編譯錯誤；D0 / D1 編譯警告 |
+| `UnoPwmPin` 的腳位 | 3、5、6、9、10、11 | 編譯錯誤 |
 | `MODE` | 0 ～ 3 | 編譯錯誤 |
 | `BAUD` | 2000 ～ 2000000，誤差 ≤ 5% | 編譯錯誤；誤差 > 2% 編譯警告 |
 | `UnoI2C` 的 `KHZ` | 1 ～ 400 | 編譯錯誤 |
@@ -203,16 +246,17 @@ using Tone = Uno::UnoTone<9>;              // start(440) 送 440 Hz，stop() 停
 | D0、D1 | `UnoSerial` | 不能同時用 Arduino 的 `Serial`；燒錄時也會用到 |
 | `UnoI2C` 的兩隻腳 | 軟體 I2C | 例如 D13 / D11 時不能同時接 SPI 螢幕；D13 的板載 LED 會跟著閃 |
 | Timer0 | Arduino 的 `millis()`（`nowMs()`） | BLK 接 D5 / D6 時只能用固定約 976 Hz 的 PWM |
-| Timer1（D9、D10）、Timer2（D3、D11） | `pwmSet`（例如 BLK） | 跟 `Servo`、Arduino `tone()` 等用同一個計時器的函式庫衝突 |
+| Timer1（D9、D10）、Timer2（D3、D11） | `pwmSet`（例如 BLK、`UnoPwmPin`） | 跟 `Servo`、Arduino `tone()` 等用同一個計時器的函式庫衝突 |
 | Timer1 | `UnoTone` | 播放時整個 Timer1 都是它的 |
-| 中斷 | 只有 `UnoTone` 不在 D9 / D10 時用 Timer1 比較中斷；`UnoOneWire` 每個位元關中斷約 70 µs | 其他都是輪詢，`update()` 要自己一直呼叫 |
+| 中斷 | `UnoTone` 不在 D9 / D10 時用 Timer1 比較中斷；`UnoInterruptPin` 用腳位改變中斷（三組，一組一個）；`UnoOneWire` 每個位元關中斷約 70 µs | 其他都是輪詢，`update()` 要自己一直呼叫 |
 
 ## 注意事項
 
 | 情況 | 結果 | 做法 |
 |---|---|---|
 | 電腦打開串口 | 板子重置（DTR），bootloader 約等 1 秒 | 先開電腦上的程式，再燒錄 |
-| `Uno_tone.h` 被兩個 .cpp include | 中斷函式重複定義，連結錯誤 | 只在一個 .cpp 裡 include（這個專案一次只有一個 .cpp） |
+| `Uno_tone.h`、`Uno_interrupt_pin.h` 被兩個 .cpp include | 中斷函式重複定義，連結錯誤 | 只在一個 .cpp 裡 include（這個專案一次只有一個 .cpp） |
+| 同一組腳位（D0 ～ D7、D8 ～ D13、A0 ～ A5）有兩個 `UnoInterruptPin` | 後 `init` 的蓋掉前一個 | 放在不同組 |
 | `UnoTone` 和 D9 / D10 的 `pwmSet` 同時用（例如 `UnoST7789` 的 BLK 接 D9） | 兩邊互改 Timer1，頻率和亮度都錯 | BLK 改接 D3、D5、D6、D11，或 `Uno::NONE` |
 | `UnoTone` 在 D9 / D10 以外的腳，同時用 `UnoOneWire` | 關中斷時方波暫停，聲音抖一下 | 蜂鳴器接 D9 或 D10（不用中斷） |
 | 一隻腳接耗電的東西 | 一隻腳建議 ≤ 20 mA（絕對上限 40 mA），整顆晶片 ≤ 200 mA | 透過電晶體推 |

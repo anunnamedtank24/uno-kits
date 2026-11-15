@@ -23,10 +23,10 @@ python -B source/convert.py assets/ode_to_joy.flac output --preview ode.wav
 
 ```cpp
 #include "Uno_tone.h"
-#include "module/passive_buzzer.h"
+#include "buzzer.h"
 #include "audio.h"
 
-using Speaker = buzzer::PassiveBuzzer<Uno::UnoTone<9>>;   // 無源蜂鳴器 + 接 D9
+using Speaker = buzzer::PassiveBuzzer2Pins<Uno::UnoTone<9>>;   // 無源蜂鳴器 + 接 D9
 audio::Player<Speaker> speaker;
 
 void setup() {

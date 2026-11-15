@@ -1,7 +1,7 @@
 #include <Arduino.h>
 #include "Uno_serial.h"
 #include "Uno_tone.h"
-#include "module/passive_buzzer.h"
+#include "buzzer.h"
 #include "audio.h"
 
 // UNO + passive buzzer (two legs, silent on DC: the board sends the pitch)
@@ -14,7 +14,7 @@
 constexpr uint8_t BUZZER_PIN = 9;
 using Tone = Uno::UnoTone<BUZZER_PIN>;
 using Link = Uno::UnoSerial<1000000>;
-using Speaker = buzzer::PassiveBuzzer<Tone>;
+using Speaker = buzzer::PassiveBuzzer2Pins<Tone>;
 audio::Player<Speaker> speaker;
 
 constexpr uint16_t PAUSE_MS = 1000;

@@ -1,8 +1,9 @@
 #ifndef ST7789_M130T_H
 #define ST7789_M130T_H
 
-// a superset of ST7789.h: including this file is enough
-#include "../ST7789.h"
+#include "../basic/datasheet.h"
+#include "../basic/window.h"
+#include "../tool/init.h"
 
 namespace ST7789 {
     // M130T: 1.3" IPS 240x240 module, ST7789 driver, no CS pin (SPI_MODE3)

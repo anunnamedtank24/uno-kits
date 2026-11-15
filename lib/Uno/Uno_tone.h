@@ -17,7 +17,10 @@ namespace Uno {
     // Timer1 is then used by this only: no pwmSet() on D9 / D10 at the same time
     // (e.g. the BLK of Uno_ST7789 on D9), no Servo library, no Arduino tone()
     // the interrupt is defined in this header: include it in one .cpp file only
-    template <uint8_t PIN>
+    //
+    // IDLE_HIGH: the level of the pin while silent (and after stop()): false = LOW (a buzzer on the pin
+    //            and GND: no DC through it), true = HIGH (a 3-pin module with a PNP transistor, on while LOW)
+    template <uint8_t PIN, bool IDLE_HIGH = false>
     struct UnoTone {
         static_assert(exists(PIN), "UnoTone: PIN must be 0 ~ 19");
         static_assert(warn::SerialPin<(PIN == 0 || PIN == 1)>::ok, "");
@@ -25,16 +28,19 @@ namespace Uno {
         static constexpr uint16_t MIN_HZ = 16;
         static constexpr uint16_t MAX_HZ = 20000;
 
+        // the level while silent (for modules that need one: buzzer::PassiveBuzzer3Pins)
+        static constexpr bool IDLE_LEVEL_HIGH = IDLE_HIGH;
+
         // ---------- Tone functions ----------
 
-        // pin LOW, timer stopped
+        // pin at its idle level, timer stopped
         static inline void init();
 
         // starts or changes the wave; hz is kept in MIN_HZ ~ MAX_HZ, 0 = stop()
         // a change while playing keeps the wave going (no click)
         static inline void start(uint16_t hz);
 
-        // timer stopped, pin LOW (no current through the buzzer)
+        // timer stopped, pin at its idle level (no current through the buzzer)
         static inline void stop();
 
         // the frequency really played (timer ticks are whole numbers), 0 if stopped
@@ -55,14 +61,14 @@ namespace Uno {
 
     // ================= definitions =================
 
-    template <uint8_t PIN>
-    inline void UnoTone<PIN>::init() {
+    template <uint8_t PIN, bool IDLE_HIGH>
+    inline void UnoTone<PIN, IDLE_HIGH>::init() {
         stop();
         pinOutput<PIN>();
     }
 
-    template <uint8_t PIN>
-    inline void UnoTone<PIN>::start(uint16_t hz) {
+    template <uint8_t PIN, bool IDLE_HIGH>
+    inline void UnoTone<PIN, IDLE_HIGH>::start(uint16_t hz) {
         if (hz == 0) {
             stop();
             return;
@@ -108,16 +114,20 @@ namespace Uno {
         TCCR1B = (1 << WGM12) | clockBits;
     }
 
-    template <uint8_t PIN>
-    inline void UnoTone<PIN>::stop() {
+    template <uint8_t PIN, bool IDLE_HIGH>
+    inline void UnoTone<PIN, IDLE_HIGH>::stop() {
         TCCR1B = 0;
         TCCR1A = 0;
         TIMSK1 &= ~(1 << OCIE1A);
-        pinLow<PIN>();
+        if (IDLE_HIGH) {
+            pinHigh<PIN>();
+        } else {
+            pinLow<PIN>();
+        }
     }
 
-    template <uint8_t PIN>
-    inline uint16_t UnoTone<PIN>::realHz() {
+    template <uint8_t PIN, bool IDLE_HIGH>
+    inline uint16_t UnoTone<PIN, IDLE_HIGH>::realHz() {
         uint8_t clockBits = TCCR1B & ((1 << CS12) | (1 << CS11) | (1 << CS10));
         if (clockBits == 0) {
             return 0;
@@ -127,13 +137,13 @@ namespace Uno {
         return (uint16_t)((ticksPerSecond + ticks / 2) / ticks);
     }
 
-    template <uint8_t PIN>
-    inline uint32_t UnoTone<PIN>::nowMs() {
+    template <uint8_t PIN, bool IDLE_HIGH>
+    inline uint32_t UnoTone<PIN, IDLE_HIGH>::nowMs() {
         return Uno::nowMs();
     }
 
-    template <uint8_t PIN>
-    inline uint16_t UnoTone<PIN>::readFlash16(const uint16_t *address) {
+    template <uint8_t PIN, bool IDLE_HIGH>
+    inline uint16_t UnoTone<PIN, IDLE_HIGH>::readFlash16(const uint16_t *address) {
         return Uno::readFlash16(address);
     }
 }

@@ -2,11 +2,11 @@
 #include <string.h>
 #include "Uno_ST7789.h"
 #include "Uno_one_wire.h"
-#include "module/M130T.h"
+#include "ST7789.h"
 #include "graphics.h"
 #include "color.h"
 #include "font.h"
-#include "temp_sensor.h"
+#include "DS18B20.h"
 
 // UNO + M130T + DS18B20: temperature, raw value and the screen's frame rate
 //   M130T:   SCL -> D13, SDA -> D11, DC -> D8, RES -> D10, BLK -> D9
@@ -24,7 +24,7 @@
 using Bus = Uno::UnoST7789<8, 10, Uno::NONE, 9>;
 using Screen = graphics::Canvas<ST7789::M130T<Bus>>;
 using SensorWire = Uno::UnoOneWire<2>;
-using Sensor = temp_sensor::DS18B20<SensorWire>;
+using Sensor = DS18B20::Thermometer<SensorWire>;
 namespace RGB565 = color::RGB565;
 using Font = font::menlo_width_12_first_32_last_126_default_63; // 12 x 35, ASCII 32 ~ 126
 

@@ -1,7 +1,7 @@
 #include <Arduino.h>
 #include <math.h>
 #include "Uno_I2C.h"
-#include "module/OLED_128x64.h"
+#include "SSD1306.h"
 #include "graphics.h"
 
 // UNO + 128x64 I2C OLED: a big circle among dots that are born and die by themselves

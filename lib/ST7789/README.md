@@ -6,7 +6,7 @@ ST7789 彩色螢幕控制器的驅動，`namespace ST7789`。只依賴一個 Bus
 
 ```
 lib/ST7789/
-├── ST7789.h          入口（沒有對應的模組時）：basic/ + tool/
+├── ST7789.h          入口：basic/ + tool/ + 所有模組（程式只 include 它）
 ├── basic/
 │   ├── datasheet.h   Datasheet<Bus>：datasheet 第 9 章所有指令（Table 1、Table 2），照順序排
 │   └── window.h      Window<Bus>：setWindow、fillWindow、writeWindow（後兩個會裁切）
@@ -36,7 +36,7 @@ M130T（沒有 CS）接 UNO：
 
 ```cpp
 #include "Uno_ST7789.h"
-#include "module/M130T.h"    // 有對應的模組：只 include 模組，它包含 ST7789.h 的全部
+#include "ST7789.h"          // 只 include 入口，它包含 basic/、tool/ 和所有模組
 
 using Bus = Uno::UnoST7789<8, 10, Uno::NONE, 9>;
 ST7789::M130T<Bus> screen;
