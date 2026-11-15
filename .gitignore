@@ -1,0 +1,7 @@
+/.pio/
+/.vscode/
+/include/
+/src/week*
+/src/hide.py
+/test/
+.DS_Store
