@@ -8,6 +8,7 @@ Arduino UNO（ATmega328P）的暫存器層程式，`namespace Uno`。
 |---|---|---|
 | `Uno_ST7789.h` | `Uno::UnoST7789<DC, RES, CS, BLK, MODE>` | **接口**：ST7789 螢幕的 Bus |
 | `Uno_serial.h` | `Uno::UnoSerial<BAUD>` | **接口**：USB 串口的 Link（`GIF::StreamPlayer` 用） |
+| `Uno_one_wire.h` | `Uno::UnoOneWire<PIN, INTERNAL_PULLUP>` | **接口**：1-Wire 匯流排的 Wire（`temp_sensor::DS18B20` 用） |
 | `Uno.h` | 腳位、SPI、UART、PWM、Flash、時間、腳位檢查 | 底層工具，上面兩個接口都會 include 它 |
 
 要用哪個接口就 include 哪個，`Uno.h` 不會反過來 include 接口：
@@ -15,6 +16,7 @@ Arduino UNO（ATmega328P）的暫存器層程式，`namespace Uno`。
 ```cpp
 #include "Uno_ST7789.h"
 #include "Uno_serial.h"   // 需要串流時才加
+#include "Uno_one_wire.h" // 接 1-Wire 感測器時才加
 ```
 
 ## UnoST7789：螢幕的 Bus
@@ -47,6 +49,19 @@ using Link = Uno::UnoSerial<1000000>;   // 1 Mbaud（預設），D0 / D1
 - **鮑率**：在 16 MHz 下，1000000 和 2000000 剛好整除沒有誤差；115200 有 2.1% 誤差，會出警告。
 - **板子會重置**：電腦打開串口時板子會重置（DTR），bootloader 大約要等 1 秒。
 
+## UnoOneWire：1-Wire 匯流排
+
+```cpp
+using SensorWire = Uno::UnoOneWire<2>;          // DQ 接 D2，順便開內部上拉
+using SensorWire = Uno::UnoOneWire<2, false>;   // 只靠外接的 4.7 kΩ 上拉
+```
+
+- **函式**：`init`、`reset`（回傳有沒有裝置回應）、`writeBit`、`readBit`、`write8`、`read8`（低位元先）、`delayMs`、`nowMs`。
+- **開汲極**：要輸出 LOW 時才把腳設成輸出；其他時候是輸入，讓上拉電阻拉成 HIGH，不會跟裝置搶線。
+- **時序**：reset 480 µs、寫 1 拉低 6 µs、寫 0 拉低 60 µs、讀在拉低後 13 µs 取樣，每個位元約 70 µs。
+- **關中斷**：每個位元的時序裡關中斷，避免 `millis()` 的中斷把時序拉長；reset 時線是空閒的，`reset()` 先檢查線是不是 HIGH，是 LOW 就直接回傳 false（沒有上拉或短路）。
+- **任何數位腳都可以**：D0 / D1 會出警告（USB 串口）。
+
 ## 編譯期檢查
 
 腳位都是 template 參數，編譯時就會檢查：
@@ -67,6 +82,7 @@ using Link = Uno::UnoSerial<1000000>;   // 1 Mbaud（預設），D0 / D1
 | `BAUD` | `uint32_t` | 2000 ～ 2000000，誤差 ≤ 5% | 編譯錯誤 |
 | `init(blk)`、`setBacklight(blk)` | `uint8_t` | 0 ～ 255；BLK 不是 PWM 腳時只有 0 = 關、其他 = 開 | — |
 | `read8(byte, timeoutMs)` | `uint16_t` ms | 0 ～ 65535 | — |
+| `UnoOneWire<PIN>` | `uint8_t` | 0 ～ 19；D0 / D1 警告 | 編譯錯誤 |
 | `readFlash8/16(p)` | 指標 | 必須指向 `PROGMEM` 的資料 | 讀到錯的資料 |
 | `delayMs(ms)` | `uint16_t` | 0 ～ 65535 | — |
 
@@ -87,7 +103,7 @@ using Link = Uno::UnoSerial<1000000>;   // 1 Mbaud（預設），D0 / D1
 | 分類 | 內容 |
 |---|---|
 | 腳位功能表 | `PIN_FUNCTIONS[20]`，以及 `exists`、`has`、`optional`、`same`、`mask` |
-| 數位腳 | `pinOutput<P>()`、`pinHigh<P>()`、`pinLow<P>()`，`P` 是 `NONE` 時什麼都不做 |
+| 數位腳 | `pinOutput<P>()`、`pinInput<P>(pullUp)`、`pinHigh<P>()`、`pinLow<P>()`、`pinRead<P>()`，`P` 是 `NONE` 時什麼都不做（讀到 false） |
 | SPI / UART | `spiSet(mode)`：SPI 主模式，f/2 = 8 MHz；`uartSet(ubrr)`、`uartUbrr(baud)`：UART，8N1，倍速模式 |
 | PWM | `pwmSet<P>(duty)`：Timer1/Timer2 用 fast PWM；Timer0（D5、D6）只開關輸出，不動它的設定，因為 millis 要用 |
 | Flash / 時間 | `readFlash8/16`、`delayMs`（忙等，不靠 Timer0）、`nowMs`（millis） |

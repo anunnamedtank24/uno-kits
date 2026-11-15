@@ -17,7 +17,8 @@ Arduino UNO 驅動 1.3 吋 240×240 ST7789 螢幕（M130T 模組）的函式庫�
 │   ├── graphics/      圖形和文字
 │   ├── color/         RGB565 顏色
 │   ├── font/          字型（.ttf → .h）
-│   └── GIF/           GIF 動畫（.gif → .h，Flash 播放或從電腦串流）
+│   ├── GIF/           GIF 動畫（.gif → .h，Flash 播放或從電腦串流）
+│   └── temp_sensor/   DS18B20 溫度感測器（1-Wire）
 └── src/
     └── test/          在板子上跑的完整測試，見 src/test/README.md
 ```
@@ -82,4 +83,5 @@ pip install pillow pyserial
 | [lib/color/README.md](lib/color/README.md) | 顏色 |
 | [lib/font/README.md](lib/font/README.md) | 字型；[source/](lib/font/source/README.md) 轉換、[output/](lib/font/output/README.md) 格式 |
 | [lib/GIF/README.md](lib/GIF/README.md) | 播放器；[source/](lib/GIF/source/README.md) 轉換和串流協定、[output/](lib/GIF/output/README.md) 格式 |
+| [lib/temp_sensor/README.md](lib/temp_sensor/README.md) | DS18B20 溫度感測器：接線、函式、解析度、錯誤 |
 | [src/test/README.md](src/test/README.md) | 測試清單 |

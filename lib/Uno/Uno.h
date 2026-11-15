@@ -184,6 +184,43 @@ namespace Uno {
         }
     }
 
+    // input; pullUp: the internal ~35 kΩ pull-up resistor
+    template <uint8_t P>
+    inline void pinInput(bool pullUp) {
+        static_assert(optional(P), "Uno: pin must be 0 ~ 19 or NONE");
+        if (P == NONE) {
+            return;
+        }
+        if (P < 8) {
+            DDRD &= ~mask(P);
+        } else if (P < 14) {
+            DDRB &= ~mask(P);
+        } else {
+            DDRC &= ~mask(P);
+        }
+        if (pullUp) {
+            pinHigh<P>();
+        } else {
+            pinLow<P>();
+        }
+    }
+
+    // true = HIGH; NONE reads false
+    template <uint8_t P>
+    inline bool pinRead() {
+        static_assert(optional(P), "Uno: pin must be 0 ~ 19 or NONE");
+        if (P == NONE) {
+            return false;
+        }
+        if (P < 8) {
+            return (PIND & mask(P)) != 0;
+        }
+        if (P < 14) {
+            return (PINB & mask(P)) != 0;
+        }
+        return (PINC & mask(P)) != 0;
+    }
+
     // ---------- SPI ----------
 
     // hardware SPI master on D11 (MOSI) / D12 (MISO) / D13 (SCK), frequency / 2 (8 MHz)

@@ -10,6 +10,7 @@
 | [color](color/README.md) | `color` | RGB565 顏色常數和轉換 | `color.h` |
 | [font](font/README.md) | `font` | 從 .ttf 產生的字型 | `font.h` |
 | [GIF](GIF/README.md) | `GIF`、`animation` | GIF 動畫：從 Flash 播，或從 Mac 串流 | `GIF.h` |
+| [temp_sensor](temp_sensor/README.md) | `temp_sensor` | DS18B20 溫度感測器（1-Wire） | `temp_sensor.h` |
 
 ## 依賴關係
 
@@ -22,6 +23,8 @@ Uno_ST7789.h ──(Bus)──▶ ST7789::Datasheet ─▶ Window ─▶ M130T
                                 │
 Uno_serial.h ──(Link)──▶ GIF::StreamPlayer     GIF::FlashPlayer
                                 └──── 都畫在 Canvas 上 ────┘
+
+Uno_one_wire.h ──(Wire)──▶ temp_sensor::DS18B20   （跟螢幕無關，可以單獨用）
 ```
 
 - **換主板**：只換 `Uno/`，寫一個有同樣 static 函式的 Bus（清單在 `ST7789/basic/datasheet.h` 開頭）。
@@ -34,10 +37,11 @@ Uno_serial.h ──(Link)──▶ GIF::StreamPlayer     GIF::FlashPlayer
 
 | 處理方式 | 什麼時候 | 例子 |
 |---|---|---|
-| **編譯錯誤** | 編譯時就知道一定不行 | 腳位不存在、SPI 腳被拿來當 DC / RES / CS / BLK、沒有 CS 卻不是 SPI mode 3、鮑率誤差 > 5%、FlashPlayer 拿到只有 mac 的動畫、StreamPlayer 拿到 256 色動畫 |
+| **編譯錯誤** | 編譯時就知道一定不行 | 腳位不存在（包括 `UnoOneWire`）、SPI 腳被拿來當 DC / RES / CS / BLK、沒有 CS 卻不是 SPI mode 3、鮑率誤差 > 5%、FlashPlayer 拿到只有 mac 的動畫、StreamPlayer 拿到 256 色動畫 |
 | **編譯警告** | 能動，但不建議 | 兩個訊號同一隻腳、用到 D0 / D1、BLK 不是 PWM 腳或用 Timer0、鮑率誤差 > 2%、StreamPlayer 拿到只有 uno 的動畫 |
 | **裁切** | 執行時，畫到螢幕外 | 所有圖形、文字、`writeWindow`：只畫螢幕上的部分 |
-| **拒絕** | 執行時，整個不能畫 | GIF 動畫放不下螢幕：`start` 回傳 false、`error()` = 4 |
+| **拒絕** | 執行時，整個不能做 | GIF 動畫放不下螢幕：`start` 回傳 false、`error()` = 4；DS18B20 的解析度不是 9 ～ 12：`ERROR_RESOLUTION` |
+| **回傳錯誤** | 執行時，硬體沒回應或資料壞了 | DS18B20：`ERROR_NO_SENSOR`、`ERROR_CRC`、`ERROR_TIMEOUT`；StreamPlayer：`error()` |
 | **不畫** | 執行時，參數本身沒意義 | 寬或高 ≤ 0、半徑 < 0、邊界 ≤ 0、空字串 |
 | **不檢查** | 檢查太貴或不可能檢查 | `setWindow` 超出螢幕、datasheet 的原始指令、`readFlash` 的指標不是 `PROGMEM`、`writeWindow` 的陣列不夠長、`setSeparator` 的字串被釋放、三角形的角相差 ≥ 2048 |
 | **轉換時報錯 / 警告** | 電腦上產生資料時 | `font/source/convert.py`、`GIF/source/convert.py`：超過格式上限報錯，超出建議範圍警告 |
@@ -72,6 +76,7 @@ UNO 沒有硬體浮點，一次除法約 500 週期，而且會多佔 Flash。�
 | `graphics::Canvas<M130T<Bus>>` | 27 | 上面 + 字型指標、文字設定 |
 | `GIF::FlashPlayer<Screen>` | 309 | 解碼器 293（一列緩衝 240、調色盤 32）+ 時間 |
 | `GIF::StreamPlayer<Screen, Link, 64>` | 392 | 解碼器 + 接收緩衝 CHUNK + 狀態；CHUNK = 16 時是 344 |
+| `temp_sensor::DS18B20<Wire>` | 1 | 解析度；讀取時另外用 9 bytes 堆疊 |
 
 播放器建議放在函式裡（堆疊），播完 RAM 就還回去，`src/test/test_1.cpp` 就是這樣用的。UNO 只有 2048 bytes RAM。
 
@@ -104,4 +109,4 @@ UNO 沒有硬體浮點，一次除法約 500 週期，而且會多佔 Flash。�
 - **C++17**：`platformio.ini` 把預設的 `-std=gnu++11` 換成 `-std=gnu++17`。
 - **`-mcall-prologues`**：函式開頭、結尾保存暫存器改用共用的程式，省約 1.5 KB，每次呼叫多幾個週期。
 - **`inline`**：有沒有寫對大小沒有影響（實測完全一樣）；template 本來就能放在標頭檔，開了 LTO 由編譯器自己決定要不要展開。
-- **`lib_deps`**：`platformio.ini` 直接列出這六個資料夾。PlatformIO 找依賴時會跳過 `src/test/`，不列的話那裡的程式找不到標頭檔。
+- **`lib_deps`**：`platformio.ini` 直接列出這七個資料夾。PlatformIO 找依賴時會跳過 `src/test/`，不列的話那裡的程式找不到標頭檔。

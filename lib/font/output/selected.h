@@ -6,5 +6,6 @@
 // python source/check.py checks every include
 #include "menlo_height_23_first_32_last_126_default_63.h"
 #include "menlo_height_46_first_48_last_57_default_63.h"
+#include "menlo_width_12_first_32_last_126_default_63.h"
 
 #endif

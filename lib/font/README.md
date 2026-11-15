@@ -47,6 +47,7 @@ screen.setFont<font::menlo_height_23_first_32_last_126_default_63>();
 | 整個字型的形狀資料 | ≤ 65535 bytes（`uint16_t` 位移） | `convert.py` 報錯，縮小字型或字元範圍 |
 | 預設字元 `--default` | 必須在字型裡 | `convert.py` 報錯 |
 | 字型檔 | .ttf、.otf | `convert.py` 報錯 |
+| 字元範圍外的符號（例如 °） | first ～ last 必須連續；`assets/menlo.ttf` 只有 ASCII，沒有 ° | 要用的話，先用 fontTools 從系統字型取出需要的字再轉換 |
 
 - **只畫字的像素**：沒有背景色，抗鋸齒的灰階也沒有，每個像素不是有就是沒有。
 - **等寬或不等寬都可以**：每個字有自己的寬度（`getWidths()`），高度都是 `gridHeight`。

@@ -1,6 +1,15 @@
 # src/test
 
-`test_1.cpp`：整套函式庫在真的板子上的測試。每個測試畫一個畫面，停 1 秒（`HOLD_MS`）再清畫面跑下一個，一直循環。每個測試上方的註解寫著「應該看到什麼」。
+在真的板子上跑的測試。`src/` 裡同時只能有一個檔案有 `setup()` / `loop()`，其他的要改成 `.bak`。
+
+| 檔案 | 測什麼 | 需要的硬體 |
+|---|---|---|
+| `test_1.cpp` | 螢幕、圖形、文字、GIF | M130T 螢幕 |
+| `test_2.cpp` | DS18B20 溫度，每秒用文字送到串口 | DS18B20 |
+
+# test_1.cpp
+
+每個測試畫一個畫面，停 1 秒（`HOLD_MS`）再清畫面跑下一個，一直循環。每個測試上方的註解寫著「應該看到什麼」。
 
 ## 接線
 
@@ -62,3 +71,33 @@ python -B source/stream.py      # pip install pillow pyserial；先關序列監�
 ## 為什麼在 `test/` 裡也能編譯
 
 PlatformIO 找依賴時會跳過 `src/test/`，所以 `platformio.ini` 用 `lib_deps` 直接列出 `lib/` 的六個資料夾。
+
+# test_2.cpp
+
+## 接線
+
+| DS18B20 | UNO |
+|---|---|
+| VCC | 5V |
+| DQ | D2（要有 4.7 kΩ 上拉到 VCC，大部分模組板上已經有） |
+| GND | GND |
+
+## 看結果
+
+```bash
+pio device monitor        # platformio.ini 已設定 monitor_speed = 1000000
+```
+
+開機時印一次解析度，之後每秒一行：
+
+```
+DS18B20 on D2
+resolution 12 bits, conversion 750 ms
+23.50 C (raw 376, 751 ms)
+```
+
+- 括號裡是 raw 值（每格 1/16 °C）和這次量測花的時間。
+- 出現 `85.00` 時會加註：這也是感測器剛上電、還沒轉換過的值。
+- 錯誤會印出原因，例如 `error: no sensor (check DQ on D2, the pull-up, VCC / GND)`。
+- 串口用 `Uno::UnoSerial<1000000>`，所以不能同時用 Arduino 的 `Serial`；打開監看視窗會讓板子重置，開頭那兩行會重印。
+
