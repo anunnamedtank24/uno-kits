@@ -1,0 +1,459 @@
+#include <Arduino.h>
+#include "Uno_serial.h"
+#include "Uno_ST7789.h"
+#include "module/M130T.h"
+#include "graphics.h"
+#include "color.h"
+#include "font.h"
+#include "GIF.h"
+
+// UNO + M130T (1.3" 240x240, no CS)
+// SCL -> D13, SDA -> D11, DC -> D8, RES -> D10, BLK -> D9
+using Bus = Uno::UnoST7789<8, 10, Uno::NONE, 9>;
+using Screen = graphics::Canvas<ST7789::M130T<Bus>>;
+namespace RGB565 = color::RGB565;
+using SmallPrintable = font::menlo_height_23_first_32_last_126_default_63;  // 8 x 23, ASCII 32 ~ 126
+using BigDigits = font::menlo_height_46_first_48_last_57_default_63;       // 16 x 46, '0' ~ '9' + '?' 
+using Orbit = animation::orbit_uno_120x120_palette_16; // 60 x 60 drawn as 120 x 120, 8 colors, 24 frames, 60 ms
+using OrbitStream = animation::orbit_mac_120x120_palette_565; // frames on the computer, 120 x 120 RGB565
+using Link = Uno::UnoSerial<1000000>;
+Screen screen;
+
+constexpr uint16_t HOLD_MS = 1000;
+
+void clear() {
+    screen.fillScreen(RGB565::BLACK);
+}
+
+// ---------- tests ----------
+
+// 1. solid colors: checks init, RGB/BGR order and inversion
+//    expected: red -> green -> blue -> white -> black
+void testColors() {
+    const uint16_t colors[] = {
+        RGB565::RED, RGB565::GREEN, RGB565::BLUE, RGB565::WHITE, RGB565::BLACK
+    };
+    for (uint8_t i = 0; i < sizeof(colors) / sizeof(colors[0]); i++) {
+        screen.fillScreen(colors[i]);
+    }
+}
+
+// 2. 1-px border + corner marks: checks size and offset
+//    expected: white frame touching all 4 edges, red/green/blue/yellow corners
+void testBorder() {
+    screen.drawRectSize(0, 0, screen.width(), screen.height(), RGB565::WHITE);
+    screen.fillRectSize(0, 0, 10, 10, RGB565::RED);
+    screen.fillRectSize(screen.width() - 10, 0, 10, 10, RGB565::GREEN);
+    screen.fillRectSize(0, screen.height() - 10, 10, 10, RGB565::BLUE);
+    screen.fillRectSize(screen.width() - 10, screen.height() - 10, 10, 10, RGB565::YELLOW);
+}
+
+// 3. ST7789::Window::fillWindow and ST7789::Window::writeWindow
+//    expected: 3 solid rects on top, 4 gradient tiles below,
+//              3 cut tiles at the left, right and bottom edges (visible part only)
+uint16_t gradient[16 * 16];
+
+void testRamRect() {
+    screen.fillWindow(10, 10, 60, 40, RGB565::RED);
+    screen.fillWindow(90, 10, 60, 40, RGB565::GREEN);
+    screen.fillWindow(170, 10, 60, 40, RGB565::BLUE);
+
+    // red grows to the right, blue grows down
+    for (uint8_t y = 0; y < 16; y++) {
+        for (uint8_t x = 0; x < 16; x++) {
+            gradient[y * 16 + x] = RGB565::color(x * 16, (x + y) * 8, y * 16);
+        }
+    }
+    for (uint8_t i = 0; i < 4; i++) {
+        screen.writeWindow(20 + i * 56, 80, 16, 16, gradient);
+    }
+    screen.writeWindow(-8, 140, 16, 16, gradient);
+    screen.writeWindow(232, 140, 16, 16, gradient);
+    screen.writeWindow(112, 232, 16, 16, gradient);
+}
+
+// 4. point
+//    expected: dotted grid every 10 px
+void testPoint() {
+    for (int16_t y = 5; y < (int16_t)screen.height(); y += 10) {
+        for (int16_t x = 5; x < (int16_t)screen.width(); x += 10) {
+            screen.drawPoint(x, y, RGB565::WHITE);
+        }
+    }
+}
+
+// 5. horizontal / vertical lines, 3 forms each
+//    expected: each group of 3 lines (red / green / blue) is identical: x 20..119
+void testHVLines() {
+    // horizontal: x 20 ~ 119
+    screen.drawHLineSize(20, 20, 100, RGB565::RED);
+    screen.drawHLinePoints(119, 20, 30, RGB565::GREEN);   // reversed order on purpose
+    screen.drawHLineCenter(70, 40, 100, RGB565::BLUE);
+    // vertical: y 120 ~ 219
+    screen.drawVLineSize(20, 120, 100, RGB565::RED);
+    screen.drawVLinePoints(30, 219, 120, RGB565::GREEN);
+    screen.drawVLineCenter(40, 170, 100, RGB565::BLUE);
+}
+
+// 6. lines, 3 forms
+//    expected: left fan (Points), middle star (Angle, every 30 deg), right box X (Delta)
+void testLines() {
+    for (int16_t y = 0; y < 240; y += 24) {
+        screen.drawLinePoints(0, 120, 70, y, RGB565::CYAN);
+    }
+    for (int16_t deg = 0; deg < 360; deg += 30) {
+        screen.drawLineAngle(120, 120, 40, deg, deg == 0 ? RGB565::RED : RGB565::YELLOW); // red = 0 deg, right
+    }
+    screen.drawLineAngle(120, 120, 40, 90, RGB565::GREEN); // green = 90 deg, up
+    screen.drawLineDelta(170, 90, 60, 60, RGB565::MAGENTA);
+    screen.drawLineDelta(230, 90, -60, 60, RGB565::MAGENTA);
+}
+
+// 7. rectangles, 3 forms
+//    expected: top row outline, bottom row filled; in each row the 3 shapes have the same size
+void testRects() {
+    screen.drawRectSize(10, 20, 60, 80, RGB565::RED);
+    screen.drawRectPoints(149, 99, 90, 20, RGB565::GREEN);  // reversed corners on purpose
+    screen.drawRectCenter(200, 60, 60, 80, RGB565::BLUE);
+
+    screen.fillRectSize(10, 140, 60, 80, RGB565::RED);
+    screen.fillRectPoints(149, 219, 90, 140, RGB565::GREEN);
+    screen.fillRectCenter(200, 180, 60, 80, RGB565::BLUE);
+}
+
+// 8. triangles, 3 forms
+//    expected: top row outline, bottom row filled
+void testTriangles() {
+    screen.drawTrianglePoints(10, 100, 40, 20, 70, 90, RGB565::CYAN);
+    screen.drawTriangleSize(90, 20, 60, 80, RGB565::YELLOW);
+    screen.drawTriangleCenter(200, 60, 60, 80, RGB565::MAGENTA);
+
+    screen.fillTrianglePoints(10, 220, 40, 140, 70, 210, RGB565::CYAN);
+    screen.fillTriangleSize(90, 140, 60, 80, RGB565::YELLOW);
+    screen.fillTriangleCenter(200, 180, 60, 80, RGB565::MAGENTA);
+    screen.drawTriangleCenter(200, 180, 60, 80, RGB565::WHITE); // outline must sit on the fill edge
+}
+
+// 9. circles, 2 forms
+//    expected: left column Radius, right column Points (same size); small white dot = the given point
+void testCircles() {
+    screen.drawCircleRadius(60, 60, 40, RGB565::GREEN);
+    screen.drawCirclePoints(180, 60, 204, 92, RGB565::GREEN); // distance = 40
+    screen.drawPoint(204, 92, RGB565::WHITE);
+
+    screen.fillCircleRadius(60, 180, 40, RGB565::ORANGE);
+    screen.fillCirclePoints(180, 180, 180, 140, RGB565::ORANGE); // distance = 40
+    screen.drawCircleRadius(180, 180, 40, RGB565::WHITE);       // outline must sit on the fill edge
+}
+
+// 10. clipping: shapes partly off screen must not wrap around
+//     expected: cut shapes at the edges, nothing on the opposite side
+void testClip() {
+    screen.fillRectSize(-30, 100, 60, 40, RGB565::RED);
+    screen.fillCircleRadius(240, 120, 40, RGB565::GREEN);
+    screen.fillTrianglePoints(100, -40, 160, -40, 130, 40, RGB565::BLUE);
+    screen.drawCircleRadius(120, 250, 40, RGB565::YELLOW);
+    screen.drawLinePoints(-50, -50, 300, 300, RGB565::WHITE);
+    screen.drawHLineCenter(0, 230, 100, RGB565::GRAY);
+}
+
+// ---------- text tests (font SmallPrintable: 8 x 23, 30 chars x 10 lines) ----------
+
+constexpr int16_t LINE = 24;
+
+// 11. every char of the font, drawn one by one with the returned x
+//     expected: ' ' ~ '~' in 4 lines, no gaps, no overlap
+void testTextChars() {
+    int16_t x = 0;
+    int16_t y = 0;
+    for (uint8_t code = 32; code <= 126; code++) {
+        if (x + 8 > (int16_t)screen.width()) {
+            x = 0;
+            y += LINE;
+        }
+        x = screen.drawTexts(x, y, RGB565::WHITE, (char)code);
+    }
+}
+
+// 12. value types: strings, char, every integer type
+//     expected (each line):
+//       const char*: abc        char[]: buffer          String: Arduino
+//       char: Az                int8/uint8: -5 200      int: -123 65535 true
+//       long: -2147483648       ulong: 4294967295
+//       ll:-9223372036854775808 ull:18446744073709551615
+void testTextTypes() {
+    char buffer[] = "buffer";
+    String arduinoString("Arduino");
+
+    screen.drawTexts(0, LINE * 0, RGB565::WHITE, "const char*: ", "abc");
+    screen.drawTexts(0, LINE * 1, RGB565::WHITE, "char[]: ", buffer);
+    screen.drawTexts(0, LINE * 2, RGB565::WHITE, "String: ", arduinoString);
+    screen.drawTexts(0, LINE * 3, RGB565::WHITE, "char: ", 'A', 'z');
+    screen.drawTexts(0, LINE * 4, RGB565::WHITE, "int8/uint8: ", (int8_t)-5, ' ', (uint8_t)200);
+    screen.drawTexts(0, LINE * 5, RGB565::WHITE, "int: ", -123, ' ', 65535U, ' ', true);
+    screen.drawTexts(0, LINE * 6, RGB565::WHITE, "long: ", -2147483647L - 1);
+    screen.drawTexts(0, LINE * 7, RGB565::WHITE, "ulong: ", 4294967295UL);
+    screen.drawTexts(0, LINE * 8, RGB565::WHITE, "ll:", -9223372036854775807LL - 1);
+    screen.drawTexts(0, LINE * 9, RGB565::WHITE, "ull:", 18446744073709551615ULL);
+}
+
+// 13. float / double, setDecimals
+//     expected:
+//       float: 3.14             round: 2.35 -1.50       double: 2.50
+//       nan inf: nan inf -inf   1e10: ovf
+//       decimals 0: 3           decimals 4: 3.1416
+void testTextFloat() {
+    screen.drawTexts(0, LINE * 0, RGB565::WHITE, "float: ", 3.14159f);
+    screen.drawTexts(0, LINE * 1, RGB565::WHITE, "round: ", 2.345f, ' ', -1.5f);
+    screen.drawTexts(0, LINE * 2, RGB565::WHITE, "double: ", 2.5);
+    screen.drawTexts(0, LINE * 3, RGB565::WHITE, "nan inf: ", NAN, ' ', INFINITY, ' ', -INFINITY);
+    screen.drawTexts(0, LINE * 4, RGB565::WHITE, "1e10: ", 1e10f);
+
+    screen.setDecimals(0);
+    screen.drawTexts(0, LINE * 5, RGB565::CYAN, "decimals 0: ", 2.5f);
+    screen.setDecimals(4);
+    screen.drawTexts(0, LINE * 6, RGB565::CYAN, "decimals 4: ", 3.14159f);
+    screen.setDecimals(2);
+}
+
+// 14. arrays, setSeparator
+//     expected:
+//       int[]: 123              (no separator by default)
+//       int[]: 1, 2, 3          float[]: 1.50, -2.25
+//       char*[]: ab, cd, ef     uint8[]: 10, 20, 255
+//       mixed: 1|2|3 / ab|cd|ef
+void testTextArrays() {
+    const int ints[] = {1, 2, 3};
+    const float floats[] = {1.5f, -2.25f};
+    const char *words[] = {"ab", "cd", "ef"};
+    const uint8_t bytes[] = {10, 20, 255};
+
+    screen.drawTexts(0, LINE * 0, RGB565::WHITE, "int[]: ", ints);
+    screen.setSeparator(", ");
+    screen.drawTexts(0, LINE * 1, RGB565::WHITE, "int[]: ", ints);
+    screen.drawTexts(0, LINE * 2, RGB565::WHITE, "float[]: ", floats);
+    screen.drawTexts(0, LINE * 3, RGB565::WHITE, "char*[]: ", words);
+    screen.drawTexts(0, LINE * 4, RGB565::WHITE, "uint8[]: ", bytes);
+    screen.setSeparator("|");
+    screen.drawTexts(0, LINE * 5, RGB565::CYAN, "mixed: ", ints, " / ", words);
+    screen.setSeparator("");
+}
+
+// 15. default char for codes outside first ~ last
+//     expected:
+//       tab:?|   utf-8:??|   newline:?|   code 200:?|          (font SmallPrintable)
+//       12?34                                                  (font BigDigits, ':' not in it)
+//       ?5?3?50                                                ('-' and '.' not in it)
+void testTextDefault() {
+    screen.drawTexts(0, LINE * 0, RGB565::WHITE, "tab:\t|");
+    screen.drawTexts(0, LINE * 1, RGB565::WHITE, "utf-8:\xC3\xA9|");
+    screen.drawTexts(0, LINE * 2, RGB565::WHITE, "newline:\n|");
+    screen.drawTexts(0, LINE * 3, RGB565::WHITE, "code 200:", (char)200, '|');
+
+    screen.setFont<BigDigits>();
+    screen.drawTexts(0, 100, RGB565::YELLOW, "12:34");
+    screen.drawTexts(0, 150, RGB565::YELLOW, -5, ' ', 3.5f);
+    screen.setFont<SmallPrintable>();
+}
+
+// 16. layout: transparent background, returned x, empty call, fontHeight, clipping
+//     expected:
+//       white text over blue / red: background stays around every letter
+//       red "ABC" and green "ABC" 2 px apart: both visible
+//       "x=123" then a magenta bar right after it, then "(x)" with its value
+//       "empty ok", "fontHeight=23", "F() in flash false" 
+//       text cut at the left, right and bottom edges, nothing wraps around
+void testTextLayout() {
+    screen.fillRectSize(0, 0, 120, 30, RGB565::BLUE);
+    screen.fillRectSize(120, 0, 120, 30, RGB565::RED);
+    screen.drawTexts(40, 4, RGB565::WHITE, "transparent text");
+
+    screen.drawTexts(10, 34, RGB565::RED, "ABC");
+    screen.drawTexts(12, 34, RGB565::GREEN, "ABC");
+
+    int16_t x = screen.drawTexts(10, 64, RGB565::WHITE, "x=");
+    x = screen.drawTexts(x, 64, RGB565::CYAN, 123);
+    screen.fillRectSize(x, 64, 3, screen.fontHeight(), RGB565::MAGENTA);
+    screen.drawTexts(x + 6, 64, RGB565::WHITE, "(", x, ")");
+
+    int16_t empty = screen.drawTexts(50, 94, RGB565::WHITE);
+    screen.drawTexts(10, 94, RGB565::WHITE, empty == 50 ? "empty ok" : "empty FAIL");
+    screen.drawTexts(10, 124, RGB565::WHITE, "fontHeight=", screen.fontHeight());
+    screen.drawTexts(10, 190, RGB565::WHITE, F("F() in flash"), ' ', false);
+
+    screen.drawTexts(-12, 160, RGB565::YELLOW, "clipped left");
+    screen.drawTexts(150, 160, RGB565::YELLOW, "clipped right");
+    screen.drawTexts(10, 228, RGB565::YELLOW, "bottom cut");
+}
+
+// 17. setAutoLineBreak, setLineSpacing
+//     expected:
+//       y 0   "line 1" / "line 2" / "3 follows"          ('\n' starts a new line at x 0)
+//       y 72  "this sentence is too long for" / "one line" + magenta bar after it (returned x)
+//       y 124 "start x 120 wra" / "ps" both starting at x 120
+//       y 170 "gap 20" / "gap 20" with a 20 px gap
+//       top right: 'A' and 'B' on 2 lines, both cut at the right edge (drawn anyway, no endless wrap)
+void testTextLineBreak() {
+    screen.setAutoLineBreak(true);
+
+    screen.drawTexts(0, 0, RGB565::WHITE, "line 1\nline 2\n", 3, " follows");
+
+    int16_t x = screen.drawTexts(0, 72, RGB565::YELLOW, "this sentence is too long for one line");
+    screen.fillRectSize(x, 72 + screen.fontHeight(), 3, screen.fontHeight(), RGB565::MAGENTA);
+
+    screen.drawTexts(120, 124, RGB565::CYAN, "start x 120 wraps");
+
+    screen.drawTexts(236, 0, RGB565::MAGENTA, "AB");
+
+    screen.setLineSpacing(20);
+    screen.drawTexts(0, 170, RGB565::GREEN, "gap 20\ngap 20");
+
+    screen.setLineSpacing(0);
+    screen.setAutoLineBreak(false);
+}
+
+// 18. GIF::FlashPlayer (lib/GIF/output, made by lib/GIF/source/convert.py)
+//     expected: moon orbiting an orange planet in the middle, 1 turn every 1.44 s, for 4 s
+//               then "late 1000 ms" test: it jumps to an I frame, "skipped" > 0
+void testGifFlash() {
+    // players live on the stack: their RAM is only used during the test
+    GIF::FlashPlayer<Screen> player(screen);
+    if (!player.start<Orbit>(60, 40)) {
+        screen.drawTexts(10, 10, RGB565::RED, "does not fit");
+        return;
+    }
+    uint32_t startMs = millis();
+    while (millis() - startMs < 4000) {
+        player.update();
+    }
+    screen.drawTexts(10, 180, RGB565::WHITE, "frame ", player.frame(), " skipped ", player.skippedFrames());
+
+    // a slow program: nothing calls update() for 1 s
+    delay(1000);
+    player.update();
+    screen.drawTexts(10, 204, RGB565::YELLOW, "late: frame ", player.frame(), " skipped ", player.skippedFrames());
+}
+
+// 19. GIF::StreamPlayer over USB serial: the board knows the file, the computer only runs
+//       cd lib/GIF && python source/stream.py        (pip install pyserial; close the serial monitor)
+//     (the file: python source/convert.py assets/orbit.gif output --target mac --fit 120x120 --palette 565)
+//     expected: "waiting for stream.py" until it answers, then the orbit in full color with its status:
+//       0 ~ 3 s   playing
+//       3 ~ 4 s   paused (the moon stops)
+//       4 s       seek to 720 ms (the moon jumps half a turn)
+//       4 ~ 6 s   playing at 200 % (twice as fast)
+//       6 ~ 9 s   loop off at 100 %: stops at the last frame, "ended"
+//     (opening the port resets the board: start stream.py first, it waits for the board)
+void showStreamStatus(GIF::StreamPlayer<Screen, Link, 64> &player, const char *step) {
+    screen.fillRectSize(0, 170, screen.width(), 70, RGB565::BLACK);
+    if (!player.isConnected()) {
+        screen.drawTexts(10, 170, RGB565::YELLOW, "waiting for stream.py");
+        screen.drawTexts(10, 194, RGB565::WHITE, "error ", player.error());
+        return;
+    }
+    screen.drawTexts(10, 170, RGB565::GREEN, step);
+    screen.drawTexts(10, 194, RGB565::WHITE, player.positionMs(), " ms, frame ", player.frame());
+    screen.drawTexts(10, 218, RGB565::WHITE, player.isPlaying() ? "playing" : "paused", player.isEnded() ? " ended" : "");
+}
+
+void testGifStream() {
+    GIF::StreamPlayer<Screen, Link, 64> player(screen);
+    player.open<OrbitStream>(60, 40);
+
+    // wait up to 10 s for stream.py
+    uint32_t startMs = millis();
+    uint32_t waitShownMs = 0;
+    while (!player.isConnected() && millis() - startMs < 10000) {
+        player.update();
+        if (millis() - waitShownMs >= 1000) {
+            waitShownMs = millis();
+            showStreamStatus(player, "");
+        }
+    }
+
+    // each step: what to send at its start, then frames for its time, the status shown every 500 ms
+    const char *const steps[] = { "play", "pause", "seek 720 ms", "speed 200 %", "loop off" };
+    const uint16_t stepMs[] = { 3000, 1000, 10, 2000, 3000 };
+    for (uint8_t i = 0; i < 5; i++) {
+        if (i == 1) {
+            player.pause();
+        } else if (i == 2) {
+            player.seek(720);
+        } else if (i == 3) {
+            player.play();
+            player.setSpeed(200);
+        } else if (i == 4) {
+            player.setSpeed(100);
+            player.setLoop(false);
+        }
+        uint32_t stepStartMs = millis();
+        uint32_t shownMs = 0;
+        while (millis() - stepStartMs < stepMs[i]) {
+            player.update();
+            if (millis() - shownMs >= 500) {
+                shownMs = millis();
+                showStreamStatus(player, steps[i]);
+            }
+        }
+    }
+    showStreamStatus(player, "done");
+    player.close();
+}
+
+void (*const tests[])() = {
+    testColors,
+    testBorder,
+    testRamRect,
+    testPoint,
+    testHVLines,
+    testLines,
+    testRects,
+    testTriangles,
+    testCircles,
+    testClip,
+    testTextChars,
+    testTextTypes,
+    testTextFloat,
+    testTextArrays,
+    testTextDefault,
+    testTextLayout,
+    testTextLineBreak,
+    testGifFlash,
+    testGifStream,
+};
+
+void (*const selectedTests[])() = {
+    tests[17]
+};
+
+// runs every test of a list, HOLD_MS after each
+// the list is taken by reference so its length N is known here
+using Test = void (*)();
+
+template <size_t N>
+void testAll(const Test (&list)[N], bool doClear = true) {
+    for (size_t i = 0; i < N; i++) {
+        if (doClear) {
+            clear();
+        }
+        list[i]();
+        delay(HOLD_MS);
+    }
+}
+
+void setup() {
+    screen.init();
+    screen.setFont<SmallPrintable>();
+}
+
+#define SELECTED
+
+void loop() {
+    #ifdef SELECTED
+    testAll(selectedTests);
+    #else
+    testAll(tests);
+    #endif
+}
+
+#undef SELECTED
