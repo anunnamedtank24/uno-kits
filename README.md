@@ -30,7 +30,9 @@ Arduino UNO 驅動 1.3 吋 240×240 ST7789 螢幕（M130T 模組）的函式庫�
     ├── hide.py        只留一個程式，其他的改成 .bak
     ├── week_3/        M130T 測試、溫度感測器、彩色圖片、作業，見 src/week_3/README.md
     ├── week_4/        OLED、黑白圖片、開關、蜂鳴器的測試和作業，見 src/week_4/README.md
-    └── week_5/        紅外線遙控器的測試，RGB LED、移動方塊、五線譜的作業，見 src/week_5/README.md
+    ├── week_5/        紅外線遙控器的測試，RGB LED、移動方塊、五線譜的作業，見 src/week_5/README.md
+    ├── week_6/        超音波測距 HC-SR04 的測試、距離控制音量的作業，見 src/week_6/README.md
+    └── week_8/        循跡模組 HW-006（TCRT5000）的測試，見 src/week_8/README.md
 ```
 
 ## 開始
@@ -43,7 +45,7 @@ pio run -t upload        # 燒錄
 ```
 
 - `src/` 裡只能有一個程式有 `setup()` / `loop()`，其他的要改成 `.bak`：`python -B src/hide.py week_4/test_1` 只留下那一個。
-- 接線見 [src/week_3/README.md](src/week_3/README.md#接線)（M130T）、[src/week_4/README.md](src/week_4/README.md#接線)（OLED、開關、蜂鳴器）、[src/week_5/README.md](src/week_5/README.md#接線)（紅外線接收器、RGB LED）。
+- 接線見 [src/week_3/README.md](src/week_3/README.md#接線)（M130T）、[src/week_4/README.md](src/week_4/README.md#接線)（OLED、開關、蜂鳴器）、[src/week_5/README.md](src/week_5/README.md#接線)（紅外線接收器、RGB LED）、[src/week_6/README.md](src/week_6/README.md#接線)（HC-SR04）、[src/week_8/README.md](src/week_8/README.md#接線)（HW-006）。
 
 ```cpp
 #include "Uno_ST7789.h"
@@ -104,6 +106,10 @@ brew install ffmpeg      # 影片、音檔的解碼（音檔沒有它時，macOS
 | [lib/buzzer/README.md](lib/buzzer/README.md) | 蜂鳴器：有源和無源、接線、電流、不能做的事 |
 | [lib/NEC/README.md](lib/NEC/README.md) | 紅外線遙控器：零件名稱、NEC 協定、遙控器的指令碼、連按 |
 | [lib/LED/README.md](lib/LED/README.md) | LED：接線、電阻、共陰 / 共陽、PWM 和眼睛的亮度 |
+| [lib/ultrasonic/README.md](lib/ultrasonic/README.md) | 超音波測距：原理、接線、結果、溫度和準確度 |
+| [lib/TCRT5000/README.md](lib/TCRT5000/README.md) | TCRT5000 反射式感測器：原理、可變電阻、`ACTIVE_LOW` |
 | [src/week_3/README.md](src/week_3/README.md) | M130T 測試、溫度感測器、彩色圖片、作業一～三 |
 | [src/week_4/README.md](src/week_4/README.md) | OLED、黑白圖片、開關、蜂鳴器的測試，作業一～四 |
-| [src/week_5/README.md](src/week_5/README.md) | 紅外線遙控器的測試，作業一～三（RGB LED、移動方塊、五線譜） |
+| [src/week_5/README.md](src/week_5/README.md) | 紅外線遙控器的測試，作業一～四（RGB LED、移動方塊、五線譜、鋼琴） |
+| [src/week_6/README.md](src/week_6/README.md) | HC-SR04 超音波測距的測試，作業一（開關 + 距離 → 蜂鳴器音量）、作業二（距離 → 音高） |
+| [src/week_8/README.md](src/week_8/README.md) | HW-006 循跡模組的測試 |

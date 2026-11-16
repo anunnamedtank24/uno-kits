@@ -1,0 +1,139 @@
+#include <Arduino.h>
+#include <math.h>
+#include "Uno_serial.h"
+#include "Uno_pin.h"
+#include "Uno_interrupt_pin.h"
+#include "Uno_tone.h"
+#include "ultrasonic.h"
+#include "buzzer.h"
+
+// UNO + HC-SR04 + passive buzzer: a theremin, the hand's distance sets the pitch
+//   HC-SR04: VCC -> 5V, Trig -> D7, Echo -> D8, GND -> GND
+//   buzzer:  + -> 100 Ω -> D9, - -> GND (passive)
+//
+// sounds while the distance is MIN_MM ~ MAX_MM (silent outside, or with no echo);
+// the pitch (the log of the frequency) is linear in the distance:
+//   t  = (distance - MIN_MM) / (MAX_MM - MIN_MM)                 0 at MIN_MM, 1 at MAX_MM
+//   hz = HZ_AT_MIN × (HZ_AT_MAX / HZ_AT_MIN)^t                    log(hz) goes from log(HZ_AT_MIN) to log(HZ_AT_MAX)
+// so every cm moves the pitch by the same musical interval
+//   e.g. 5 ~ 50 cm, 1760 ~ 220 Hz (3 octaves): 15 cm an octave, 1.25 cm a semitone; nearer = higher
+// HZ_AT_MIN > HZ_AT_MAX: nearer is higher; the other way round: farther is higher
+//
+// the distance is measured every 60 ms (the HC-SR04's minimum); the pitch changes without a click
+// the state goes to the USB serial every PRINT_MS: pio device monitor (1 Mbaud)
+using Ranger = ultrasonic::HCSR04<Uno::UnoOutputPin<7>, Uno::UnoInterruptPin<8>>;
+using Speaker = buzzer::PassiveBuzzer2Pins<Uno::UnoTone<9>>;
+using Link = Uno::UnoSerial<1000000>;
+
+constexpr uint16_t MIN_MM = 20;            // the nearest that sounds (5 cm); the HC-SR04 sees 20 mm ~ 4000 mm
+constexpr uint16_t MAX_MM = 400;           // the farthest that sounds (50 cm)
+constexpr uint16_t HZ_AT_MIN = 10000;       // the pitch at MIN_MM (A6)
+constexpr uint16_t HZ_AT_MAX = 50;        // the pitch at MAX_MM (A3)
+constexpr uint8_t VOLUME = 3;            // 0 ~ 255 (128 = -6 dB)
+constexpr int16_t AIR_TENTHS_C = 250;      // the room's temperature, 0.1 °C
+constexpr uint16_t PRINT_MS = 300;
+
+static_assert(MIN_MM < MAX_MM, "MIN_MM must be less than MAX_MM");
+static_assert(MIN_MM >= 20 && MAX_MM <= 4000, "the HC-SR04 measures 20 ~ 4000 mm");
+static_assert(HZ_AT_MIN >= 31 && HZ_AT_MAX >= 31 && HZ_AT_MIN <= 20000 && HZ_AT_MAX <= 20000,
+              "the pitches must be 31 ~ 20000 Hz (a buzzer is loud at ~ 500 ~ 5000 Hz)");
+
+float logHzAtMin = 0;                      // log(HZ_AT_MIN), set in setup()
+float logHzRatio = 0;                      // log(HZ_AT_MAX / HZ_AT_MIN)
+uint16_t hz = 0;                           // from the last measurement: 0 = silent
+uint32_t nextPrintMs = 0;
+
+// ---------- text over the serial link ----------
+
+void printText(const char *text) {
+    while (*text) {
+        Link::write8((uint8_t)*text);
+        text++;
+    }
+}
+
+void printNumber(uint32_t value) {
+    char digits[11];
+    uint8_t i = sizeof(digits) - 1;
+    digits[i] = '\0';
+    do {
+        i--;
+        digits[i] = (char)('0' + value % 10);
+        value /= 10;
+    } while (value > 0);
+    printText(&digits[i]);
+}
+
+// ---------- distance -> pitch ----------
+
+// HZ_AT_MIN ~ HZ_AT_MAX, log-linear in mm; 0 outside MIN_MM ~ MAX_MM
+uint16_t hzFor(uint16_t mm) {
+    if (mm < MIN_MM || mm > MAX_MM) {
+        return 0;
+    }
+    float t = (float)(mm - MIN_MM) / (float)(MAX_MM - MIN_MM);
+    return (uint16_t)(expf(logHzAtMin + t * logHzRatio) + 0.5f);
+}
+
+void measured() {
+    uint16_t next = Ranger::result() == ultrasonic::RESULT_OK ? hzFor(Ranger::distanceMm()) : 0;
+    if (next == hz) {
+        return;
+    }
+    hz = next;
+    if (hz == 0) {
+        Speaker::stop();
+    } else {
+        Speaker::start(hz);                // also while sounding: the new pitch, no click
+    }
+}
+
+void printState() {
+    if (Ranger::result() == ultrasonic::RESULT_OK) {
+        uint16_t mm = Ranger::distanceMm();
+        printNumber(mm / 10);
+        printText(".");
+        printNumber(mm % 10);
+        printText(" cm  ");
+    } else {
+        printText("---  ");
+    }
+    if (hz == 0) {
+        printText("silent\r\n");
+        return;
+    }
+    printNumber(hz);
+    printText(" Hz\r\n");
+}
+
+// ---------- main ----------
+
+void setup() {
+    Link::init();
+    Speaker::init();
+    Speaker::setVolume(VOLUME);
+    Ranger::init();
+    Ranger::setTemperature(AIR_TENTHS_C);
+    logHzAtMin = logf((float)HZ_AT_MIN);
+    logHzRatio = logf((float)HZ_AT_MAX) - logHzAtMin;
+    printText("\r\ntheremin: ");
+    printNumber(MIN_MM / 10);
+    printText(" cm = ");
+    printNumber(HZ_AT_MIN);
+    printText(" Hz ~ ");
+    printNumber(MAX_MM / 10);
+    printText(" cm = ");
+    printNumber(HZ_AT_MAX);
+    printText(" Hz\r\n");
+    nextPrintMs = millis();
+}
+
+void loop() {
+    if (Ranger::update()) {
+        measured();
+    }
+    if ((int32_t)(millis() - nextPrintMs) >= 0) {
+        nextPrintMs += PRINT_MS;
+        printState();
+    }
+}

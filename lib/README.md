@@ -19,7 +19,9 @@ lib/
 ├── switch/         開關（GND、VCC、OUT）
 ├── buzzer/         有源 / 無源蜂鳴器
 ├── NEC/            紅外線遙控器的 NEC 協定：解碼、按鍵、模組（HX1838 接收器、17 鍵遙控器）
-└── LED/            LED（PWM 調亮度）：一顆、RGB
+├── LED/            LED（PWM 調亮度）：一顆、RGB
+├── ultrasonic/     超音波測距（Trig / Echo）：HC-SR04
+└── TCRT5000/       TCRT5000 反射式紅外線感測器：HW-006 循跡模組
 ```
 
 | 資料夾 | namespace | 入口 | 依賴的介面 |
@@ -38,6 +40,8 @@ lib/
 | [buzzer](buzzer/README.md) | `buzzer` | `buzzer.h` | Pin、Tone |
 | [NEC](NEC/README.md) | `NEC` | `NEC.h` | InterruptPin、Remote |
 | [LED](LED/README.md) | `LED` | `LED.h` | Pwm |
+| [ultrasonic](ultrasonic/README.md) | `ultrasonic` | `ultrasonic.h` | Trigger、Echo |
+| [TCRT5000](TCRT5000/README.md) | `TCRT5000` | `TCRT5000.h` | Pin |
 
 ## 分類和名稱
 
@@ -48,7 +52,7 @@ lib/
 | 大類 | 資料夾 | 名稱用 | 結構 |
 |---|---|---|---|
 | **主板** | `Uno` | 主板 | 每個介面一個 `Uno_*.h` |
-| **硬體**（零件的驅動） | 有晶片：`ST7789`、`SSD1306`、`DS18B20`<br>用協定：`NEC`<br>沒有晶片（例外）：`switch`、`buzzer`、`LED` | 晶片、協定；沒有晶片的用零件種類 | 核心（`basic/` 或根目錄）+ `module/`（實際買到的零件） |
+| **硬體**（零件的驅動） | 有晶片：`ST7789`、`SSD1306`、`DS18B20`、`TCRT5000`<br>用協定：`NEC`<br>沒有晶片（例外）：`switch`、`buzzer`、`LED`、`ultrasonic` | 晶片、協定；沒有晶片的用零件種類 | 核心（`basic/` 或根目錄）+ `module/`（實際買到的零件） |
 | **資料**（從電腦的檔案轉，或程式算出來的） | 有轉換工具：`font`、`image`、`video`、`audio`<br>沒有：`graphics`（畫圖的演算法）、`color`（顏色常數和換算） | 資料的種類 | 有轉換工具的：程式 + `source/`（`convert.py`、`check.py`）+ `assets/` + `output/` |
 
 - **沒有晶片的零件為什麼是例外**：照規則要用「通訊方式」命名（`GPIO/`、`tone/`、`PWM/`），但那樣有源和無源蜂鳴器會分到兩個資料夾，找起來不直覺，所以保留零件種類的名稱。
@@ -84,7 +88,9 @@ lib/
 | DHT11 溫濕度 | 用晶片命名：`DHT11/` | Pin + `nowUs`（它自己的單線協定） |
 | 伺服馬達、步進馬達 | `motor/module/` | Pwm（伺服要 50 Hz 的版本）、Pin |
 | 可變電阻、光敏電阻、搖桿 | `analog/`（或 `knob/`） | 新的 `UnoAnalogPin`（ADC） |
-| 超音波測距（HC-SR04） | `distance/module/HC_SR04.h` | Pin + `nowUs` |
+| 別的超音波測距（JSN-SR04T 防水、US-100） | `ultrasonic/module/` 一個檔案（改 `MIN_MM`、`MAX_MM`） | 現有的 Trigger、Echo |
+| 別的 TCRT5000 板子（KY-033、有 A0 的四腳板） | `TCRT5000/module/`；A0 要新的 `UnoAnalogPin` | Pin |
+| 紅外線避障模組（FC-51、HW-201：LED 和接收管分開） | 用零件種類命名：`IR_obstacle/`（沒有共同的晶片） | Pin |
 | 七段顯示器、LED 矩陣（MAX7219） | 用晶片命名：`MAX7219/` | `Uno_SPI.h` |
 
 每一個都只依賴 `Uno/` 的介面，不依賴其他函式庫；新的硬體功能先在 `Uno/` 加一個 `Uno_*.h`。
@@ -100,10 +106,10 @@ lib/
 | Screen | `graphics`、`image`、`video` | `width`、`height`、`fillWindow`、`writeWindow`、型別 `BusType`（它的 `readFlash8/16`、`nowMs`）；`video` 另外要 `setWindow`、`writeData16`、`endWrite` | `ST7789::M130T`、`SSD1306::OLED128x64` |
 | Link | `image::StreamImage`、`video::StreamPlayer`、`audio::StreamPlayer`、`StreamSamplePlayer` | `init`、`available`、`read8`、`write8`、`clearInput` | `Uno::UnoSerial`（`Uno_serial.h`） |
 | Wire | `DS18B20` | `init`、`reset`、`write8`、`read8`、`readBit`、`nowMs` | `Uno::UnoOneWire`（`Uno_one_wire.h`） |
-| Pin（輸入） | `switch` | `init`、`read`、`nowMs` | `Uno::UnoPin`（`Uno_pin.h`） |
-| Pin（輸出） | `buzzer::ActiveBuzzer2Pins`、`3Pins` | `init`、`write`、`nowMs`、`readFlash8/16` | `Uno::UnoOutputPin`（`Uno_pin.h`） |
+| Pin（輸入） | `switch`、`TCRT5000` | `init`、`read`、`nowMs` | `Uno::UnoPin`（`Uno_pin.h`） |
+| Pin（輸出） | `buzzer::ActiveBuzzer2Pins`、`3Pins`、`ultrasonic::Ranger`（Trigger，只用 `init`、`write`） | `init`、`write`、`nowMs`、`readFlash8/16` | `Uno::UnoOutputPin`（`Uno_pin.h`） |
 | Pwm | `LED` 的所有模組 | `init`、`write(duty)` | `Uno::UnoPwmPin`（`Uno_pin.h`） |
-| InterruptPin | `NEC::Receiver` | `init(onChange)`、`read`、`nowUs`、`nowMs`、`stopInterrupts`、`restoreInterrupts` | `Uno::UnoInterruptPin`（`Uno_interrupt_pin.h`） |
+| InterruptPin | `NEC::Receiver`、`ultrasonic::Ranger`（Echo） | `init(onChange)`、`read`、`nowUs`、`nowMs`、`stopInterrupts`、`restoreInterrupts` | `Uno::UnoInterruptPin`（`Uno_interrupt_pin.h`） |
 | Remote | 用 `NEC` 的程式 | `ADDRESS`、`toKey(code)` | `NEC::Remote17KeyNumbersTop`、`Remote17KeyArrowsTop` |
 | Tone | `buzzer::PassiveBuzzer2Pins`、`3Pins` | `init`、`start`、`stop`、`realHz`、`nowMs`、`readFlash8/16`、常數 `IDLE_LEVEL_HIGH` | `Uno::UnoTone`（`Uno_tone.h`） |
 | Sound | `audio::Player`、`StreamPlayer` | 常數 `HAS_PITCH`、`init`、`start`、`stop`、`nowMs`、`readFlash8/16` | `buzzer` 的所有模組 |
@@ -123,6 +129,9 @@ Uno_serial.h ─(Link)─▶ image::StreamImage、video::StreamPlayer
 
 Uno_one_wire.h ─(Wire)─▶ DS18B20::Thermometer
 Uno_pin.h ─────(Pin)──▶ switches::Switch2Pins、Switch3Pins
+Uno_pin.h ─────(Pin)──▶ TCRT5000::Reflector ▶ HW006
+Uno_pin.h ───(Trigger)─┐
+Uno_interrupt_pin.h ─(Echo)─▶ ultrasonic::Ranger ▶ HCSR04
 Uno_pin.h ─────(Pin)──▶ buzzer::ActiveBuzzer2Pins、3Pins ──┐
 Uno_tone.h ────(Tone)─▶ buzzer::PassiveBuzzer2Pins、3Pins ─┴─(Sound)─▶ audio::Player、StreamPlayer
 Uno_pcm_out.h ─(SampleOut)──────────────────────────────────────▶ audio::SamplePlayer、StreamSamplePlayer
