@@ -37,6 +37,7 @@ namespace Uno {
         static inline void write(bool high);
 
         static inline uint32_t nowMs();
+        static inline uint8_t readFlash8(const uint8_t *address);
         static inline uint16_t readFlash16(const uint16_t *address);
     };
 
@@ -91,6 +92,11 @@ namespace Uno {
     template <uint8_t PIN>
     inline uint32_t UnoOutputPin<PIN>::nowMs() {
         return Uno::nowMs();
+    }
+
+    template <uint8_t PIN>
+    inline uint8_t UnoOutputPin<PIN>::readFlash8(const uint8_t *address) {
+        return Uno::readFlash8(address);
     }
 
     template <uint8_t PIN>

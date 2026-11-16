@@ -80,7 +80,7 @@ void setup() {
     beeper.init();
     speaker.init();
     beeper.beeps(Beeper::HZ, 3, 100, 100);                   // 嗶三聲（有源不管 hz，只要 > 0）
-    speaker.play<melody::ode_to_joy_semitone>();             // lib/audio/output 的旋律
+    speaker.play<melody::ode_to_joy_uno_passive_medium>();             // lib/audio/output 的旋律
 }
 
 void loop() {
@@ -95,10 +95,10 @@ void loop() {
 
 | 參數 | 需要的 static 函式 | 現成的實作 |
 |---|---|---|
-| `Pin`（有源） | `init()`、`write(high)`、`nowMs()`、`readFlash16(address)` | `Uno::UnoOutputPin` |
-| `Tone`（無源） | `init()`、`start(hz)`（播放中呼叫就換頻率）、`stop()`（腳位回到安靜的電位）、`realHz()`、`nowMs()`、`readFlash16(address)`；常數 `IDLE_LEVEL_HIGH`（安靜時是不是 HIGH，模組用它檢查） | `Uno::UnoTone<PIN, IDLE_HIGH>` |
+| `Pin`（有源） | `init()`、`write(high)`、`nowMs()`、`readFlash8(address)`、`readFlash16(address)` | `Uno::UnoOutputPin` |
+| `Tone`（無源） | `init()`、`start(hz)`（播放中呼叫就換頻率）、`stop()`（腳位回到安靜的電位）、`realHz()`、`nowMs()`、`readFlash8(address)`、`readFlash16(address)`；常數 `IDLE_LEVEL_HIGH`（安靜時是不是 HIGH，模組用它檢查） | `Uno::UnoTone<PIN, IDLE_HIGH>` |
 
-兩個模組本身都是 `audio::Player` 要的 Sound（`init`、`start`、`stop`、`nowMs`、`readFlash16`）。
+每個模組本身都是 `audio::Player`、`StreamPlayer` 要的 Sound（`HAS_PITCH`、`init`、`start`、`stop`、`nowMs`、`readFlash8/16`）：有源的 `HAS_PITCH` 是 false，給它音符會編譯警告（只聽得到節奏）。播取樣（PCM）不經過這裡，用 `Uno::UnoPcmOut`，見 [audio](../audio/README.md#接線)。
 
 ## 函式
 
@@ -122,6 +122,41 @@ void loop() {
 | `ACTIVE_HIGH`（核心 `ActiveBuzzer`） | `true` | 自己接線、不照模組時用：+ 接 5V、- 接腳位時是 `false` |
 | `Tone`（無源） | — | 兩隻腳：`Uno::UnoTone<PIN>`；三隻腳模組：`Uno::UnoTone<PIN, true>`。D9 / D10 不佔 CPU，其他腳用中斷 |
 
+## 音量
+
+`player.setVolume(volume)`：0 = 安靜 ～ 255 = 最大聲（`init()` 之後是 255），播放中也能改。
+
+| 蜂鳴器 | 怎麼做 | 能調嗎 |
+|---|---|---|
+| 無源 | 方波的頻率不變，改變每個週期「開」的比例（工作週期） | ✅ 0 ～ 255 |
+| 有源 | 它自己的振盪器決定音量 | ❌ 只有 0 = 靜音、其他 = 開（PWM 會讓它沙沙響） |
+| 取樣（`audio::SamplePlayer`） | 每個取樣乘上音量 | ✅ 0 ～ 255 |
+
+**音量和工作週期**：方波的基音大小跟 sin(π × 工作週期) 成正比，50% 時最大。`UnoTone` 用工作週期 = asin(音量 / 255) / π，所以音量就是基音的大小：
+
+| 音量 | 工作週期 | 大小 |
+|---|---|---|
+| 255 | 50% | 0 dB（最大聲） |
+| 128 | 16.7% | -6 dB |
+| 64 | 8.1% | -12 dB |
+| 32 | 4.0% | -18 dB |
+| 16 | 2.0% | -24 dB |
+| 1 | 0.13% | -48 dB |
+
+- **實測**（`src/week_4/test_4.cpp` 的 test 7，2 kHz）：D9 上量到的工作週期跟設定的一樣（差 0.1% 以內），頻率不變。
+- **耳朵聽到的**：-6 dB 大約是「小一點」，-10 dB 大約是「一半大聲」。蜂鳴器也會有一點泛音，所以很小聲時音色會變尖。
+- **最小的一步**：工作週期是整數個 tick。20 kHz 時一個週期只有 800 tick，最小聲的幾格會變粗；D9 / D10 以外的腳最短約 2 µs（中斷本身）。
+
+### 極限
+
+| 項目 | 極限 | 原因 / 做法 |
+|---|---|---|
+| 最大聲 | 音量 255（工作週期 50%） | 方波的基音在 50% 最大，程式不可能更大聲 |
+| 更大聲 | 硬體：電壓、電流、共振 | 用三隻腳的模組（電晶體推，電流從 VCC 來）；接近共振頻率（常見 2 ～ 4 kHz，最大聲）；12 V 的蜂鳴器 + 電晶體 |
+| 腳位電流 | 建議 ≤ 20 mA，上限 40 mA | 電磁式串 100 Ω（見[接線](#接線)），所以直接接腳位的音量有上限 |
+| 取樣的最大聲 | 取樣用滿 0 ～ 255 | `convert.py` 已經把最大的取樣拉到滿格；要更大聲用 `--gain`（會切掉峰值，聽起來更響但會破） |
+| 有源 | 不能調 | 只能靜音；要小聲就串電阻（例如 100 ～ 330 Ω，會比較小聲，太大會不響） |
+
 ## 有源和無源
 
 | | 有源（active） | 無源（passive） |
@@ -142,7 +177,7 @@ void loop() {
 | 腳位 | 0 ～ 19；D0 / D1 編譯警告 | 編譯錯誤 |
 | 無源的 hz | 16 ～ 20000（`UnoTone`）；好聽的範圍約 200 ～ 5000，最大聲在共振頻率（常見 2 ～ 4 kHz） | 夾到範圍內 |
 | 有源的 hz | 任何 > 0 都一樣 | — |
-| 音量 | 不能調：方波固定 50%（最大聲） | — |
+| 音量 | 無源 0 ～ 255、有源只能靜音（見[音量](#音量)） | 255 以上不可能（已經是 50%） |
 | 同時發幾個音 | 一個 Sound 一個音 | — |
 
 ## 資源
@@ -187,4 +222,4 @@ void loop() {
 | 無源接 D9 / D10 以外的腳，同時用 `UnoOneWire`（DS18B20）或其他關中斷的程式 | 關中斷時方波暫停，聲音抖一下 | 無源接 D9 或 D10 |
 | `update()` 很久才呼叫一次（例如 OLED 的 `display()` 64 ms） | 音的邊界晚，但節奏不飄；無源的方波照常（計時器在跑） | 正常；要準就少做長的事 |
 | 板子進入睡眠（power-down） | Timer1 停止，無源不響 | 播放時不要睡 |
-| 想調音量 | 方波固定 50% | 串電阻或可變電阻 |
+| 想調音量 | 無源用 `setVolume`；有源只能靜音 | 有源要小聲就串電阻 |

@@ -238,6 +238,7 @@ void setup() {
         }
     }
     speaker.init();
+    speaker.setVolume(1);
     Receiver::init();
     for (uint8_t i = 0; i < NOTE_COUNT; i++) {
         notes[i] = {0, 0};                          // all middle C

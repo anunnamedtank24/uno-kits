@@ -15,7 +15,8 @@ lib/Uno/
 │                    UnoOutputPin<PIN>                     Pin：一隻輸出腳
 │                    UnoPwmPin<PIN>                        Pwm：一隻 PWM 腳（調亮度）
 ├── Uno_interrupt_pin.h UnoInterruptPin<PIN, INTERNAL_PULLUP> InterruptPin：電位改變就呼叫函式（腳位改變中斷）
-└── Uno_tone.h       UnoTone<PIN, IDLE_HIGH>               Tone：方波（Timer1）
+├── Uno_tone.h       UnoTone<PIN, IDLE_HIGH>               Tone：方波（Timer1）
+└── Uno_pcm_out.h    UnoPcmOut<PIN, IDLE_HIGH>             SampleOut：取樣（Timer1 PWM + Timer2 取樣時鐘）
 ```
 
 ## 用法
@@ -30,6 +31,7 @@ lib/Uno/
 #include "Uno_pin.h"      // 開關、有源蜂鳴器、LED
 #include "Uno_interrupt_pin.h" // 紅外線接收器（只能在一個 .cpp 裡 include）
 #include "Uno_tone.h"     // 無源蜂鳴器（只能在一個 .cpp 裡 include）
+#include "Uno_pcm_out.h"  // 取樣（PCM）：人聲、真正的波形（只能在一個 .cpp 裡 include）
 
 using Bus = Uno::UnoST7789<8, 10, Uno::NONE, 9>;    // DC = D8、RES = D10、沒有 CS、BLK = D9
 ```
@@ -189,16 +191,41 @@ using Tone = Uno::UnoTone<9, true>;        // 安靜時 HIGH：三隻腳的無�
 | `start(hz)` | 開始送方波，或在播放中直接改頻率（不會停頓，滑音用）；0 = `stop()` |
 | `stop()` | 停止計時器，腳位回到安靜的電位 |
 | `realHz()` | 回傳實際播出的頻率（tick 是整數），停止時是 0 |
+| `setVolume(volume)`、`volume()` | 設定、回傳音量 0 ～ 255（0 = 安靜），播放中也能改 |
+| `realDuty()` | 回傳實際的工作週期（1 / 65536 個週期，32768 = 50%） |
 | `nowMs`、`readFlash16` | 給上層計時、讀 Flash |
 
 | 項目 | 說明 |
 |---|---|
-| 計時器 | Timer1 的 CTC 模式：每 OCR1A + 1 個 tick 翻轉一次，頻率 = 16 MHz ÷（2 × 預除 ×（OCR1A + 1）） |
-| 預除 | 123 Hz 以上用 1（4 kHz 時誤差 < 0.02%），以下用 8（最低 16 Hz） |
-| D9、D10 | 計時器直接翻轉腳位（OC1A / OC1B），完全不佔 CPU |
-| 其他腳 | 中斷翻轉，每次約 2 µs，20 kHz 時約佔 8% 的 CPU |
-| 工作週期 | 固定 50%（最大聲），不能調音量 |
+| 計時器 | Timer1 的 fast PWM（ICR1 當 TOP）：頻率 = 16 MHz ÷（預除 ×（ICR1 + 1）），OCR1A / OCR1B 決定「開」多久 |
+| 預除 | 245 Hz 以上用 1（4 kHz 時誤差 < 0.02%），31 Hz 以上用 8，以下用 64（最低 16 Hz） |
+| D9、D10 | 計時器直接控制腳位（OC1A / OC1B），完全不佔 CPU |
+| 其他腳 | 每個週期兩個中斷（開、關），每次約 2 µs，20 kHz 時約佔 16% 的 CPU；最短的「開」約 2 µs |
+| 工作週期 | `setVolume(0 ～ 255)`：255 = 50%（最大聲），其他 = asin(音量 / 255) / π，頻率不變 |
 | 實測 | 50 Hz ～ 15 kHz，D9 和 D7 從腳位讀回來的頻率都跟 `realHz()` 一致（`src/week_4/test_4.cpp`） |
+
+### UnoPcmOut：取樣的 SampleOut
+
+```cpp
+using PcmOut = Uno::UnoPcmOut<9>;          // 蜂鳴器或喇叭接 D9（或 D10）
+using PcmOut = Uno::UnoPcmOut<9, true>;    // 三隻腳的無源模組（PNP，安靜時 HIGH）
+```
+
+| 函式 | 說明 |
+|---|---|
+| `init()` | 停止計時器，腳位設成輸出、安靜的電位 |
+| `start(rate, next)` | 開始：每秒 rate 次在中斷裡呼叫 `next()`，回傳值（0 ～ 255）就是 PWM 的工作週期 |
+| `stop()` | 停止兩個計時器，腳位回到安靜的電位 |
+| `realRate()` | 回傳實際的取樣率，停止時是 0 |
+| `stopInterrupts()`、`restoreInterrupts(saved)`、`nowMs`、`readFlash8/16` | 給播放器讀中斷寫的資料、讀 Flash |
+
+| 項目 | 說明 |
+|---|---|
+| 聲音 | Timer1 fast PWM 8 bits、不預除：62.5 kHz，工作週期 = 取樣；遠超過聽得到的範圍，只剩平均值變成聲音 |
+| 取樣時鐘 | Timer2 CTC：2 MHz / n（n ≤ 256，7813 Hz 以上）或 500 kHz / n；8000、16000 剛好，11025 → 11050、22050 → 21978（`convert.py` 用同樣的算法） |
+| 範圍 | 1954 ～ 32000 Hz，超出夾到範圍內 |
+| 腳位 | 只能 D9（OC1A）或 D10（OC1B），其他腳編譯錯誤 |
+| 衝突 | Timer1 和 Timer2 都是它的：不能同時用 `UnoTone`、D3 / D9 / D10 / D11 的 PWM、`Servo`、Arduino `tone()` |
 
 ## 編譯期檢查
 
@@ -248,6 +275,7 @@ using Tone = Uno::UnoTone<9, true>;        // 安靜時 HIGH：三隻腳的無�
 | Timer0 | Arduino 的 `millis()`（`nowMs()`） | BLK 接 D5 / D6 時只能用固定約 976 Hz 的 PWM |
 | Timer1（D9、D10）、Timer2（D3、D11） | `pwmSet`（例如 BLK、`UnoPwmPin`） | 跟 `Servo`、Arduino `tone()` 等用同一個計時器的函式庫衝突 |
 | Timer1 | `UnoTone` | 播放時整個 Timer1 都是它的 |
+| Timer1 + Timer2 | `UnoPcmOut` | 播放取樣時兩個都是它的 |
 | 中斷 | `UnoTone` 不在 D9 / D10 時用 Timer1 比較中斷；`UnoInterruptPin` 用腳位改變中斷（三組，一組一個）；`UnoOneWire` 每個位元關中斷約 70 µs | 其他都是輪詢，`update()` 要自己一直呼叫 |
 
 ## 注意事項
@@ -255,7 +283,7 @@ using Tone = Uno::UnoTone<9, true>;        // 安靜時 HIGH：三隻腳的無�
 | 情況 | 結果 | 做法 |
 |---|---|---|
 | 電腦打開串口 | 板子重置（DTR），bootloader 約等 1 秒 | 先開電腦上的程式，再燒錄 |
-| `Uno_tone.h`、`Uno_interrupt_pin.h` 被兩個 .cpp include | 中斷函式重複定義，連結錯誤 | 只在一個 .cpp 裡 include（這個專案一次只有一個 .cpp） |
+| `Uno_tone.h`、`Uno_interrupt_pin.h`、`Uno_pcm_out.h` 被兩個 .cpp include | 中斷函式重複定義，連結錯誤 | 只在一個 .cpp 裡 include（這個專案一次只有一個 .cpp） |
 | 同一組腳位（D0 ～ D7、D8 ～ D13、A0 ～ A5）有兩個 `UnoInterruptPin` | 後 `init` 的蓋掉前一個 | 放在不同組 |
 | `UnoTone` 和 D9 / D10 的 `pwmSet` 同時用（例如 `UnoST7789` 的 BLK 接 D9） | 兩邊互改 Timer1，頻率和亮度都錯 | BLK 改接 D3、D5、D6、D11，或 `Uno::NONE` |
 | `UnoTone` 在 D9 / D10 以外的腳，同時用 `UnoOneWire` | 關中斷時方波暫停，聲音抖一下 | 蜂鳴器接 D9 或 D10（不用中斷） |

@@ -9,7 +9,7 @@
 //   pio device monitor -b 1000000
 using SensorWire = Uno::UnoOneWire<2>;
 using Link = Uno::UnoSerial<1000000>;
-DS18B20::Thermometer<SensorWire> sensor;
+DS18B20::KY001<SensorWire> sensor;   // the board with the pull-up; bare part: DS18B20::TO92, probe: DS18B20::WaterproofProbe
 
 constexpr uint16_t PERIOD_MS = 1000;
 
@@ -55,7 +55,7 @@ void printCentiCelsius(int16_t centiCelsius) {
 }
 
 void printResult(uint8_t result) {
-    using Sensor = DS18B20::Thermometer<SensorWire>;
+    using Sensor = DS18B20::KY001<SensorWire>;
     if (result == Sensor::ERROR_NO_SENSOR) {
         printText("error: no sensor (check DQ on D2, the pull-up, VCC / GND)");
     } else if (result == Sensor::ERROR_CRC) {
@@ -76,7 +76,7 @@ void setup() {
     Link::init();
     printText("\r\nDS18B20 on D2\r\n");
     uint8_t result = sensor.init(12);
-    if (result != DS18B20::Thermometer<SensorWire>::OK) {
+    if (result != DS18B20::KY001<SensorWire>::OK) {
         printResult(result);
         printText("\r\n");
         return;
@@ -93,17 +93,17 @@ void loop() {
 
     int16_t raw = 0;
     uint8_t result = sensor.startConversion();
-    if (result == DS18B20::Thermometer<SensorWire>::OK) {
+    if (result == DS18B20::KY001<SensorWire>::OK) {
         // the sensor answers 0 while converting
         bool done = false;
         while (!done && millis() - startMs < (uint32_t)sensor.conversionMs() + 50) {
             done = sensor.isConversionDone();
         }
-        result = done ? sensor.readRaw(raw) : DS18B20::Thermometer<SensorWire>::ERROR_TIMEOUT;
+        result = done ? sensor.readRaw(raw) : DS18B20::KY001<SensorWire>::ERROR_TIMEOUT;
     }
 
-    if (result == DS18B20::Thermometer<SensorWire>::OK) {
-        printCentiCelsius(DS18B20::Thermometer<SensorWire>::toCentiCelsius(raw));
+    if (result == DS18B20::KY001<SensorWire>::OK) {
+        printCentiCelsius(DS18B20::KY001<SensorWire>::toCentiCelsius(raw));
         printText(" C (raw ");
         printNumber(raw);
         printText(", ");

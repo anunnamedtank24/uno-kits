@@ -16,6 +16,9 @@ namespace audio {
     // constexpr: noteHz(A, 4) in a melody costs nothing at run time
     inline constexpr uint16_t noteHz(Pitch pitch, uint8_t octave);
 
+    // a MIDI note number -> hz (60 = C4, 69 = A4); 12 ~ 119 (C0 ~ B8), anything else 0 (rest)
+    inline constexpr uint16_t midiHz(uint8_t midi);
+
     // length of a note at a tempo: beatMs(120, 1, 2) = an eighth when a quarter is the beat = 250 ms
     inline constexpr uint16_t beatMs(uint16_t bpm, uint8_t beats = 1, uint8_t divide = 1);
 
@@ -30,6 +33,10 @@ namespace audio {
     inline constexpr uint16_t noteHz(Pitch pitch, uint8_t octave) {
         return octave > 8 ? 0
              : (uint16_t)((OCTAVE_8_CENTI_HZ[pitch] + (50UL << (8 - octave))) / (100UL << (8 - octave)));
+    }
+
+    inline constexpr uint16_t midiHz(uint8_t midi) {
+        return midi < 12 || midi > 119 ? 0 : noteHz((Pitch)(midi % 12), (uint8_t)(midi / 12 - 1));
     }
 
     inline constexpr uint16_t beatMs(uint16_t bpm, uint8_t beats, uint8_t divide) {

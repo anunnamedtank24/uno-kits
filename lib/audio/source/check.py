@@ -17,7 +17,8 @@ Rules (errors):
     selected.h exists and has its include guard
     every #include "x.h" is a file in the output dir (not selected.h, not outside), listed once
     every included file was made by the current convert.py: same FORMAT_VERSION
-    every included file defines struct melody::{file name} and getNotes()
+    every included file defines struct melody::{file name}, getPath() and, unless made for the mac only,
+    its data: getNotes() (notes, rhythm) or getSamples() (pcm)
     the source audio of an included file (recorded path + sha256) is unchanged, if it still exists
 Warnings:
     the source audio of an included file is gone (cannot tell if it changed)
@@ -26,7 +27,7 @@ selected.h is edited by hand (remove what you do not use), convert.py adds what 
 """
 
 
-FORMAT_VERSION = 1 # 1: pairs { hz, ms } of uint16_t, count, durationMs, getNotes()
+FORMAT_VERSION = 2 # 2: target, kind, encoding, count, durationMs, rate, rhythmHz, dataSize, getPath(), getNotes() / getSamples() (lib/audio/format.h)
 NAMESPACE = "melody"
 SELECTED_NAME = "selected.h"
 SELECTED_GUARD = "MELODY_SELECTED_H"
@@ -120,8 +121,16 @@ def check_header(header_path: Path) -> tuple[list[str], list[str]]:
         elif get_sha256(source_path) != source_match.group(2):
             errors.append(f"{header_path.name}: source {source_match.group(1)} changed since, regenerate it")
 
-    if "getNotes()" not in header_str:
-        errors.append(f"{header_path.name}: no getNotes(), regenerate it")
+    if "getPath()" not in header_str:
+        errors.append(f"{header_path.name}: no getPath(), regenerate it")
+    target_match = re.search(r"static constexpr uint8_t target = (\d+);", header_str)
+    kind_match = re.search(r"static constexpr uint8_t kind = (\d+);", header_str)
+    if not target_match or not kind_match:
+        errors.append(f"{header_path.name}: no target / kind, regenerate it")
+    elif int(target_match.group(1)) & 1:
+        data_name = "getSamples()" if int(kind_match.group(1)) == 2 else "getNotes()"
+        if data_name not in header_str:
+            errors.append(f"{header_path.name}: made for the UNO but no {data_name}, regenerate it")
     return errors, warnings
 
 

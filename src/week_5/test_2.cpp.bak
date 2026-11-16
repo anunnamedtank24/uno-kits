@@ -1,0 +1,174 @@
+#include <Arduino.h>
+#include "Uno_serial.h"
+#include "Uno_tone.h"
+#include "Uno_pcm_out.h"
+#include "buzzer.h"
+#include "audio.h"
+
+// UNO + passive buzzer: every format of lib/audio, from flash and from the Mac
+//   buzzer: + -> 100 Ω -> D9, - -> GND
+//   on the Mac (lib/audio):   python -B source/stream.py      (it prints what the board reports)
+//
+// tests, one after another (each line also says what you should hear):
+//   0 notes, medium (Hz + ms)          twinkle star, in tune
+//   1 notes, low (MIDI + 10 ms)        the same tune, half the bytes
+//   2 rhythm (active) on the passive   SOS at its rhythmHz
+//   3 PCM from flash, 8 kHz ADPCM      "Hello! I am an Arduino." (the rate is measured)
+//   4 notes from the Mac               twinkle star again (needs stream.py)
+//   5 PCM from the Mac, 16 kHz 8 bits  ode to joy as a real sound (underruns are counted)
+// then it starts over after 3 s
+using Link = Uno::UnoSerial<1000000>;
+using Speaker = buzzer::PassiveBuzzer2Pins<Uno::UnoTone<9>>;
+using PcmOut = Uno::UnoPcmOut<9>;
+using Samples = audio::SamplePlayer<PcmOut>;
+using StreamSamples = audio::StreamSamplePlayer<PcmOut, Link>;   // BUFFER 512, CHUNK 255: 256 / 64 runs short at 16 kHz
+using Report = audio::StreamLink<Link>;   // "Stream" is an Arduino class
+
+audio::Player<Speaker> speaker;
+audio::StreamPlayer<Speaker, Link> streamSpeaker;
+
+// ---------- reports (printed by stream.py) ----------
+
+char line[96];
+uint8_t lineLength = 0;
+
+void add(const char *text) {
+    while (*text && lineLength < sizeof(line) - 1) {
+        line[lineLength++] = *text++;
+    }
+    line[lineLength] = '\0';
+}
+
+void addNumber(uint32_t value) {
+    char digits[11];
+    uint8_t i = sizeof(digits) - 1;
+    digits[i] = '\0';
+    do {
+        i--;
+        digits[i] = (char)('0' + value % 10);
+        value /= 10;
+    } while (value > 0);
+    add(&digits[i]);
+}
+
+void send() {
+    Report::message(line);
+    lineLength = 0;
+    line[0] = '\0';
+}
+
+// ---------- tests ----------
+
+template <class Melody>
+void playNotes(const char *what) {
+    add(what);
+    send();
+    speaker.play<Melody>();
+    while (speaker.isPlaying()) {
+        speaker.update();
+    }
+}
+
+void testFlashPcm() {
+    add("3 PCM flash, 8 kHz ADPCM: hello");
+    send();
+    Samples::play<melody::hello_uno_pcm_8000_adpcm>();
+    uint32_t startMs = millis();
+    uint32_t afterSecond = 0;
+    uint16_t realRate = PcmOut::realRate();
+    while (Samples::isPlaying()) {
+        Samples::update();
+        if (afterSecond == 0 && millis() - startMs >= 1000) {
+            afterSecond = Samples::position();
+        }
+    }
+    uint32_t ms = millis() - startMs;
+    add("   realRate ");
+    addNumber(realRate);
+    add(" Hz, ");
+    addNumber(afterSecond);
+    add(" samples in the first 1000 ms, all ");
+    addNumber(Samples::position());
+    add(" in ");
+    addNumber(ms);
+    add(" ms");
+    send();
+}
+
+void testStreamNotes() {
+    add("4 notes from the Mac: twinkle star");
+    send();
+    uint8_t result = streamSpeaker.open<melody::twinkle_star_mac_passive_medium>();
+    if (result != audio::STREAM_OK) {
+        add("   open failed: error ");
+        addNumber(result);
+        send();
+        return;
+    }
+    uint32_t startMs = millis();
+    while (streamSpeaker.isPlaying()) {
+        streamSpeaker.update();
+    }
+    add("   ");
+    addNumber(streamSpeaker.noteIndex());
+    add(" steps in ");
+    addNumber(millis() - startMs);
+    add(" ms, error ");
+    addNumber(streamSpeaker.error());
+    send();
+}
+
+void testStreamPcm() {
+    add("5 PCM from the Mac, 16 kHz 8 bits: ode to joy");
+    send();
+    uint32_t startMs = millis();
+    uint8_t result = StreamSamples::open<melody::ode_to_joy_mac_pcm_16000_u8>();
+    if (result != audio::STREAM_OK) {
+        add("   open failed: error ");
+        addNumber(result);
+        send();
+        return;
+    }
+    uint32_t playMs = millis();
+    while (StreamSamples::isPlaying()) {
+        StreamSamples::update();
+    }
+    uint32_t endMs = millis();
+    add("   opened in ");
+    addNumber(playMs - startMs);
+    add(" ms; ");
+    addNumber(StreamSamples::position());
+    add(" samples in ");
+    addNumber(endMs - playMs);
+    add(" ms, underruns ");
+    addNumber(StreamSamples::underruns());
+    add(", error ");
+    addNumber(StreamSamples::error());
+    send();
+}
+
+void setup() {
+    Link::init();
+    speaker.init();
+    Samples::init();
+    delay(500);
+}
+
+void loop() {
+    playNotes<melody::twinkle_star_uno_passive_medium>("0 notes medium: twinkle star");
+    delay(500);
+    playNotes<melody::twinkle_star_uno_passive_low>("1 notes low (compact): twinkle star");
+    delay(500);
+    playNotes<melody::sos_uno_active_medium>("2 rhythm on the passive buzzer: SOS");
+    delay(500);
+    testFlashPcm();
+    speaker.init();
+    delay(500);
+    testStreamNotes();
+    delay(500);
+    testStreamPcm();
+    speaker.init();
+    add("done, again in 3 s");
+    send();
+    delay(3000);
+}

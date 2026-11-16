@@ -14,7 +14,7 @@ lib/
 ├── font/           字型（.ttf → .h）
 ├── image/          靜態圖片（.jpg / .png / .webp / .heic → .h）：Flash 或從 Mac 串流
 ├── video/          動畫和影片（.gif / .mp4 / .mov / .webm … → .h）：Flash 或從 Mac 串流
-├── audio/          旋律（.wav / .mp3 / .m4a / .ogg … → .h）和播放器
+├── audio/          聲音（.wav / .mp3 / .m4a / .ogg … → 音符、節奏或取樣）和播放器：Flash 或從 Mac 串流
 ├── DS18B20/        DS18B20 溫度感測器（1-Wire）
 ├── switch/         開關（GND、VCC、OUT）
 ├── buzzer/         有源 / 無源蜂鳴器
@@ -98,15 +98,16 @@ lib/
 | Bus（SPI 螢幕） | `ST7789` | `init`、`write8/16`、`cmdMode`、`dataMode`、`select`…、`delayMs`、`nowMs`、`readFlash8/16` | `Uno::UnoST7789`（`Uno_ST7789.h`） |
 | Bus（I2C） | `SSD1306` | `init`、`start`、`write8`、`read8`、`stop`、`delayMs`、`nowMs`、`readFlash8/16` | `Uno::UnoI2C`（`Uno_I2C.h`） |
 | Screen | `graphics`、`image`、`video` | `width`、`height`、`fillWindow`、`writeWindow`、型別 `BusType`（它的 `readFlash8/16`、`nowMs`）；`video` 另外要 `setWindow`、`writeData16`、`endWrite` | `ST7789::M130T`、`SSD1306::OLED128x64` |
-| Link | `image::StreamImage`、`video::StreamPlayer` | `init`、`available`、`read8`、`write8`、`clearInput` | `Uno::UnoSerial`（`Uno_serial.h`） |
+| Link | `image::StreamImage`、`video::StreamPlayer`、`audio::StreamPlayer`、`StreamSamplePlayer` | `init`、`available`、`read8`、`write8`、`clearInput` | `Uno::UnoSerial`（`Uno_serial.h`） |
 | Wire | `DS18B20` | `init`、`reset`、`write8`、`read8`、`readBit`、`nowMs` | `Uno::UnoOneWire`（`Uno_one_wire.h`） |
 | Pin（輸入） | `switch` | `init`、`read`、`nowMs` | `Uno::UnoPin`（`Uno_pin.h`） |
-| Pin（輸出） | `buzzer::ActiveBuzzer2Pins`、`3Pins` | `init`、`write`、`nowMs`、`readFlash16` | `Uno::UnoOutputPin`（`Uno_pin.h`） |
+| Pin（輸出） | `buzzer::ActiveBuzzer2Pins`、`3Pins` | `init`、`write`、`nowMs`、`readFlash8/16` | `Uno::UnoOutputPin`（`Uno_pin.h`） |
 | Pwm | `LED` 的所有模組 | `init`、`write(duty)` | `Uno::UnoPwmPin`（`Uno_pin.h`） |
 | InterruptPin | `NEC::Receiver` | `init(onChange)`、`read`、`nowUs`、`nowMs`、`stopInterrupts`、`restoreInterrupts` | `Uno::UnoInterruptPin`（`Uno_interrupt_pin.h`） |
 | Remote | 用 `NEC` 的程式 | `ADDRESS`、`toKey(code)` | `NEC::Remote17KeyNumbersTop`、`Remote17KeyArrowsTop` |
-| Tone | `buzzer::PassiveBuzzer2Pins`、`3Pins` | `init`、`start`、`stop`、`realHz`、`nowMs`、`readFlash16`、常數 `IDLE_LEVEL_HIGH` | `Uno::UnoTone`（`Uno_tone.h`） |
-| Sound | `audio::Player` | `init`、`start`、`stop`、`nowMs`、`readFlash16` | `buzzer` 的所有模組 |
+| Tone | `buzzer::PassiveBuzzer2Pins`、`3Pins` | `init`、`start`、`stop`、`realHz`、`nowMs`、`readFlash8/16`、常數 `IDLE_LEVEL_HIGH` | `Uno::UnoTone`（`Uno_tone.h`） |
+| Sound | `audio::Player`、`StreamPlayer` | 常數 `HAS_PITCH`、`init`、`start`、`stop`、`nowMs`、`readFlash8/16` | `buzzer` 的所有模組 |
+| SampleOut | `audio::SamplePlayer`、`StreamSamplePlayer` | `init`、`start(rate, next)`、`stop`、`realRate`、`stopInterrupts`、`restoreInterrupts`、`readFlash8/16` | `Uno::UnoPcmOut`（`Uno_pcm_out.h`） |
 
 ## 依賴關係
 
@@ -123,7 +124,9 @@ Uno_serial.h ─(Link)─▶ image::StreamImage、video::StreamPlayer
 Uno_one_wire.h ─(Wire)─▶ DS18B20::Thermometer
 Uno_pin.h ─────(Pin)──▶ switches::Switch2Pins、Switch3Pins
 Uno_pin.h ─────(Pin)──▶ buzzer::ActiveBuzzer2Pins、3Pins ──┐
-Uno_tone.h ────(Tone)─▶ buzzer::PassiveBuzzer2Pins、3Pins ─┴─(Sound)─▶ audio::Player
+Uno_tone.h ────(Tone)─▶ buzzer::PassiveBuzzer2Pins、3Pins ─┴─(Sound)─▶ audio::Player、StreamPlayer
+Uno_pcm_out.h ─(SampleOut)──────────────────────────────────────▶ audio::SamplePlayer、StreamSamplePlayer
+Uno_serial.h ──(Link)─▶ audio::StreamPlayer、StreamSamplePlayer
 Uno_pin.h ─────(Pwm)──▶ LED::SingleLED ▶ LED2Pins、RGBLED4Pins、TrafficLight4Pins
 Uno_interrupt_pin.h ─(InterruptPin)─▶ NEC::Receiver（HX1838）─(Code)─▶ NEC::Remote17Key… ─▶ NEC::Key
 ```
@@ -217,7 +220,9 @@ UNO 沒有硬體浮點，一次除法約 500 週期，也會多佔 Flash。只�
 | `image::StreamImage<Screen, Link>` | 約 180 | 上面 + 接收緩衝 64 |
 | `video::FlashPlayer<Screen>` | 309 | 解碼器 293（一列緩衝 240、調色盤 32）+ 時間 |
 | `video::StreamPlayer<Screen, Link, 64>` | 392 | 解碼器 + 接收緩衝 + 狀態；CHUNK = 16 時 344 |
-| `audio::Player<Sound>` | 約 28 | 狀態、時間、旋律指標；旋律在 Flash |
+| `audio::Player<Sound>` | 約 32 | 狀態、時間、旋律指標、編碼；旋律在 Flash |
+| `audio::StreamPlayer<Sound, Link, 32>` | 約 30 + CHUNK | 狀態 + 接收緩衝 |
+| `audio::StreamSamplePlayer<SampleOut, Link>` | 約 30 + BUFFER（預設 512） | 取樣的環形緩衝（static） |
 | `DS18B20::Thermometer<Wire>` | 1 | 解析度；讀取時另外用 9 bytes 堆疊 |
 | `switches::Switch3Pins<Pin>`（或 `Switch2Pins`） | 約 16 | 狀態、時間、次數 |
 | `NEC::Receiver<InterruptPin>` | 約 30（static） | 佇列 4 個碼、解碼狀態、時間 |
@@ -233,6 +238,57 @@ UNO 只有 2048 bytes RAM。用完就不要的物件（圖片、播放器）放�
 | 一個像素 | 44 | SPI 送 2 bytes；8 MHz 的硬體極限是 32 |
 | 整個螢幕 | 2.5 M（約 160 ms） | 240×240 像素 |
 | 三角形 | 外框方塊裡每點約 100 | 逐點檢查，比較慢 |
+
+## 參數在哪個階段決定
+
+font、image、video、audio 的資料都由 `source/convert.py` 事先轉好。參數分成四個階段，越前面的越省板子的 Flash、RAM 和時間，但改了就要重新轉換或重新燒錄：
+
+| 階段 | 怎麼改 | 改了要做什麼 |
+|---|---|---|
+| ① 轉換時（`convert.py`） | 命令列參數，寫進 `output/*.h` 的資料本身 | 重新轉換、重新燒錄 |
+| ② 編譯時（template 參數、`selected.h`） | 程式裡的型別，例如 `StreamImage<Screen, Link, 64>` | 重新燒錄 |
+| ③ 開始時（`start`、`open`、`play` 的參數） | 每次開始一個新的都能不同，但播放中不能改 | — |
+| ④ 隨時 | 一般的函式，播放中也能呼叫 | — |
+
+### font
+
+| 階段 | 參數 |
+|---|---|
+| ① 轉換時 | 字型檔、大小（`--height` / `--width` / `--size`）、字元範圍（`--first`、`--last`）、找不到的字用哪個（`--default`） |
+| ② 編譯時 | 哪些字型編進程式（`output/selected.h`；沒用到的不佔 Flash） |
+| ④ 隨時 | `setFont<Font>()`（在編進去的字型之間換）、每次畫的位置和顏色、`setDecimals`、`setSeparator`、`setLineSpacing`、`setAutoLineBreak` |
+| 不能改 | 字的大小、粗細：要另一個大小就再轉一個字型 |
+
+### image
+
+| 階段 | 參數 |
+|---|---|
+| ① 轉換時 | `--target`（Flash 或串流）、尺寸（`--width` / `--height` / `--resize` / `--fit` / `--fill`）、`--scale`、`--resample`、顏色（`--palette`、`--colors`、`--dither`、`--threshold`、`--invert`、`--background`）、`--encoding`、`--max-bytes` |
+| ② 編譯時 | `SEGMENT`（一次畫幾個像素，RAM）、`CHUNK`（`StreamImage` 一次收幾個 byte）、Screen 和 Link 的型別、哪些圖片（`selected.h`） |
+| ③ 開始時 | `draw<Picture>(x, y)`：哪張圖、畫在哪（超出螢幕的部分裁掉） |
+| 不能改 | 放大倍數、顏色、反白：都在資料裡 |
+
+### video
+
+| 階段 | 參數 |
+|---|---|
+| ① 轉換時 | `--target`、尺寸和 `--scale`、`--resample`、顏色（`--palette`、`--colors`、`--dither`、`--mono`、`--threshold`、`--invert`、`--background`）、剪輯（`--start`、`--duration`）、幀率（`--max-fps`、`--min-fps`）、大小（`--max-bytes`、`--reduce`）、`--keyframe`、`--tile` |
+| ② 編譯時 | `CHUNK`（`StreamPlayer`）、Screen 和 Link 的型別、哪些動畫（`selected.h`） |
+| ③ 開始時 | `FlashPlayer::start<Animation>(x, y)`；`StreamPlayer::open<Animation>(x, y, play, loop, speed)` |
+| ④ 隨時 | `StreamPlayer`：`play`、`pause`、`stop`、`seek`、`setSpeed`、`setLoop`、`close`。`FlashPlayer` 只有 `update()`：要換動畫或位置就重新 `start` |
+| 不能改 | 幀率、放大倍數、顏色；`FlashPlayer` 的速度和循環（它固定照原本的時間、一直循環） |
+
+### audio
+
+| 階段 | 參數 |
+|---|---|
+| ① 轉換時 | `--target`、`--sound`（無源的音符 / 有源的節奏 / 取樣）、`--quality`；音符：`--quantize`、`--transpose`、`--range`、`--min-note`、`--min-rest`、`--speed`；節奏：`--hz`；取樣：`--rate`、`--encoding`、`--gain`；偵測：`--silence`、`--voicing`、`--onset`；剪輯：`--start`、`--duration` |
+| ② 編譯時 | 哪隻腳、哪種蜂鳴器（`UnoTone<PIN, IDLE_HIGH>`、`PassiveBuzzer2Pins` / `3Pins`、`UnoPcmOut<PIN>`）、`GAP_MS`（音和音之間的空隙）、`CHUNK`、`BUFFER`（串流）、哪些聲音（`selected.h`） |
+| ③ 開始時 | `play<Melody>(repeat)`、`open<Melody>(repeat)`：哪首、要不要重複 |
+| ④ 隨時 | `setVolume`（全部的播放器）、`stop`；`Player` 的 `tone`、`beep`、`beeps`、`slide` 的頻率和長度（每次呼叫都能不同） |
+| 不能改 | 轉好的聲音的速度、移調、音色：在資料裡（`--speed`、`--transpose`）；要即時改就自己用 `tone()` 一個一個播，例如 `src/week_5/assignment_4.cpp` |
+
+**為什麼大部分在轉換時**：UNO 只有 2 KB RAM、16 MHz。縮放、換顏色、重新取樣在電腦上算一次就好，在板子上每一幀、每個取樣都算會太慢。所以會用到很多組參數時，就轉成好幾個檔案，用 `selected.h` 挑要編進去的。
 
 ## 共同的寫法
 

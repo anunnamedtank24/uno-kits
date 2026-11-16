@@ -109,7 +109,7 @@ void testRange() {
 // 2. C major scale C5 ~ C6 and back
 void testScale() {
     printText("scale C5 ~ C6 ~ C5");
-    speaker.play<melody::scale_semitone>();
+    speaker.play<melody::scale_uno_passive_medium>();
     waitDone();
 }
 
@@ -132,24 +132,61 @@ void testBeeps() {
 // 5. the cues of lib/audio/output: startup (up), success (short, up), error (low, down)
 void testCues() {
     printText("startup, success, error");
-    speaker.play<melody::startup_semitone>();
+    speaker.play<melody::startup_uno_passive_medium>();
     waitDone();
     delay(500);
-    speaker.play<melody::success_semitone>();
+    speaker.play<melody::success_uno_passive_medium>();
     waitDone();
     delay(500);
-    speaker.play<melody::error_semitone>();
+    speaker.play<melody::error_uno_passive_medium>();
     waitDone();
 }
 
 // 6. two melodies: Twinkle Twinkle, then Ode to Joy (the repeated notes must be separate)
 void testMelodies() {
     printText("Twinkle Twinkle, Ode to Joy");
-    speaker.play<melody::twinkle_star_semitone>();
+    speaker.play<melody::twinkle_star_uno_passive_medium>();
     waitDone();
     delay(500);
-    speaker.play<melody::ode_to_joy_semitone>();
+    speaker.play<melody::ode_to_joy_uno_passive_medium>();
     waitDone();
+}
+
+// 7. volume: 2 kHz at 255, 128, 64, 32, 16, 4, 1 (0.6 s each), each step 6 ~ 12 dB quieter
+//    the duty is read back from the pin (share of HIGH samples) and printed next to what was set
+//    expected on D9 / D10: duty 50.0 %, 16.7 %, 8.1 %, 4.0 %, 2.0 %, 0.5 %, 0.1 % (measured within ~0.1 %)
+//    on other pins the reading is ~1 % low and misses the shortest pulses: the measuring loop pauses
+//    while the tone interrupts run, and they run right at the edges
+uint16_t measureDutyPermille() {
+    uint32_t start = micros();
+    uint32_t high = 0;
+    uint32_t total = 0;
+    while (micros() - start < MEASURE_US) {
+        high += Uno::pinRead<BUZZER_PIN>();
+        total++;
+    }
+    return (uint16_t)((high * 1000UL + total / 2) / total);
+}
+
+void testVolume() {
+    const uint8_t VOLUMES[] = { 255, 128, 64, 32, 16, 4, 1 };
+    printText("volume at 2000 Hz");
+    speaker.tone(2000);
+    for (uint8_t volume : VOLUMES) {
+        speaker.setVolume(volume);
+        printText("\r\n  volume ");
+        printNumber(volume);
+        printText(": duty set ");
+        printNumber((uint32_t)Tone::realDuty() * 1000UL / 65536UL);
+        printText(" / 1000, measured ");
+        printNumber(measureDutyPermille());
+        printText(" / 1000, still ");
+        printNumber(Speaker::realHz());
+        printText(" Hz");
+        delay(400);
+    }
+    speaker.stop();
+    speaker.setVolume(255);
 }
 
 void (*const tests[])() = {
@@ -160,6 +197,7 @@ void (*const tests[])() = {
     testBeeps,
     testCues,
     testMelodies,
+    testVolume,
 };
 constexpr uint8_t TEST_COUNT = sizeof(tests) / sizeof(tests[0]);
 

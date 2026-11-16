@@ -1,13 +1,14 @@
 # audio/source
 
-在電腦上跑的工具。需要 Python 3、`pip install numpy`，以及 `brew install ffmpeg`（解碼音檔；沒有時 macOS 的 `afconvert` 也能讀大部分格式）。都在 `lib/audio` 裡執行，加 `-B` 不產生 `__pycache__`。
+在電腦上跑的工具。需要 Python 3、`pip install numpy pyserial`，以及 `brew install ffmpeg`（解碼音檔；沒有時 macOS 的 `afconvert` 也能讀大部分格式）。都在 `lib/audio` 裡執行，加 `-B` 不產生 `__pycache__`。
 
 ## 檔案
 
 | 檔案 | 作用 |
 |---|---|
-| `convert.py` | 音檔 → `output/*.h`，並把新產生的那個加進 `output/selected.h` |
+| `convert.py` | 音檔 → `output/*.h`（`--target mac` 另外寫 `output/mac/*.h`），並把新產生的那個加進 `output/selected.h` |
 | `check.py` | 檢查 `output/selected.h` |
+| `stream.py` | 把 `--target mac` 的聲音串流給板子（`StreamPlayer`、`StreamSamplePlayer`），並印出板子送來的 `'M'` 訊息 |
 
 ## 用法
 
@@ -15,7 +16,11 @@
 cd lib/audio
 python -B source/convert.py assets/twinkle_star.wav output
 python -B source/convert.py ~/Music/song.mp3 output --start 12.5 --duration 8 --preview song.wav
+python -B source/convert.py assets/sos.webm output --sound active
+python -B source/convert.py assets/hello.aiff output --sound pcm --quality low --preview hello.wav
+python -B source/convert.py assets/ode_to_joy.flac output --target mac --sound pcm --quality high
 python -B source/check.py
+python -B source/stream.py
 ```
 
 ## convert.py
@@ -54,19 +59,33 @@ python -B source/check.py
 
 | 參數 | 預設 | 說明 |
 |---|---|---|
-| `--name` | `{檔名}_{semitone\|raw}` | 檔名和 struct 名稱 |
-| `--preview F.wav` | — | 另外存一個試聽用的方波 wav |
-| `--start S` | 0 | 從第幾秒開始 |
-| `--duration S` | 到結尾 | 取幾秒 |
-| `--speed F` | 1 | > 1 變快、< 1 變慢，音高不變；0.1 ～ 10 |
-| `--min-note MS` | 60 | 更短的音併進鄰居 |
-| `--min-rest MS` | 40 | 更短的休止給前一個音 |
-| `--quantize` | `semitone` | `semitone`：對齊到最近的半音，聽起來準；`raw`：量到的頻率（每個音的中位數） |
-| `--transpose N` | 0 | 移調幾個半音，+ 升、- 降 |
-| `--range LOW HIGH` | 200 4000 | Hz；範圍外的音移八度進來。小蜂鳴器低於 200 Hz 很小聲、高於 4 kHz 很刺耳。至少要一個八度寬 |
-| `--silence DB` | 35 | 比最大聲小這麼多就是休止；音檔很安靜或有雜音時調整 |
-| `--voicing F` | 0.2 | YIN 的門檻，0.05 ～ 0.5：小 = 只收很乾淨的音，大 = 雜一點的也收 |
-| `--onset DB` | 6 | 音量突然升高多少 dB 算新的音；0 = 不用（同音高一律連成一個） |
+| `--target uno / mac` | `uno` | `uno`：資料燒進 Flash；`mac`：資料留在 Mac（`output/mac/`），`stream.py` 串流；兩個都寫：Flash 有資料，也能串流 |
+| `--sound passive / active / pcm` | `passive` | 誰播：無源蜂鳴器（音符）、有源蜂鳴器（節奏）、取樣（真正的波形） |
+| `--quality low / medium / high` | `medium` | 預設組合，見 [audio 的格式和品質](../README.md#格式和品質)；下面的單一參數可以蓋過它 |
+| `--name` | `{檔名}_{target}_{sound}_{quality}`；取樣：`{檔名}_{target}_pcm_{rate}_{encoding}` | 檔名和 struct 名稱 |
+| `--preview F.wav` | — | 存一個試聽用的 wav：音符、節奏是方波；取樣是板子實際播的值 |
+| `--start S`、`--duration S` | 0、到結尾 | 取哪一段（秒） |
+| `--speed F` | 1 | > 1 變快、< 1 變慢，音高不變；0.1 ～ 10（取樣要 ffmpeg） |
+| `--min-note MS`、`--min-rest MS` | 看 `--quality` | 更短的音併進鄰居、更短的休止給前一個音（音符、節奏） |
+| `--quantize semitone / raw` | 看 `--quality` | 對齊半音，或量到的頻率（音符；`--quality low` 只能 semitone） |
+| `--transpose N` | 0 | 移調幾個半音（音符） |
+| `--range LOW HIGH` | 200 4000 | Hz；範圍外的音移八度進來，至少一個八度寬（音符） |
+| `--hz` | 量到的音高中位數，沒有就 2000 | 節奏在無源蜂鳴器上播的音高（節奏） |
+| `--rate HZ` | 看 `--quality` | 取樣率 2000 ～ 32000；轉換時用板子實際做得到的頻率（`Uno::UnoPcmOut` 的整數 tick） |
+| `--encoding u8 / u4 / adpcm` | 看 `--quality` | 每個取樣 8 bits、4 bits、IMA ADPCM 4 bits |
+| `--gain DB` | 0 | 最大的取樣拉到滿格之後再加幾 dB；> 0 比較大聲，但峰值會被切掉 |
+| `--silence DB` | 35 | 比最大聲小這麼多就是休止（音符、節奏） |
+| `--voicing F` | 0.2 | YIN 的門檻，0.05 ～ 0.5（音符、節奏） |
+| `--onset DB` | 6 | 音量突然升高多少 dB 算新的音；0 = 不用 |
+
+- 不屬於這個 `--sound` 的參數（例如 `--rate` 配 `--sound passive`）是錯誤。
+
+### 取樣的流程
+
+1. **解碼**：ffmpeg 直接轉成單聲道、板子實際的取樣率（8000 → 8000 Hz、11025 → 11050 Hz、22050 → 21978 Hz）；`--speed` 用 ffmpeg 的 atempo（音高不變）。
+2. **音量**：最大的取樣拉到 0.98，再加 `--gain`。
+3. **編碼**：u8、u4，或 IMA ADPCM。ADPCM 的編碼器邊編邊用板子的解碼法解回來，所以誤差不會累積；最後再整段解一次確認跟板子一樣。
+4. **報告**：訊號 / 誤差（dB）、每秒幾個 byte、切掉的比例。
 
 ### 錯誤和警告
 
@@ -74,8 +93,11 @@ python -B source/check.py
 |---|---|
 | 檔案不存在、副檔名不支援、參數超出範圍 | 錯誤，不產生檔案 |
 | 解碼失敗、少於 46 ms、一個音都找不到 | 錯誤，並提示可以調哪個參數 |
-| 超過 65535 個音，或超過 UNO 的 Flash（32256 bytes） | 錯誤：用 `--start` / `--duration` 剪短 |
-| 超過 8192 bytes | 警告：留給程式的 Flash 不多 |
+| `--target uno` 時超過 65535 步，或超過 UNO 的 Flash（32256 bytes） | 錯誤：剪短、降低 `--quality`，或 `--target mac` |
+| `--target uno` 時音符、節奏超過 8192 bytes，取樣超過 20000 bytes | 警告：留給程式的 Flash 不多 |
+| `--target mac` 的取樣每秒超過 12000 bytes | 警告：串流可能跟不上（實測 16000 在邊緣；`underruns()` 會算） |
+| 取樣率高於 22050 / 低於 4000 | 警告：中斷佔很多 CPU / 聲音很悶 |
+| 超過 1% 的取樣被切掉 | 警告：`--gain` 調小 |
 | 有短於 40 ms 的音 | 警告：`GAP_MS` 20 會讓它一半時間是安靜的 |
 | `--range` 低於 100 Hz 或高於 8 kHz | 警告 |
 | 輸出的資料夾不是 `lib/audio/output` | 警告：`audio.h` 只 include `output/selected.h` |
@@ -84,6 +106,19 @@ python -B source/check.py
 
 - `selected.h` 存在，而且有 include guard。
 - 每個 `#include` 都是 `output/` 裡的檔案，只列一次。
-- 每個檔案都是目前的格式（`// format: 1`），有 `struct melody::{檔名}` 和 `getNotes()`。
+- 每個檔案都是目前的格式（`// format: 2`），有 `struct melody::{檔名}`、`getPath()`；給 UNO 的（`--target uno`）還要有資料：`getNotes()`（音符、節奏）或 `getSamples()`（取樣）。
 - 原始音檔（記錄的路徑和 sha256）沒有變過；找不到原始檔時只警告。
 - `output/` 裡沒被選的 .h 只警告。
+
+## stream.py
+
+```bash
+python -B source/stream.py                       # 自己找板子；拔掉、重插、燒錄都會自己接回
+python -B source/stream.py --port /dev/cu.usbmodem1101
+```
+
+- **板子說要哪個檔**：路徑是 struct 的 `getPath()`（相對於 `lib/audio`），只開 `lib/audio` 裡的 .h；`--target uno` 和 `--target mac` 的都可以串流。
+- **檔案改了會重讀**（看修改時間），不用重開。
+- **印出**：每個聲音的格式、大小，傳完的時間和速度；板子用 `StreamLink::message` 送的文字印成 `[Board] …`。
+- **燒錄**：看到 avrdude 或 `pio run -t upload` 就放開串口，燒完再接回；開串口會讓板子重置。
+- 協定見 [audio 的串流](../README.md#串流)。

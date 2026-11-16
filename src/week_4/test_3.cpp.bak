@@ -77,14 +77,14 @@ void testBeeps() {
 // 3. a melody on an active buzzer: only the rhythm (Morse SOS: 3 short, 3 long, 3 short)
 void testSos() {
     printText("SOS: ... --- ...");
-    beeper.play<melody::sos_semitone>();
+    beeper.play<melody::sos_uno_active_medium>();
     waitDone();
 }
 
 // 4. another rhythm: Twinkle Twinkle at one pitch (14 notes, the 7th and the last longer)
 void testRhythm() {
     printText("Twinkle Twinkle, rhythm only (one pitch)");
-    beeper.play<melody::twinkle_star_semitone>();
+    beeper.play<melody::twinkle_star_uno_active_medium>();
     waitDone();
 }
 

@@ -38,6 +38,11 @@ namespace Uno {
 
     template <uint32_t BAUD>
     inline void UnoSerial<BAUD>::init() {
+        // already running at this rate: nothing to do (setting it again would cut off a byte being sent)
+        bool running = (UCSR0B & ((1 << RXEN0) | (1 << TXEN0))) == ((1 << RXEN0) | (1 << TXEN0));
+        if (running && UBRR0 == uartUbrr(BAUD) && (UCSR0A & (1 << U2X0))) {
+            return;
+        }
         uartSet(uartUbrr(BAUD));
     }
 

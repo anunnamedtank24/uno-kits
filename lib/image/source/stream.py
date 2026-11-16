@@ -39,7 +39,8 @@ POLL_S = 0.005
 PORT_PATTERNS = ("/dev/cu.usbmodem*", "/dev/cu.usbserial*", "/dev/cu.wchusbserial*", "/dev/cu.SLAB_USBtoUART*")
 UPLOAD_CHECK_S = 0.3
 # avrdude itself, or PlatformIO starting an upload (released before it even builds)
-UPLOAD_PATTERN = re.compile(r"\bavrdude\b|\b(platformio|pio)\b.*(-t|--target)[ =]?upload\b")
+# only the program itself (its first word, or the script python runs), not a shell line that mentions it
+UPLOAD_PATTERN = re.compile(r"^\S*\bavrdude\s|^(\S*python\S*\s+)?\S*\b(platformio|pio)\s.*(-t|--target)[ =]?upload\b")
 LIB_DIR_PATH = Path(__file__).resolve().parent.parent # lib/image
 PALETTES = {mode: palette for palette, mode in convert.COLOR_MODES.items()} # colorMode -> palette
 ENCODING_NAMES = {code: name for name, code in convert.ENCODINGS.items()}

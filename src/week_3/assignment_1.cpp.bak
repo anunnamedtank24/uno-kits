@@ -24,7 +24,7 @@
 using Bus = Uno::UnoST7789<8, 10, Uno::NONE, 9>;
 using Screen = graphics::Canvas<ST7789::M130T<Bus>>;
 using SensorWire = Uno::UnoOneWire<2>;
-using Sensor = DS18B20::Thermometer<SensorWire>;
+using Sensor = DS18B20::KY001<SensorWire>;   // bare part: DS18B20::TO92, probe: DS18B20::WaterproofProbe
 namespace RGB565 = color::RGB565;
 using Font = font::menlo_width_12_first_32_last_126_default_63; // 12 x 35, ASCII 32 ~ 126
 

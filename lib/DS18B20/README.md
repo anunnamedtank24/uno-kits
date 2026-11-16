@@ -1,12 +1,17 @@
 # DS18B20
 
-DS18B20 數位溫度感測器（三隻腳：VCC、DQ、GND），`namespace DS18B20`，類別 `DS18B20::Thermometer`。資料夾用晶片命名：裸的 TO-92、防水探頭、KY-001 模組裡面都是同一顆 DS18B20，程式一樣，所以不分 `module/`。只依賴一個 Wire（1-Wire 匯流排，例如 `Uno::UnoOneWire<PIN>`），換主板只要換 Wire。
+DS18B20 數位溫度感測器（三隻腳：VCC、DQ、GND），`namespace DS18B20`，類別 `DS18B20::Thermometer`。資料夾用晶片命名；裸的 TO-92、防水探頭、KY-001 模組裡面都是同一顆 DS18B20，程式一樣，`module/` 只記錄各自的接法（差在有沒有上拉電阻）。只依賴一個 Wire（1-Wire 匯流排，例如 `Uno::UnoOneWire<PIN>`），換主板只要換 Wire。
 
 ## 檔案
 
 ```
 lib/DS18B20/
-└── DS18B20.h        Thermometer<Wire>：解析度、轉換、讀取、CRC
+├── DS18B20.h               入口：全部（程式只 include 它）
+├── thermometer.h           Thermometer<Wire>：解析度、轉換、讀取、CRC（模組共用的核心）
+└── module/                 實際買到的零件
+    ├── TO_92.h             TO92<Wire>：裸的 DS18B20（黑色、一面平的、3 隻腳）
+    ├── waterproof_probe.h  WaterproofProbe<Wire>：防水探頭（不鏽鋼管、3 條線）
+    └── KY_001.h            KY001<Wire>：焊在小板子上、已經有上拉電阻
 ```
 
 ## 接線
@@ -17,7 +22,13 @@ lib/DS18B20/
 | DQ | 任何數位腳，例如 D2 |
 | GND | GND |
 
-- **DQ 要有上拉電阻**：4.7 kΩ 接到 VCC。大部分三隻腳的模組板上已經有了；裸的 DS18B20（TO-92 封裝）要自己加。
+| 零件 | 腳位 | 上拉電阻 | 用 |
+|---|---|---|---|
+| 裸的 DS18B20（TO-92） | 平面朝自己、腳朝下：GND、DQ、VDD | **要自己加** 4.7 kΩ（DQ 到 VCC） | `DS18B20::TO92` |
+| 防水探頭 | 紅 VDD、黑 GND、黃（或白、藍）DQ；顏色依賣家，看說明 | **要自己加**，線長更需要 | `DS18B20::WaterproofProbe` |
+| KY-001 等模組板 | 照板子印的字：S = DQ、中間 = VCC、- = GND | 板子上已經有 | `DS18B20::KY001` |
+
+- **DQ 要有上拉電阻**：1-Wire 只靠上拉電阻把線拉回 HIGH。
 - `Uno::UnoOneWire` 預設也會開 UNO 內部約 35 kΩ 的上拉，短線（幾十公分內）沒有外接電阻也可能可以用，但不保證。
 
 ## 用法
@@ -27,7 +38,7 @@ lib/DS18B20/
 #include "DS18B20.h"
 
 using SensorWire = Uno::UnoOneWire<2>;            // DQ 接 D2
-DS18B20::Thermometer<SensorWire> sensor;
+DS18B20::KY001<SensorWire> sensor;                // 板子上有上拉；裸的用 DS18B20::TO92
 
 sensor.init(12);                                  // 12 bits：0.0625 °C，一次 750 ms
 int16_t centi;

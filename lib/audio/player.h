@@ -3,13 +3,15 @@
 
 #include <stdint.h>
 #include "note.h"
+#include "format.h"
 
 namespace audio {
     // plays sounds without waiting: start one, then call update() every loop
     // (one thing at a time: starting a new one replaces the old)
     //
-    // Sound: a struct providing these static functions (e.g. buzzer::ActiveBuzzer,
-    // buzzer::PassiveBuzzer of lib/buzzer)
+    // Sound: a struct providing these static functions (e.g. the modules of lib/buzzer)
+    //   static constexpr bool HAS_PITCH   false: one pitch only (active buzzer), true: any pitch
+    //   void setVolume(uint8_t)  /  uint8_t volume()   0 ~ 255
     //   void init()
     //   void start(uint16_t hz)     sound at hz (> 0); called again to change it (a sound that has
     //                               one pitch only, like an active buzzer, just turns on)
@@ -40,15 +42,25 @@ namespace audio {
         // notes: a flash array of count pairs { hz, ms } (see note.h); repeat: from the start again
         inline void play(const uint16_t *notes, uint16_t count, bool repeat = false);
 
-        // a melody of output/selected.h (source/convert.py): play<melody::ode_to_joy_semitone>()
+        // a melody of output/selected.h (source/convert.py), --sound passive or active, --target uno:
+        // play<melody::ode_to_joy_uno_passive_medium>()
+        // (--sound pcm: audio::SamplePlayer; --target mac only: audio::StreamPlayer)
         template <class Melody>
         inline void play(bool repeat = false);
+
+        // the same from a pointer: any NOTES / RHYTHM encoding of format.h
+        inline void play(const uint16_t *words, uint16_t count, uint8_t encoding, uint16_t rhythmHz, bool repeat);
 
         // from fromHz to toHz in ms, straight in Hz (a siren, a laser ...)
         inline void slide(uint16_t fromHz, uint16_t toHz, uint16_t ms);
 
         // silent now
         inline void stop();
+
+        // 0 = silent ~ 255 = the loudest (the default after init()), also while playing:
+        // a passive buzzer gets a narrower pulse (-6 dB at 128); an active buzzer has only 0 = muted, else on
+        inline void setVolume(uint8_t volume);
+        inline uint8_t volume() const;
 
         // true while anything is going on (also during tone() and the rests of a melody)
         inline bool isPlaying() const;
@@ -70,6 +82,8 @@ namespace audio {
 
         // STEPS: a melody (_notes) or beeps (_notes = nullptr: even steps on, odd steps off)
         const uint16_t *_notes = nullptr;
+        uint8_t _encoding = NOTES_HZ_MS;
+        uint16_t _rhythmHz = 0;
         uint16_t _count = 0;
         uint16_t _index = 0;
         bool _repeat = false;
@@ -87,6 +101,20 @@ namespace audio {
     };
 
     // ================= definitions =================
+
+    template <class Sound, uint8_t GAP_MS>
+    inline void Player<Sound, GAP_MS>::setVolume(uint8_t volume) {
+        Sound::setVolume(volume);
+        // from 0 back up in the middle of a note: the Sound had stopped, start it again
+        if (volume != 0 && _hz != 0) {
+            Sound::start(_hz);
+        }
+    }
+
+    template <class Sound, uint8_t GAP_MS>
+    inline uint8_t Player<Sound, GAP_MS>::volume() const {
+        return Sound::volume();
+    }
 
     template <class Sound, uint8_t GAP_MS>
     inline void Player<Sound, GAP_MS>::init() {
@@ -169,12 +197,20 @@ namespace audio {
 
     template <class Sound, uint8_t GAP_MS>
     inline void Player<Sound, GAP_MS>::play(const uint16_t *notes, uint16_t count, bool repeat) {
-        if (notes == nullptr || count == 0) {
+        play(notes, count, NOTES_HZ_MS, 0, repeat);
+    }
+
+    template <class Sound, uint8_t GAP_MS>
+    inline void Player<Sound, GAP_MS>::play(const uint16_t *words, uint16_t count, uint8_t encoding,
+                                            uint16_t rhythmHz, bool repeat) {
+        if (words == nullptr || count == 0 || encoding > RHYTHM_MS) {
             stop();
             return;
         }
         _mode = STEPS;
-        _notes = notes;
+        _notes = words;
+        _encoding = encoding;
+        _rhythmHz = rhythmHz;
         _count = count;
         _index = 0;
         _repeat = repeat;
@@ -185,7 +221,13 @@ namespace audio {
     template <class Sound, uint8_t GAP_MS>
     template <class Melody>
     inline void Player<Sound, GAP_MS>::play(bool repeat) {
-        play(Melody::getNotes(), Melody::count, repeat);
+        static_assert(Melody::kind != KIND_PCM,
+                      "audio::Player: a PCM sound (--sound pcm) is played by audio::SamplePlayer");
+        static_assert(Melody::target & TARGET_UNO,
+                      "audio::Player: made with --target mac only (no data on the board): use audio::StreamPlayer");
+        static_assert(Melody::count <= 65535, "audio::Player: at most 65535 steps");
+        static_assert(warn::PitchLost<(Melody::kind == KIND_NOTES && !Sound::HAS_PITCH)>::ok, "");
+        play(Melody::getNotes(), (uint16_t)Melody::count, Melody::encoding, Melody::rhythmHz, repeat);
     }
 
     template <class Sound, uint8_t GAP_MS>
@@ -227,9 +269,18 @@ namespace audio {
     inline void Player<Sound, GAP_MS>::startStep() {
         uint16_t hz;
         if (_notes != nullptr) {
-            hz = Sound::readFlash16(&_notes[(uint32_t)_index * 2]);
-            _stepMs = Sound::readFlash16(&_notes[(uint32_t)_index * 2 + 1]);
-            _soundMs = _stepMs >= 2 * GAP_MS ? (uint16_t)(_stepMs - GAP_MS) : _stepMs;
+            uint16_t first;
+            uint16_t second = 0;
+            if (_encoding == NOTES_HZ_MS) {
+                first = Sound::readFlash16(&_notes[(uint32_t)_index * 2]);
+                second = Sound::readFlash16(&_notes[(uint32_t)_index * 2 + 1]);
+            } else {
+                first = Sound::readFlash16(&_notes[_index]);
+            }
+            decodeStep(_encoding, first, second, _rhythmHz, hz, _stepMs);
+            // a rhythm says where the silences are: no extra gap
+            bool gap = _encoding != RHYTHM_MS && _stepMs >= 2 * GAP_MS;
+            _soundMs = gap ? (uint16_t)(_stepMs - GAP_MS) : _stepMs;
         } else {
             bool on = (_index % 2) == 0;
             hz = on ? _beepHz : REST;

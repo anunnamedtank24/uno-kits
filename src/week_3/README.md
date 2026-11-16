@@ -36,7 +36,7 @@ DS18B20（`test_2`、`assignment_1`）：
 | DS18B20 | UNO |
 |---|---|
 | VCC | 5V |
-| DQ | D2（要有 4.7 kΩ 上拉到 VCC，大部分模組板上已經有） |
+| DQ | D2（要有 4.7 kΩ 上拉到 VCC：KY-001 這類模組板上已經有；裸的 TO-92 和防水探頭要自己加，程式改用 `DS18B20::TO92`、`DS18B20::WaterproofProbe`） |
 | GND | GND |
 
 # test_1.cpp

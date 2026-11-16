@@ -17,7 +17,7 @@ pio run -t upload
 | `test_4.cpp` | 無源蜂鳴器：頻率（實測）、音階、滑音、旋律 | 無源蜂鳴器 |
 | `assignment_1.cpp` | 作業一：按開關換下一張照片 | OLED + 開關模組 |
 | `assignment_2.cpp` | 作業二：OLED 播動畫 | OLED |
-| `assignment_3.cpp` | 作業三：照片每隔 `SLIDE_MS`（現在 1 秒）自動換下一張 | OLED |
+| `assignment_3.cpp` | 作業三：依序顯示照片，每張同時播一首不同的音樂 | OLED + 無源蜂鳴器 |
 | `assignment_4.cpp` | 作業四：大圓吃掉自己生滅的像素點，長到上限就縮小並噴出點 | OLED |
 
 ## 接線
@@ -42,7 +42,7 @@ pio run -t upload
 | VCC | 5V |
 | OUT | D2 |
 
-蜂鳴器（`test_3`、`test_4`），兩隻腳：
+蜂鳴器（`test_3`、`test_4`、`assignment_3`），兩隻腳：
 
 | 蜂鳴器 | UNO |
 |---|---|
@@ -198,11 +198,23 @@ test 1: range
 - 實測 16.5 ～ 17 fps（動畫本身 16.7 fps），沒有跳幀，最慢一幀（I 幀）66 ms。
 - Flash 4.6 KB、RAM 1369 B。
 
-## assignment_3.cpp：自動換照片
+## assignment_3.cpp：照片配音樂
 
-- 跟作業一一樣的四張照片，每隔 `SLIDE_MS`（現在 1000 ms）換下一張。
-- 時間從上一次換照片的時間點往後算，所以畫圖花的時間不會讓間隔越來越長。
-- Flash 7.0 KB、RAM 1073 B。
+接線：OLED（D13、D11）+ 無源蜂鳴器（+ 串 100 Ω 接 **D9**、- 接 GND）。
+
+| 順序 | 照片 | 音樂 | 長度 |
+|---|---|---|---|
+| 1 | 夕陽 | 小星星 | 6.4 s |
+| 2 | 月亮 | 歡樂頌 | 6.9 s |
+| 3 | 城市 | C 大調音階 | 4.3 s |
+| 4 | logo | 開機音效 | 0.5 s（照片至少留 `MIN_SLIDE_MS` 2 秒） |
+
+- **換的時機**：音樂開始時換照片；音樂播完（而且照片已經顯示至少 2 秒）就停 `PAUSE_MS`（0.8 秒），再換下一組；最後一組之後回到第一組。
+- **同時播放**：音樂由 `audio::Player` 用 Timer1 播，不會等；OLED 的 `display()` 只在換照片時花約 64 ms，音樂照常（方波由計時器產生），只是那一刻換音會晚一點。
+- **換音樂或照片**：改 `photos[]`、`songs[]` 兩個陣列，兩個要一樣長（不一樣時編譯錯誤）。音樂用 `lib/audio/source/convert.py` 轉，照片用 `lib/image/source/convert.py`。
+- **音量**：檔案開頭的 `VOLUME`，0 ～ 255（255 最大聲、128 小 6 dB、64 小 12 dB），見 [lib/buzzer 的音量](../../lib/buzzer/README.md#音量)。
+- **三隻腳的無源模組**：`Speaker` 改成 `buzzer::PassiveBuzzer3Pins<Uno::UnoTone<9, true>>`。
+- Flash 8.6 KB、RAM 1164 B。已經燒進板子，畫面和聲音要你看、聽確認。
 
 
 ## assignment_4.cpp：大圓和生滅的像素點

@@ -1,21 +1,32 @@
 #include <Arduino.h>
 #include "Uno_I2C.h"
+#include "Uno_tone.h"
 #include "SSD1306.h"
 #include "image.h"
+#include "buzzer.h"
+#include "audio.h"
 
-// UNO + 128x64 I2C OLED: the photos change by themselves, one every SLIDE_MS
-//   OLED: GND -> GND, VCC -> 5V, SCL -> D13, SDA -> D11
+// UNO + 128x64 I2C OLED + passive buzzer: a slide show, every photo with its own music
+//   OLED:   GND -> GND, VCC -> 5V, SCL -> D13, SDA -> D11
+//   buzzer: + -> 100 Ω -> D9, - -> GND (passive; a 3-pin module: see Speaker below)
+//
+// slide n shows photos[n] and plays songs[n]; when the song has ended (and the photo was up for
+// at least MIN_SLIDE_MS) it waits PAUSE_MS, then the next slide; after the last one, the first again
 //
 // the photos are black / white (the OLED has no colors), made by lib/image/source/convert.py
-// (see src/week_4/assignment_1.cpp); the switch of assignment 1 is replaced by a clock:
-// the time is counted from the last change, so drawing does not make the slides drift
+// (see src/week_4/assignment_1.cpp); the songs are made by lib/audio/source/convert.py
+// the song plays on Timer1 while the screen is sent (display() ~64 ms only when the photo changes)
 using Bus = Uno::UnoI2C<13, 11>;
 using Screen = SSD1306::OLED128x64<Bus>;
+using Speaker = buzzer::PassiveBuzzer2Pins<Uno::UnoTone<9>>;   // 3-pin module: PassiveBuzzer3Pins<Uno::UnoTone<9, true>>
 Screen screen;
+audio::Player<Speaker> speaker;
 
-constexpr uint16_t SLIDE_MS = 1000;
+constexpr uint8_t VOLUME = 1;           // 0 = silent ~ 255 = the loudest; 128 = -6 dB, 64 = -12 dB
+constexpr uint16_t MIN_SLIDE_MS = 2000;   // a short jingle still leaves the photo up this long
+constexpr uint16_t PAUSE_MS = 800;        // silence between two slides
 
-// ---------- photos ----------
+// ---------- slides ----------
 
 template <class Picture>
 void drawPicture() {
@@ -23,21 +34,38 @@ void drawPicture() {
     pictures.draw<Picture>(0, 0);
 }
 
+template <class Melody>
+void playSong() {
+    speaker.play<Melody>();
+}
+
+// one photo and one song a slide, in the same order
 void (*const photos[])() = {
     drawPicture<picture::sunset_uno_128x64_palette_2>,
     drawPicture<picture::moon_uno_128x64_palette_2>,
     drawPicture<picture::city_uno_128x64_palette_2>,
     drawPicture<picture::logo_uno_mac_128x64_palette_2>,
 };
-constexpr uint8_t PHOTO_COUNT = sizeof(photos) / sizeof(photos[0]);
+void (*const songs[])() = {
+    playSong<melody::twinkle_star_uno_passive_medium>,   // 6.4 s
+    playSong<melody::ode_to_joy_uno_passive_medium>,     // 6.9 s
+    playSong<melody::scale_uno_passive_medium>,          // 4.3 s
+    playSong<melody::startup_uno_passive_medium>,        // 0.5 s (the photo stays MIN_SLIDE_MS)
+};
+constexpr uint8_t SLIDE_COUNT = sizeof(photos) / sizeof(photos[0]);
+static_assert(sizeof(songs) / sizeof(songs[0]) == SLIDE_COUNT, "one song for every photo");
 
-uint8_t photo = 0;
-uint32_t nextSlideMs = 0;
+uint8_t slide = 0;
+uint32_t slideStartMs = 0;
+uint32_t songEndMs = 0;            // 0 while the song is playing
 
-void showPhoto() {
+void showSlide() {
     screen.clear();
-    photos[photo]();
+    photos[slide]();
     screen.display();
+    songs[slide]();
+    slideStartMs = millis();
+    songEndMs = 0;
 }
 
 // ---------- main ----------
@@ -49,17 +77,25 @@ void halt() {
 }
 
 void setup() {
+    speaker.init();
+    speaker.setVolume(VOLUME);
     if (!screen.init()) {
         halt();
     }
-    showPhoto();
-    nextSlideMs = millis() + SLIDE_MS;
+    showSlide();
 }
 
 void loop() {
-    if ((int32_t)(millis() - nextSlideMs) >= 0) {
-        nextSlideMs += SLIDE_MS;
-        photo = (uint8_t)((photo + 1) % PHOTO_COUNT);
-        showPhoto();
+    speaker.update();
+    uint32_t now = millis();
+    if (songEndMs == 0) {
+        if (!speaker.isPlaying() && now - slideStartMs >= MIN_SLIDE_MS) {
+            songEndMs = now;
+        }
+        return;
+    }
+    if (now - songEndMs >= PAUSE_MS) {
+        slide = (uint8_t)((slide + 1) % SLIDE_COUNT);
+        showSlide();
     }
 }

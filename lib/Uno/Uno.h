@@ -15,6 +15,7 @@
 //                 Uno::UnoPwmPin<PIN>           Pwm: brightness on a PWM pin, e.g. LED::RGBLED
 //   Uno_interrupt_pin.h  Uno::UnoInterruptPin<PIN>  InterruptPin: a function on every change, e.g. NEC::Receiver
 //   Uno_tone.h    Uno::UnoTone<PIN>             square wave on any pin (Timer1), e.g. buzzer::PassiveBuzzer
+//   Uno_pcm_out.h Uno::UnoPcmOut<PIN>           SampleOut: sound samples on D9 / D10 (Timer1 + Timer2), audio::SamplePlayer
 // this file:     Uno::                         pins, SPI, UART, PWM, flash, time, pin checks
 //
 // pins are Arduino numbers: D0 ~ D13 = 0 ~ 13, A0 ~ A5 = 14 ~ 19
