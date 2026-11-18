@@ -14,6 +14,7 @@ pio device monitor                      # 看串口（1 Mbaud，platformio.ini �
 src/
 ├── README.md       這份：程式的寫法
 ├── hide.py         只留一個程式，其他的改成 .bak（用 git mv，git 保留檔案的歷史）
+├── clean.py        刪掉快取和轉好的素材（__pycache__、.pio/build、lib/<種類>/output/*.h）
 └── week_{N}_{lib}/ 每週一個資料夾，名稱是週數加上這週新用到的函式庫（硬體在前、輔助在後）
     ├── README.md
     ├── tests/
@@ -45,6 +46,20 @@ src/
 
 符合的不是剛好一個時，什麼都不改，印出錯誤。
 
+## clean.py
+
+刪掉工具產生、而且能再產生的東西：每個 `__pycache__`、PlatformIO 的 `.pio/build`、`lib/font`、`image`、`video`、`audio` 的 `output/*.h`（`README.md` 留著）。
+
+| 指令 | 結果 |
+|---|---|
+| `python src/clean.py --dry-run` | 只列出會刪什麼 |
+| `python src/clean.py` | 刪掉 |
+| `python src/clean.py --rebuild` | 刪掉，再照每個檔案開頭的 `// source:`、`// options:` 全部重新轉換（檔名不變）；原始檔不見的那個不刪，印警告 |
+
+- **只刪不轉時**：下次編譯只會重轉程式裡 `FONT(...)` 這類巨集的檔案；直接用名稱的（`font::menlo_…`、`picture::sunset_…`）要 `--rebuild`，或 `git restore lib` 拿回來（轉好的檔案都在 git 裡）。
+- **`--rebuild` 什麼時候用**：改了 `convert.py`、想讓每個輸出都是最新的寫法（約 10 秒）。轉換用的 Python 跟 `tools/assets.py` 一樣：`platformio.ini` 的 `custom_asset_python`。
+- `.pio/build` 刪掉後，下一次編譯會全部重新編譯（慢一點，結果一樣）。
+
 ## 檔名
 
 | 什麼 | 名稱 | 例子 |
@@ -53,7 +68,7 @@ src/
 | 測試 | `week_…/tests/{n}_{說明}.cpp`：n 從 1 開始；說明是小寫英文、底線分開的幾個字 | `week_7_L298N/tests/6_car.cpp` |
 | 作業 | `week_…/assignments/{n}_{說明}.cpp`：n 照作業的編號 | `week_5_NEC/assignments/4_piano.cpp` |
 
-- **`{lib}` 的順序**：先放硬體的函式庫（`ST7789`、`DS18B20`、`switch`、`L298N`…，這週的主角），再放輔助的（`graphics`、`color`、`font`、`image`、`video`、`audio`，照 [lib/README.md](../lib/README.md) 的順序）。前幾週已經出現過的不再寫（week_4 也用 `graphics`，但它在 week_3 已經寫了）；`Uno` 每週都用，不寫。
+- **`{lib}` 的順序**：先放硬體的函式庫（`ST7789`、`DS18B20`、`switch`、`L298N`…，這週的主角），再放輔助的，固定照 `graphics`、`color`、`font`、`image`、`video`、`audio`、`stream` 的順序（先畫圖的基礎，再素材）。前幾週已經出現過的不再寫（week_4 也用 `graphics`，但它在 week_3 已經寫了）；`Uno` 每週都用，不寫。
 - **新的程式放在哪一週**：它主要測的硬體函式庫第一次出現的那一週。可以用前面幾週的零件（例如 `week_4_SSD1306_switch_buzzer_audio/tests/6_clicks` 用 week_2 的 LED 顯示按鈕手勢），不能用後面幾週的。
 - **沒有對應的週**：開新的一週；比較底層、其他零件會用到的放前面的週（例如類比輸入 → `week_1_analog`）。
 - **一個程式測好幾個函式庫的功能時**：拆成每個函式庫一個測試，各放在自己的週。
@@ -123,6 +138,7 @@ void loop() { ... }
 | 接法的選項 | `bool`、enum | `SWITCH_ACTIVE_HIGH`、`IN12_SIDE` |
 | 串口速度 | `BAUD`（跟 `platformio.ini` 的 `monitor_speed` 一樣） | `constexpr uint32_t BAUD = 1000000;` |
 | 函式庫 template 參數的預設值 | 列出來，即使跟預設一樣 | `DEBOUNCE_MS`、`I2C_KHZ`、`GAP_MS`、`IR_QUEUE`、`STREAM_CHUNK` |
+| 螢幕的顏色格式 | ST7789：`using ScreenColor = …;`（換格式只改這行）；OLED 只能黑白，放門檻 `BW_THRESHOLD` | `using ScreenColor = color::RGB565;` |
 | 時間、速度、亮度、音量、門檻 | 名稱加單位 | `HOLD_MS`、`TONE_HZ`、`MIN_MM`、`SUPPLY_V`、`VOLUME` |
 | 用哪個檔案 | `FONT(...)`、`PICTURE(...)`、`ANIMATION(...)`、`MELODY(...)` | `using Song = MELODY("~/x.aiff", "--quality high");` |
 | 測試的順序表、對應表 | 陣列 | `LADDER[]`、`NOTE_HZ[]`、`MOVES[]` |
@@ -138,13 +154,14 @@ void loop() { ... }
 
 ```cpp
 using Link = Uno::UnoSerial<BAUD>;
-using Button = switches::Switch3Pins<Uno::UnoPin<SWITCH_PIN>, SWITCH_ACTIVE_HIGH, DEBOUNCE_MS>;
+using Button = switches::Switch3Pins<Uno::UnoInputPin<SWITCH_PIN>, SWITCH_ACTIVE_HIGH, DEBOUNCE_MS>;
 Button button;
 ```
 
-- **不要直接寫 `Uno::UnoPin<2>`**：腳位一定先寫成 `X_PIN`。
+- **不要直接寫 `Uno::UnoInputPin<2>`**：腳位一定先寫成 `X_PIN`。
 - **型別用 `using` 取名**：大駝峰，用零件的角色命名（`Bus`、`Screen`、`Link`、`Speaker`、`Car`、`Button`），不用型號。
 - 物件（變數）用小駝峰（`screen`、`car`、`speaker`）。
+- **顏色**：常數用 `ScreenColor::RED`、`ScreenColor::color(r, g, b)`；存顏色的變數、參數用 `using Color = ScreenColor::Value;`，不要寫 `uint16_t` 或 `RGB565::`（換格式時才不用改程式）。
 - 別的接法寫在旁邊的註解：`// 3-pin module: PassiveBuzzer3Pins<Uno::UnoTone<BUZZER_PIN, true>>`。
 
 ### 5. 程式自己的段落

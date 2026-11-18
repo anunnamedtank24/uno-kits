@@ -67,7 +67,7 @@ cd ../.. && python lib/stream/source/stream.py     # 串流：圖片、動畫、
 | `--fit WxH` | 維持比例，塞進 W×H 的框裡，盡量大 |
 | `--fill WxH` | 維持比例，蓋滿 W×H，超出的部分從中間裁掉 |
 | `--scale N` / `--scale NXxNY` | 板子把每個點重複畫 NX×NY 次，只能是整數。資料只存「螢幕大小 ÷ scale」 |
-| `--resample` | 縮放方法：`nearest`（像素風）、`bilinear`、`bicubic`、`lanczos`（預設） |
+| `--resample` | 縮放的算法：`nearest`（像素風）、`bilinear`、`bicubic`、`lanczos`（預設） |
 
 - 非整數倍的放大用 `--resize` 或 `--width`；`--scale` 只負責整數倍、省資料。
 - 尺寸不是 scale 的整數倍時會四捨五入，並印警告說實際大小。
@@ -96,7 +96,7 @@ cd ../.. && python lib/stream/source/stream.py     # 串流：圖片、動畫、
 | `--tile N` | 找變化區域用的小方塊大小，預設 8 |
 | `--name` | 自訂檔名和 struct 名稱 |
 
-- **檔名**：`{檔名}_{flash|stream|flash_stream}_{寬}x{高}_palette_{16|256|565}.h`，struct 同名。`assets/` 外面的檔案前面加上資料夾；撞名（例如只差 `--keyframe`）加 `_2`、`_3`，不蓋掉別的（見 [output/README.md](../output/README.md#名稱和來源)）。
+- **檔名**：`{檔名}_{flash|stream|flash_stream}_{寬}x{高}_palette_{16|256|565}[_mono].h`（`--mono` 時加 `_mono`），struct 同名。`assets/` 外面的檔案前面加上資料夾；撞名（例如只差 `--keyframe`）加 `_2`、`_3`，不蓋掉別的（見 [output/README.md](../output/README.md#名稱和來源)）。
 
 ### 流程
 

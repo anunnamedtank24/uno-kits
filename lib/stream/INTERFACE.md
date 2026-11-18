@@ -46,6 +46,7 @@ image、video、audio 對 `Stream` 的需求（`Puller` 都有）：
 | 需要 | 誰用 |
 |---|---|
 | `CHUNK_SIZE`、`OK`、`ERROR_NOT_FOUND` ～ `ERROR_BROKEN` | 全部 |
+| `ERROR_NO_MEMORY` | `StreamImage`、`video::StreamPlayer`（256 色的調色盤） |
 | `begin()`、`write8/16/32()`、`writePath(path)`、`waitAnswer(timeoutMs)` | 全部 |
 | `available()` | `video::StreamPlayer`（不等待地看有沒有回答） |
 | `Answer`：`begin()`、`read8/16/32()`、`failed()` | `StreamImage`、`video::StreamPlayer`、`audio::StreamPlayer` |

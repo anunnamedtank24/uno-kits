@@ -31,8 +31,8 @@ void setup() {
         return;
     }
     screen.setFont<font::menlo_height_23_first_32_last_126_default_63>();
-    screen.drawHollowRectSize(0, 0, 128, 64, 1);
-    screen.drawTexts(10, 26, 1, "hello ", 42);
+    screen.drawHollowRectSize(0, 0, 128, 64, ScreenColor::WHITE);
+    screen.drawTexts(10, 26, ScreenColor::WHITE, "hello ", 42);
     screen.display();                                        // 畫完才送出去
 }
 ```

@@ -2,7 +2,7 @@
 
 | 需要 | 得到 |
 |---|---|
-| 一個 `Pin`：`init()`、`read()`、`nowMs()`（`Uno::UnoPin<PIN>`） | `switches::Switch2Pins`、`Switch3Pins`：去彈跳的開關（開著沒、剛按下、按了幾次、多久）；`switches::Clicks`：單擊、雙擊、長按、按住連發 |
+| 一個 `Pin`：`init()`、`read()`、`nowMs()`（`Uno::UnoInputPin<PIN>`） | `switches::Switch2Pins`、`Switch3Pins`：去彈跳的開關（開著沒、剛按下、按了幾次、多久）；`switches::Clicks`：單擊、雙擊、長按、按住連發 |
 
 「需要」是介面（duck typing），括號裡是這個專案現成的實作，換主板只要換它們。開發者看的細節（前提條件、介面需求、每個函式、參數、資源）在 [INTERFACE.md](INTERFACE.md)。
 
@@ -15,8 +15,8 @@
 #include "switch.h"
 
 constexpr uint8_t SWITCH_PIN = 2;                 // 模組的 OUT
-switches::Switch3Pins<Uno::UnoPin<SWITCH_PIN>> button;
-// switches::Switch2Pins<Uno::UnoPin<SWITCH_PIN, true>> button;   // 兩隻腳的裸按鈕：接 SWITCH_PIN 和 GND
+switches::Switch3Pins<Uno::UnoInputPin<SWITCH_PIN>> button;
+// switches::Switch2Pins<Uno::UnoInputPin<SWITCH_PIN, true>> button;   // 兩隻腳的裸按鈕：接 SWITCH_PIN 和 GND
 
 void setup() {
     button.init();
@@ -79,15 +79,15 @@ void loop() {
 | VCC | 5V |
 | OUT | 任何數位腳，例如 D2 |
 
-兩隻腳的裸開關：一邊接腳位、一邊接 GND，用 `Switch2Pins<Uno::UnoPin<PIN, true>>`。
+兩隻腳的裸開關：一邊接腳位、一邊接 GND，用 `Switch2Pins<Uno::UnoInputPin<PIN, true>>`。
 
 ## 兩隻腳和三隻腳
 
 | 零件 | 例子 | 接法 | 用 |
 |---|---|---|---|
-| 兩隻腳的裸開關 | 按鈕、磁簧開關、傾斜開關（滾珠） | 一隻接腳位、一隻接 GND | `Switch2Pins<Uno::UnoPin<PIN, true>>`：內部上拉，沒按 HIGH、按下 LOW |
+| 兩隻腳的裸開關 | 按鈕、磁簧開關、傾斜開關（滾珠） | 一隻接腳位、一隻接 GND | `Switch2Pins<Uno::UnoInputPin<PIN, true>>`：內部上拉，沒按 HIGH、按下 LOW |
 | 四隻腳的輕觸按鈕 | 麵包板常用的方形按鈕 | 四隻腳兩兩相通，**取對角的兩隻**當兩隻腳 | 同上 |
-| 三隻腳的模組（GND、VCC、OUT） | 按鈕模組、TTP223 觸摸、傾斜、磁簧、霍爾模組 | OUT 接腳位，模組自己輸出高低 | `Switch3Pins<Uno::UnoPin<PIN>>`，不開上拉；按下是 LOW 的模組加 `false` |
+| 三隻腳的模組（GND、VCC、OUT） | 按鈕模組、TTP223 觸摸、傾斜、磁簧、霍爾模組 | OUT 接腳位，模組自己輸出高低 | `Switch3Pins<Uno::UnoInputPin<PIN>>`，不開上拉；按下是 LOW 的模組加 `false` |
 
 - **兩隻腳一定要上拉**：開關打開時沒有東西推腳位，不開上拉會讀到亂跳的雜訊。
 - **三隻腳的 ACTIVE_HIGH**：觸摸模組和大部分按鈕模組按下是 HIGH（預設）；有些按鈕、傾斜、霍爾模組按下是 LOW。不確定就跑 `src/week_4_SSD1306_switch_buzzer_audio/tests/2_switch.cpp`。

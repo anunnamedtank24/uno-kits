@@ -51,7 +51,7 @@ using Clef = picture::treble_clef_flash_15x40_palette_2;
 Screen screen;
 audio::Player<Speaker> speaker;
 
-constexpr uint16_t ON = 1;
+constexpr ScreenColor::Value ON = ScreenColor::ON;     // a lit pixel
 
 // ---------- staff ----------
 

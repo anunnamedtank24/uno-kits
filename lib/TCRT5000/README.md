@@ -2,7 +2,7 @@
 
 | 需要 | 得到 |
 |---|---|
-| 數位輸出（OUT）：一個 `Pin`：`init()`、`read()`、`nowMs()`（`Uno::UnoPin<PIN>`） | `TCRT5000::HW006`（`Reflector`）：反射或暗、剛改變、維持多久 |
+| 數位輸出（OUT）：一個 `Pin`：`init()`、`read()`、`nowMs()`（`Uno::UnoInputPin<PIN>`） | `TCRT5000::HW006`（`Reflector`）：反射或暗、剛改變、維持多久 |
 | 類比輸出（四腳板的 A0）：`AnalogPin`（`Uno::UnoAnalogPin<A0>`） | `TCRT5000::AnalogReflector`：反射有多強 |
 
 「需要」是介面（duck typing），括號裡是這個專案現成的實作，換主板只要換它們。開發者看的細節（前提條件、介面需求、每個函式、參數、資源）在 [INTERFACE.md](INTERFACE.md)。
@@ -16,7 +16,7 @@ TCRT5000 反射式紅外線感測器（裝在有比較器的小板子上），`n
 #include "TCRT5000.h"
 
 constexpr uint8_t OUT_PIN = 4;            // 板子的 OUT
-TCRT5000::HW006<Uno::UnoPin<OUT_PIN>> sensor;
+TCRT5000::HW006<Uno::UnoInputPin<OUT_PIN>> sensor;
 
 void setup() {
     sensor.init();
@@ -78,7 +78,7 @@ uint16_t r = sensor.reflection();       // 0（沒反射）～ 1023（全反射�
 | **LM393** | 板子上的比較器：把光電晶體收到的強弱變成 OUT 的 HIGH / LOW |
 | **HW-006** | 板子的型號（零件），放在 `module/HW_006.h`；循跡模組 |
 
-照「`lib/` 用晶片命名」的規則，決定程式怎麼寫的是 TCRT5000（什麼算反射），所以叫 `TCRT5000/`。以後其他 TCRT5000 的板子（KY-033、有 A0 類比輸出的四腳板）放 `module/`。
+照「`lib/` 用晶片命名」的規則，決定程式怎麼寫的是 TCRT5000（什麼算反射），所以叫 `TCRT5000/`。四腳板也在 `module/`（`TCRT5000_4_pins.h`）；以後其他 TCRT5000 的板子（KY-033）也放那裡。
 
 ## 原理
 

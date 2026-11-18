@@ -6,7 +6,7 @@
 // format: 1
 // source: assets/sunset.heic sha256 79993da11911a01872452e5df1c4e5516c0c97a90423fb32980079b5b05b4847
 // settings:
-//   target      stream: pixels stay on the computer (output/stream/*.h), stream.py sends them to image::StreamImage; the board only has the size and the path (output/*.h); 256 colors would need 512 B RAM on the board
+//   target      stream: pixels stay on the computer (in output/*.h, after #if 0), stream.py sends them to image::StreamImage; the board only has the size and the path (output/*.h); palette 256 works (the board keeps it in RAM taken at run time, 2 bytes a color), but warns
 //   picture     480 x 320 px, heic
 //   crop        x 80.0 y 0.0 w 320.0 h 320.0 (picture px)
 //   screen      240 x 240 px = stored 240 x 240 x scale 1 x 1

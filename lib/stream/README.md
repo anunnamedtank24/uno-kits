@@ -27,7 +27,6 @@ python lib/stream/source/stream.py
 ```cpp
 #include "Uno_serial.h"
 #include "stream.h"
-#include "color.h"
 #include "image.h"
 
 constexpr uint32_t BAUD = 1000000;          // 跟 stream.py 的 --baud 一樣
@@ -35,7 +34,7 @@ constexpr uint8_t STREAM_CHUNK = 64;        // 一次收幾個 byte（RAM）
 
 using Link = Uno::UnoSerial<BAUD>;
 using StreamLink = stream::Puller<Link, STREAM_CHUNK>;
-image::StreamImage<Screen, StreamLink, color::RGB565> pictures(screen);
+image::StreamImage<Screen, StreamLink> pictures(screen);   // 顏色格式跟著 Screen
 
 uint8_t result = pictures.draw<picture::sunset_stream_240x240_palette_565>(0, 0);
 ```

@@ -11,7 +11,7 @@
 //   Uno_serial.h  Uno::UnoSerial<BAUD>          Link over USB serial (D0 / D1), e.g. for video::StreamPlayer
 //   Uno_one_wire.h  Uno::UnoOneWire<PIN>        Wire for 1-Wire devices, e.g. DS18B20::Thermometer
 //   Uno_I2C.h     Uno::UnoI2C<SCL, SDA>         Bus for I2C devices on any pins, e.g. SSD1306 OLEDs
-//   Uno_pin.h     Uno::UnoPin<PIN>              Pin to read, e.g. switches::Switch
+//   Uno_pin.h     Uno::UnoInputPin<PIN>         Pin to read, e.g. switches::Switch3Pins
 //                 Uno::UnoOutputPin<PIN>        Pin to drive, e.g. buzzer::ActiveBuzzer
 //                 Uno::UnoPwmPin<PIN>           Pwm: brightness on a PWM pin, e.g. LED::RGBLED
 //   Uno_interrupt_pin.h  Uno::UnoInterruptPin<PIN>  InterruptPin: a function on every change, e.g. NEC::Receiver
@@ -378,7 +378,7 @@ namespace Uno {
 
     // what every interface of this folder provides (pins, buses, timers all inherit it), so a library that
     // gets any of them can always ask for the time, wait, read flash and turn interrupts off for a moment:
-    //   Uno::UnoPin<2>::nowMs(), Uno::UnoI2C<13, 11>::readFlash8(p), Uno::UnoTone<9>::stopInterrupts() ...
+    //   Uno::UnoInputPin<2>::nowMs(), Uno::UnoI2C<13, 11>::readFlash8(p), Uno::UnoTone<9>::stopInterrupts() ...
     struct UnoBoard {
         // ms / µs since power on (millis / micros)
         static inline uint32_t nowMs() {

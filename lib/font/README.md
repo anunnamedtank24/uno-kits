@@ -4,9 +4,7 @@
 |---|---|
 | （不需要）；字型檔 .ttf / .otf | `font::*`：每個字型一個 struct（`FONT("檔案")` 或 `source/convert.py` 轉出來），給 `graphics::Text` 的 `setFont<…>()` |
 
-「需要」是介面（duck typing），括號裡是這個專案現成的實作，換主板只要換它們。開發者看的細節（前提條件、介面需求、每個函式、參數、資源）在 [INTERFACE.md](INTERFACE.md)。
-
-不需要任何介面，任何主板都能用。
+不需要任何介面，任何主板都能用。開發者看的細節（前提條件、資料怎麼產生、輸入限制）在 [INTERFACE.md](INTERFACE.md)。
 
 字型資料，`namespace font`。每個字型是一個 struct，由 `source/convert.py` 從 .ttf / .otf 產生，給 `graphics::Text` 畫。
 
@@ -44,7 +42,7 @@ screen.setFont<Title>();
 | 型態 | `FONT(...)` 就是那個 `font::` struct，跟手動轉換的一樣用 |
 | 限制 | 兩個參數都要是字串常數（不能是變數） |
 
-完整的說明：[lib/README.md](../README.md#字型圖片影片聲音直接用檔案)；例子：`src/week_4_SSD1306_switch_buzzer_audio/tests/5_files.cpp`（四種都有）。下面「用法」是手動轉換的方式，一樣能用。
+完整的說明：[lib/README.md](../README.md#字型圖片影片聲音直接用檔案)；例子：`src/week_4_SSD1306_switch_buzzer_audio/tests/5_files.cpp`（四種都有）。上面「用法」是手動轉換的方式，一樣能用。
 
 ## 輸入限制
 

@@ -46,7 +46,7 @@ pio run -t upload
 | VCC | 5V |
 | OUT | D2 |
 
-蜂鳴器（`tests/3_active_buzzer`、`tests/4_passive_buzzer`、`tests/7_play_file`、`assignments/3_photo_music`），兩隻腳：
+蜂鳴器（`tests/3_active_buzzer`、`tests/4_passive_buzzer`、`tests/5_files`、`tests/7_play_file`、`assignments/3_photo_music`），兩隻腳：
 
 | 蜂鳴器 | UNO |
 |---|---|
@@ -243,7 +243,7 @@ using Chime = MELODY("success.m4a");                                            
 
 # tests/8_graphics.cpp：graphics 的每個函式
 
-跟 week_3 的 `tests/1_screen` 一樣的圖形和文字測試，改成 128 × 64 黑白：`ON` 是亮的點、`OFF` 是暗的。字用 4 × 12 的小字（一行 32 個字、5 行），標題用 23 px 的字。
+跟 `week_3_ST7789_DS18B20_graphics_color_font_image_video/tests/1_screen` 一樣的圖形和文字測試，改成 128 × 64 黑白：`ON`（= `ScreenColor::ON`）是亮的點、`OFF` 是暗的。字用 4 × 12 的小字（一行 32 個字、5 行），標題用 23 px 的字。
 
 | 測試 | 測什麼 | 應該看到 |
 |---|---|---|
@@ -276,7 +276,7 @@ using Chime = MELODY("success.m4a");                                            
 
 # assignments/2_animation.cpp：OLED 播動畫
 
-- `video::FlashPlayer` 直接畫在 OLED 上：OLED 的 `Frame` 也提供 `setWindow` / `writeData16`，畫進 RAM 的畫面；每畫完一幀呼叫 `display()`。
+- `video::FlashPlayer` 直接畫在 OLED 上：OLED 的 `Frame` 也提供 `setWindow` / `writePixel`，畫進 RAM 的畫面；每畫完一幀呼叫 `display()`。
 - 64×64 的 orbit 放在中間（x = 32），一直循環。
 - 實測 16.5 ～ 17 fps（動畫本身 16.7 fps），沒有跳幀，最慢一幀（I 幀）66 ms。
 - Flash 4.6 KB、RAM 1369 B。

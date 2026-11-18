@@ -22,7 +22,7 @@ lib/analog/
 ├── analog.h            入口：全部（程式只 include 它）
 ├── input.h             Input<AnalogPin, SMOOTHING>：平滑、範圍、百分比 / 任意範圍、門檻、變化（模組共用的核心）
 ├── joystick.h          Joystick<XPin, YPin, ButtonPin, INVERT_X, INVERT_Y>：兩軸 -100 ～ 100、死區、方向、按鈕
-├── thermistor.h        Thermistor<AnalogPin, NTC_ON_GND, R0, BETA, FIXED>：NTC 熱敏電阻的溫度
+├── thermistor.h        Thermistor<AnalogPin, NTC_ON_GND, R0_OHMS, BETA, FIXED_OHMS>：NTC 熱敏電阻的溫度
 ├── sound_level.h       SoundLevel<AnalogPin, WINDOW_MS>：麥克風模組的音量、拍手
 └── module/             實際買到的零件
     ├── potentiometer.h Potentiometer<AnalogPin>：旋鈕、滑桿、微調電阻

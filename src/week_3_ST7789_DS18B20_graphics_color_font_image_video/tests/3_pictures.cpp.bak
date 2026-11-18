@@ -18,6 +18,7 @@ constexpr uint8_t DC_PIN = 8;               // DC
 constexpr uint8_t RES_PIN = 10;             // RES; Uno::NONE: not connected (software reset)
 constexpr uint8_t CS_PIN = Uno::NONE;       // CS: the M130T has none
 constexpr uint8_t BLK_PIN = 9;              // BLK (backlight); Uno::NONE: tied to VCC
+using ScreenColor = color::RGB565;          // the screen's colors (lib/color): RGB565 16 bit (fastest), RGB888 / RGB666 18 bit, RGB444 12 bit
 constexpr uint32_t BAUD = 1000000;          // USB serial for stream.py (its --baud)
 
 constexpr uint32_t ONLY_TESTS = 0;          // 0: every test; bit i = only test i, e.g. (1UL << 0) | (1UL << 5)
@@ -28,21 +29,19 @@ constexpr uint8_t STREAM_CHUNK = 64;        // test 5: bytes per request to stre
 // ---------- parts ----------
 
 using Bus = Uno::UnoST7789<DC_PIN, RES_PIN, CS_PIN, BLK_PIN>;
-using ScreenColor = color::RGB565;                 // M130T: 16 bit (RGB888 / RGB666: 18 bit, RGB444: 12 bit)
 using Screen = graphics::Canvas<ST7789::M130T<Bus, ScreenColor>>;
 using Link = Uno::UnoSerial<BAUD>;
 using StreamLink = stream::Puller<Link, STREAM_CHUNK>;   // asks stream.py for files
-using RGB565 = color::RGB565;
 using SmallPrintable = font::menlo_height_23_first_32_last_126_default_63;  // 8 x 23, ASCII 32 ~ 126
 Screen screen;
 
 void clear() {
-    screen.drawFilledScreen(RGB565::BLACK);
+    screen.drawFilledScreen(ScreenColor::BLACK);
 }
 
 // the time a draw took, under the picture
 void showMs(int16_t y, uint32_t ms) {
-    screen.drawTexts(4, y, RGB565::WHITE, ms, " ms");
+    screen.drawTexts(4, y, ScreenColor::WHITE, ms, " ms");
 }
 
 // ---------- tests ----------
@@ -103,7 +102,7 @@ void testStream() {
     if (result == pictures.OK) {
         showMs(4, elapsed);
     } else {
-        screen.drawTexts(4, 100, RGB565::RED, "error ", result);
+        screen.drawTexts(4, 100, ScreenColor::RED, "error ", result);
     }
 }
 
@@ -134,9 +133,9 @@ int16_t testIndex(Test test) {
 void showTitle(Test test) {
     const int16_t x = 88;
     const int16_t y = (240 - 23) / 2;
-    int16_t end = screen.drawTexts(x, y, RGB565::WHITE, "test ", testIndex(test));
+    int16_t end = screen.drawTexts(x, y, ScreenColor::WHITE, "test ", testIndex(test));
     delay(TITLE_MS);
-    screen.drawFilledRectSize(x, y, end - x, screen.fontHeight(), RGB565::BLACK);
+    screen.drawFilledRectSize(x, y, end - x, screen.fontHeight(), ScreenColor::BLACK);
 }
 
 // ---------- main ----------

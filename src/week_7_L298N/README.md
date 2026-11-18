@@ -15,14 +15,14 @@ pio device monitor                      # 1 Mbaud
 | `tests/1_one_motor.cpp` | **一顆**馬達：漸變、滑行和煞車的差別、反轉、速度階梯 | L298N + 直流馬達（OUT1、OUT2） |
 | `tests/2_two_motors.cpp` | **兩顆**馬達（兩輪車）：各自確認、直走、後退、轉彎、原地旋轉 | L298N + 2 顆直流馬達 |
 | `tests/3_voltage.cpp` | **控制電壓**：在串口打 `a 4.5`，馬達 A 就拿到約 4.5 V | L298N + 1 ～ 2 顆直流馬達 |
-| `tests/4_pwm.cpp` | **PWM**：佔空比由小到大（從哪裡開始轉）、由大到小（在哪裡停）、起動的「踢一下」、PWM 煞車 | L298N + 直流馬達 |
+| `tests/4_pwm.cpp` | **PWM**：工作週期由小到大（從哪裡開始轉）、由大到小（在哪裡停）、起動的「踢一下」、PWM 煞車 | L298N + 直流馬達 |
 | `tests/5_stepper.cpp` | **步進馬達**：FULL、HALF、WAVE 各轉一圈來回，速度階梯找上限 | L298N + 雙極步進馬達（4 條線） |
-| `tests/6_car.cpp` | **兩輪車**（`TwoWheelCar`）：直走、後退、原地旋轉、單輪旋轉、弧線、正方形、8 字、之字 | L298N（**EN 跳線帽接著**）+ 2 顆直流馬達 |
-| `tests/7_background_remote.cpp` | **背景遙控**：車在背景跑（`UnoBackground`），用鍵盤操作；沒有時間的動作、`until`、失聯自動停 | 同 `tests/6_car` |
+| `tests/6_car.cpp` | **兩輪車**（`TwoWheelCar`）：直走、後退、原地旋轉、單輪旋轉、弧線、正方形、8 字、之字 | L298N（**EN 跳線帽接著**，IN1、IN3 接 PWM 腳，IN2、IN4 接 GND）+ 2 顆直流馬達 |
+| `tests/7_background_remote.cpp` | **背景遙控**：車在背景跑（`UnoBackground`），用鍵盤操作；沒有時間的動作、`until`、失聯自動停 | L298N（**EN 跳線帽接著**，IN1 ～ IN4 都接 PWM 腳）+ 2 顆直流馬達 |
 
 ## 接線
 
-`tests/1_one_motor` ～ `tests/5_stepper` 的接法一樣（只接一顆馬達的測試，通道 B 就空著）；`tests/6_car` 不同，見 [tests/6_car](#tests6_carcpp兩輪車)。
+`tests/1_one_motor` ～ `tests/5_stepper` 的接法一樣（只接一顆馬達的測試，通道 B 就空著）；`tests/6_car`、`tests/7_background_remote` 不同，見 [tests/6_car](#tests6_carcpp兩輪車)。
 
 | 零件 | 腳 | UNO / 其他 |
 |---|---|---|
@@ -101,7 +101,7 @@ A 是左輪、B 是右輪。先看 1、2：只有一個輪子轉、而且往前�
 A: duty 115 / 255 (45 %) -> about 4.51 V
 ```
 
-- **L298N 不能真的降壓**：它把電源開開關關（PWM），馬達平均起來拿到 `佔空比 × (電源 - 壓降)`。
+- **L298N 不能真的降壓**：它把電源開開關關（PWM），馬達平均起來拿到 `工作週期 × (電源 - 壓降)`。
 - 設定要改成你的：`SUPPLY_V`（電源，用電錶量；9 V 電池接上馬達後常常只剩約 7 V）、`DROP_V`（L298N 吃掉的，約 2 V）、`MOTOR_MAX_V`（馬達的額定電壓，超過的會被限制）。
 - 用電錶的直流電壓量 OUT1、OUT2，大約就是印出來的值（PWM 會讓有些電錶不太準）。
 
@@ -109,9 +109,9 @@ A: duty 115 / 255 (45 %) -> about 4.51 V
 
 只用馬達 A，四個部分一直重複：
 
-1. **佔空比 0 → 255**（每 0.4 秒加 5）：記下**開始轉**的佔空比。
-2. **255 → 0**：記下**停下來**的佔空比，會比 1 低（已經在轉的馬達比較容易繼續轉）。
-3. **踢一下**：低佔空比（`LOW_DUTY`，設成比 1 的值低一點）直接起動可能只會嗡嗡叫；先 255 跑 100 ms 再降下來，就能起動而且繼續轉。
+1. **工作週期 0 → 255**（每 0.4 秒加 5）：記下**開始轉**的工作週期。
+2. **255 → 0**：記下**停下來**的工作週期，會比 1 低（已經在轉的馬達比較容易繼續轉）。
+3. **踢一下**：低工作週期（`LOW_DUTY`，設成比 1 的值低一點）直接起動可能只會嗡嗡叫；先 255 跑 100 ms 再降下來，就能起動而且繼續轉。
 4. **PWM 煞車**：全速後分別滑行、`brake(64)`、`brake(128)`、`brake(255)`，停下來的距離越來越短。
 
 - 1 的值就是 `DCMotor::setMinDuty` 該設的值（`tests/1_one_motor`、`tests/2_two_motors` 的 `MIN_DUTY`）。
@@ -138,21 +138,21 @@ speed ladder (FULL): the last speed that turns is the limit
 
 # tests/6_car.cpp：兩輪車
 
-**接法跟其他測試不同**：只接 IN1 ～ IN4、OUT1 ～ OUT4、+12V、GND，**ENA、ENB 的跳線帽接著**。速度改由 IN 腳的 PWM 控制，所以 IN1 ～ IN4 都要接 PWM 腳。
+**接法跟其他測試不同**：只接 IN、OUT1 ～ OUT4、+12V、GND，**ENA、ENB 的跳線帽接著**。速度改由 IN 腳的 PWM 控制，所以接到 UNO 的 IN 都要是 PWM 腳。
 
-| L298N | UNO / 其他 |
-|---|---|
-| IN1 | **D5** |
-| IN2 | **D6** |
-| IN3 | **D3** |
-| IN4 | **D11** |
-| ENA、ENB | 不接（跳線帽接著） |
-| OUT1、OUT2 | 右馬達 |
-| OUT3、OUT4 | 左馬達 |
-| +12V | 電池的 + |
-| GND | 電池的 - **和** UNO 的 GND |
+| L298N | 目前的設定（只會往前） | 四隻都接（能後退、原地旋轉） |
+|---|---|---|
+| IN1 | **D5**（`IN1_PIN = 5`） | D5（`IN1_PIN = 5`） |
+| IN2 | **GND**（`IN2_PIN = GROUND`） | D6（`IN2_PIN = 6`） |
+| IN3 | **D6**（`IN3_PIN = 6`） | D3（`IN3_PIN = 3`） |
+| IN4 | **GND**（`IN4_PIN = GROUND`） | D11（`IN4_PIN = 11`） |
+| ENA、ENB | 不接（跳線帽接著） | 同左 |
+| OUT1、OUT2 | 右馬達 | 同左 |
+| OUT3、OUT4 | 左馬達 | 同左 |
+| +12V | 電池的 + | 同左 |
+| GND | 電池的 - **和** UNO 的 GND | 同左 |
 
-- **為什麼是 D3、D5、D6、D11**：UNO 只有 6 隻 PWM 腳；D9、D10（Timer1）留給蜂鳴器。D11 跟 OLED 的 SDA 是同一隻，所以這個測試不能同時接 OLED。
+- **為什麼是 D3、D5、D6、D11**：UNO 只有 6 隻 PWM 腳；D9、D10（Timer1）留給蜂鳴器。D11 跟 OLED 的 SDA 是同一隻，所以四隻都接時不能同時接 OLED。
 
 接線方式寫成型態，一行就說完：
 
@@ -164,7 +164,7 @@ using Car = L298N::TwoWheelCar<Board, L298N::RIGHT, L298N::FORWARD, L298N::FORWA
 - **IN1 - IN2 為正**（IN1 HIGH、IN2 LOW）：右馬達向前。
 - **IN3 - IN4 為正**：左馬達向前。
 - 輪子方向相反：把那一對的 `FORWARD` 改成 `BACKWARD`。左右相反：`RIGHT` 改成 `LEFT`。
-- **IN 接 GND**：例如 IN2、IN4 直接接 GND，只用兩隻 PWM 腳，設定改成 `IN2_PIN = GROUND`、`IN4_PIN = GROUND`。`tests/6_car` 目前的設定就是這樣（IN1 = D5、IN3 = D6）；照上表接四隻腳時，改回 `IN1_PIN = 5`、`IN2_PIN = 6`、`IN3_PIN = 3`、`IN4_PIN = 11`。輪子只能往前：後退和原地旋轉（動作 2、3、4、9）會變成煞車。
+- **IN 接 GND**（目前的設定）：IN2、IN4 直接接 GND，只用兩隻 PWM 腳（`IN2_PIN = GROUND`、`IN4_PIN = GROUND`）。輪子只能往前：後退和原地旋轉（動作 2、3、4、9）會變成煞車。要全部動作就照上表右欄接四隻腳、改四個 `IN*_PIN`。
 
 | 動作 | 內容 |
 |---|---|
@@ -190,7 +190,7 @@ using Car = L298N::TwoWheelCar<Board, L298N::RIGHT, L298N::FORWARD, L298N::FORWA
 
 # tests/7_background_remote.cpp：背景遙控
 
-接法跟 `tests/6_car` 一樣（EN 跳線帽接著，IN1 ～ IN4 = D5、D6、D3、D11）。`pio device monitor` 打開後直接按鍵（不用 Enter）：
+接法是 `tests/6_car` 接線表的右欄（EN 跳線帽接著，IN1 ～ IN4 = D5、D6、D3、D11）：要後退和原地旋轉。`pio device monitor` 打開後直接按鍵（不用 Enter）：
 
 | 鍵 | 動作 |
 |---|---|

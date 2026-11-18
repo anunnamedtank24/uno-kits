@@ -18,7 +18,8 @@
 
 ```
 lib/font/
-├── font.h      入口：include output/selected.h
+├── font.h      入口：asset.h + output/selected.h
+├── asset.h     FONT(路徑, 選項) 巨集：編譯前自動轉換（tools/assets.py）
 ├── assets/     原始字型（menlo.ttf）
 ├── source/     convert.py、check.py，見 source/README.md
 └── output/     產生的字型和 selected.h，見 output/README.md
@@ -28,9 +29,9 @@ lib/font/
 
 | 步驟 | 說明 |
 |---|---|
-| `convert.py` | 產生 `output/x.h`，只把它加進 `output/selected.h`（其他的保持原樣），最後跑一次檢查 |
-| `selected.h` | 決定程式裡能用哪些字型；不用的刪掉那行 `#include` 就好 |
-| 編譯 | 只有程式 `setFont<…>` 到的字型會進 Flash（實測多選一個沒用到的 5.4 KB 字型，Flash 不變） |
+| `convert.py` | 產生 `output/x.h`，把它加進 `output/selected.h`，最後跑一次檢查（`check.py`） |
+| `tools/assets.py` | 每次編譯前：轉 `FONT(...)` 要的字型，再把 `selected.h` 重寫成 `output/` 的**全部** .h，`registry.h` 寫巨集對應的型態 |
+| 編譯 | 只有程式 `setFont<…>` 到的字型會進 Flash（實測多列一個沒用到的 5.4 KB 字型，Flash 不變）；不要的字型直接刪掉 .h（`python tools/assets.py --unused` 列出沒用到的） |
 
 ## 輸入限制
 

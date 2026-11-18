@@ -54,7 +54,7 @@ using StreamLink = stream::Puller<Link, STREAM_CHUNK>;
 image::StreamImage<Screen, StreamLink> pictures(screen);
 uint8_t result = pictures.draw<picture::sunset_stream_240x240_palette_565>(0, 0);
 if (result != pictures.OK) {
-    // 見下面的錯誤代碼
+    // 錯誤代碼見 INTERFACE.md（OK、ERROR_NO_ANSWER、ERROR_NO_MEMORY…）
 }
 ```
 
@@ -95,7 +95,7 @@ pictures.draw<Cat>(0, 0);
 | 型態 | `PICTURE(...)` 就是那個 `picture::` struct，跟手動轉換的一樣用 |
 | 限制 | 兩個參數都要是字串常數（不能是變數） |
 
-完整的說明：[lib/README.md](../README.md#字型圖片影片聲音直接用檔案)；例子：`src/week_4_SSD1306_switch_buzzer_audio/tests/5_files.cpp`（四種都有）。下面「用法」是手動轉換的方式，一樣能用。
+完整的說明：[lib/README.md](../README.md#字型圖片影片聲音直接用檔案)；例子：`src/week_4_SSD1306_switch_buzzer_audio/tests/5_files.cpp`（四種都有）。上面「用法」是手動轉換的方式，一樣能用。
 
 ## 顏色和來源
 
@@ -147,13 +147,13 @@ pictures.draw<Cat>(0, 0);
 | 存的寬、高 | 1 ～ 240 | `convert.py` 報錯 |
 | scale | 1 ～ 8 | `convert.py` 報錯 |
 | 調色盤顏色數 | 2：2 色；16：≤ 16；256：≤ 256 | `convert.py` 保證；Flash 版超過時編譯錯誤 |
-| `SEGMENT`、`Stream` 的 `CHUNK` | 1 ～ 255 | — |
+| `SEGMENT`、`Stream` 的 `CHUNK` | 1 ～ 255 | 0：編譯錯誤 |
 
 ## 注意事項
 
 | 情況 | 結果 | 做法 |
 |---|---|---|
-| `StreamImage::draw` 很久 | 等到整張畫完才返回 | 大圖用 `--scale` 或 palette 降低資料量 |
+| `StreamImage::draw` 很久 | 等到整張畫完才回來 | 大圖用 `--scale` 或 palette 降低資料量 |
 | 同時開 `pio device monitor` | 兩個都要用同一個串口 | 串流時關掉監看視窗；`stream.py` 本身同時處理圖片、動畫、聲音 |
 | 同時用 Arduino 的 `Serial` | `UnoSerial` 也用 D0 / D1 | 不能同時用 |
 | 想放動畫 | 這裡只有一張圖 | 用 [video](../video/README.md) |

@@ -51,7 +51,7 @@ void loop() {
 ```bash
 cd lib/audio
 python source/convert.py assets/hello.aiff output --sound pcm --quality low --preview hello.wav
-python source/convert.py assets/song.mp3 output --target stream --sound pcm --quality high --duration 60
+python source/convert.py assets/ode_to_joy.flac output --target stream --sound pcm --quality high
 cd ../.. && python lib/stream/source/stream.py     # 串流時一直開著；燒錄時它會自己放開串口（lib/stream）
 ```
 
@@ -75,7 +75,22 @@ speaker.play<Chime>();
 | 型態 | `MELODY(...)` 就是那個 `melody::` struct，跟手動轉換的一樣用 |
 | 限制 | 兩個參數都要是字串常數（不能是變數） |
 
-完整的說明：[lib/README.md](../README.md#字型圖片影片聲音直接用檔案)；例子：`src/week_4_SSD1306_switch_buzzer_audio/tests/5_files.cpp`（四種都有）。下面「用法」是手動轉換的方式，一樣能用。
+完整的說明：[lib/README.md](../README.md#字型圖片影片聲音直接用檔案)；例子：`src/week_4_SSD1306_switch_buzzer_audio/tests/5_files.cpp`（四種都有）。上面「用法」是手動轉換的方式，一樣能用。
+
+## 手寫旋律
+
+不想從音檔轉時，也可以直接寫：
+
+```cpp
+#include <avr/pgmspace.h>
+using namespace audio;
+
+const uint16_t MY_SONG[] PROGMEM = {
+    noteHz(E, 5), beatMs(120), noteHz(G, 5), beatMs(120, 1, 2), REST, 100, noteHz(C, 6), 600,
+};
+speaker.play(MY_SONG, sizeof(MY_SONG) / sizeof(MY_SONG[0]) / 2);
+```
+
 
 ## 接線
 
@@ -115,20 +130,6 @@ speaker.play<Chime>();
 | 資料在哪 | `output/x.h`，燒進 Flash | `output/x.h` 的 `#if 0` 裡，留在電腦；板子只編譯前面的長度和路徑 | `output/x.h` |
 | 播放 | `Player`、`SamplePlayer` | `StreamPlayer`、`StreamSamplePlayer` + `stream.py` | 兩種都可以 |
 | 長度 | 受 Flash 限制：取樣 8 kHz ADPCM 約 6 秒、16 kHz 8 bits 約 1.5 秒 | 不限 | 受 Flash 限制 |
-
-## 手寫旋律
-
-不想從音檔轉時，也可以直接寫：
-
-```cpp
-#include <avr/pgmspace.h>
-using namespace audio;
-
-const uint16_t MY_SONG[] PROGMEM = {
-    noteHz(E, 5), beatMs(120), noteHz(G, 5), beatMs(120, 1, 2), REST, 100, noteHz(C, 6), 600,
-};
-speaker.play(MY_SONG, sizeof(MY_SONG) / sizeof(MY_SONG[0]) / 2);
-```
 
 ## 輸入限制
 

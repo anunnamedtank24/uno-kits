@@ -2,7 +2,7 @@
 
 | 需要 | 得到 |
 |---|---|
-| 一個 `Pin`：`init()`、`read()`、`nowMs()`（`Uno::UnoPin<PIN>`） | `switches::Switch2Pins`、`Switch3Pins`：去彈跳的開關（開著沒、剛按下、按了幾次、多久）；`switches::Clicks`：單擊、雙擊、長按、按住連發 |
+| 一個 `Pin`：`init()`、`read()`、`nowMs()`（`Uno::UnoInputPin<PIN>`） | `switches::Switch2Pins`、`Switch3Pins`：去彈跳的開關（開著沒、剛按下、按了幾次、多久）；`switches::Clicks`：單擊、雙擊、長按、按住連發 |
 
 給要寫新套件、換主板或換零件的人；用法、接線、注意事項見 [README.md](README.md)。
 
@@ -31,7 +31,7 @@ lib/switch/
 
 | 參數 | 需要的 static 函式 | 現成的實作 |
 |---|---|---|
-| `Pin` | `init()`、`read()`（true = HIGH）、`nowMs()` | `Uno::UnoPin` |
+| `Pin` | `init()`、`read()`（true = HIGH）、`nowMs()` | `Uno::UnoInputPin` |
 
 ## 函式
 
@@ -46,11 +46,23 @@ lib/switch/
 | `stateMs()` | 回傳目前的狀態維持多久了 |
 | `lastStateMs()` | 回傳上一個狀態維持多久，例如放開後就是剛才按了多久 |
 
+`Clicks<Switch>`（`tool/clicks.h`）：Switch 是這個函式庫的開關（`DebouncedSwitch`、`Switch2Pins`、`Switch3Pins`），程式只呼叫 `Clicks::update()`：
+
+| 函式 | 說明 |
+|---|---|
+| `Clicks(button)` | 建構：要看的開關 |
+| `init()` | 也 init 開關 |
+| `update()` | 呼叫開關的 `update()`；回傳剛發生的事件（`CLICK`、`DOUBLE_CLICK`、`MULTI_CLICK`、`LONG_PRESS`、`REPEAT`、`LONG_RELEASE`），沒有就是 `NOTHING` |
+| `count()` | 回傳上一次單擊 / 雙擊 / 多擊按了幾下 |
+| `isPressed()` | 現在有沒有按著 |
+| `setDoubleMs(ms)` | 雙擊兩下之間最多隔多久（預設 300 ms；0 = 不分辨雙擊，放開就報 `CLICK`） |
+| `setLongMs(ms)`、`setRepeatMs(ms)` | 長按的時間（預設 800 ms）、之後 `REPEAT` 的間隔（預設 150 ms；0 = 不重複） |
+
 ## 參數
 
 | 參數 | 預設 | 說明 |
 |---|---|---|
-| `Pin` | — | 兩隻腳：`Uno::UnoPin<PIN, true>`（上拉）；三隻腳：`Uno::UnoPin<PIN>` |
+| `Pin` | — | 兩隻腳：`Uno::UnoInputPin<PIN, true>`（上拉）；三隻腳：`Uno::UnoInputPin<PIN>` |
 | `ACTIVE_HIGH`（`Switch3Pins`） | `true` | 開的時候 OUT 是 HIGH。觸摸模組和大部分按鈕模組是 HIGH；有些模組是 LOW，要設成 `false`（`Switch2Pins` 固定是 LOW） |
 | `DEBOUNCE_MS` | 20 | 去彈跳：新的電位要維持這麼久才算數 |
 

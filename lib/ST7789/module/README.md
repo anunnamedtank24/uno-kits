@@ -36,8 +36,8 @@ namespace ST7789 {
         : Window<Bus, ColorFormat>(240, 280) {   // 面板大小
     }
 
-    template <class Bus>
-    inline void XXX<Bus>::init(uint8_t blk) {
+    template <class Bus, class ColorFormat>
+    inline void XXX<Bus, ColorFormat>::init(uint8_t blk) {
         Bus::init(blk);
         this->hwReset();
         this->swReset();

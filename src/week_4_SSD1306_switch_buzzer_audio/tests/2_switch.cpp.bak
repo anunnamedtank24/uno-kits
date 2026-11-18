@@ -23,7 +23,7 @@ constexpr uint16_t STATUS_MS = 1000;        // a status line this often
 // ---------- parts ----------
 
 using Link = Uno::UnoSerial<BAUD>;
-using Button = switches::Switch3Pins<Uno::UnoPin<SWITCH_PIN>, SWITCH_ACTIVE_HIGH, DEBOUNCE_MS>;
+using Button = switches::Switch3Pins<Uno::UnoInputPin<SWITCH_PIN>, SWITCH_ACTIVE_HIGH, DEBOUNCE_MS>;
 Button button;
 
 uint32_t nextStatusMs = 0;

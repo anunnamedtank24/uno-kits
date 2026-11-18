@@ -2,13 +2,11 @@
 
 | 需要 | 得到 |
 |---|---|
-| Arduino 的 `millis()`、`micros()`（Arduino UNO，ATmega328P） | 其他函式庫要的介面的 UNO 版本：Bus（`UnoST7789`、`UnoI2C`）、Link（`UnoSerial`）、Wire（`UnoOneWire`）、Pin、Pwm、InterruptPin、AnalogPin（`UnoPin`、`UnoPwmPin`、`UnoInterruptPin`、`UnoAnalogPin`）、Tone（`UnoTone`）、Carrier（`UnoIrCarrier`）、SampleOut（`UnoPcmOut`）；接錯腳在編譯時就擋下 |
+| Arduino 的 `millis()`、`micros()`（Arduino UNO，ATmega328P） | 其他函式庫要的介面的 UNO 版本：Bus（`UnoST7789`、`UnoI2C`）、Link（`UnoSerial`）、Wire（`UnoOneWire`）、Pin、Pwm、InterruptPin、AnalogPin（`UnoInputPin`、`UnoPwmPin`、`UnoInterruptPin`、`UnoAnalogPin`）、Tone（`UnoTone`）、Carrier（`UnoIrCarrier`）、SampleOut（`UnoPcmOut`）、背景執行（`UnoBackground`）；接錯腳在編譯時就擋下 |
 
 「需要」是介面（duck typing），括號裡是這個專案現成的實作，換主板只要換它們。開發者看的細節（前提條件、介面需求、每個函式、參數、資源）在 [INTERFACE.md](INTERFACE.md)。
 
-這是最底層：別的函式庫要的介面（「需要」那一欄）在這裡有 UNO 的版本，每個的函式見[提供的介面](INTERFACE.md#提供的介面)。換主板時，照同樣的函式為新的主板寫一份。
-
-Arduino UNO（ATmega328P）的暫存器層，`namespace Uno`。
+Arduino UNO（ATmega328P）的暫存器層，`namespace Uno`，四大類裡的「主板」。這是最底層：別的函式庫要的介面（「需要」那一欄）在這裡有 UNO 的版本，每個的函式見[提供的介面](INTERFACE.md#提供的介面)。換主板時，照同樣的函式為新的主板寫一份。
 
 ## 用法
 
@@ -32,18 +30,26 @@ constexpr uint8_t BLK_PIN = 9;
 using Bus = Uno::UnoST7789<DC_PIN, RES_PIN, Uno::NONE, BLK_PIN>;    // 沒有 CS
 ```
 
+完整的例子：`src/` 的每個程式（parts 段落）；`src/week_7_L298N/tests/7_background_remote.cpp`（`UnoBackground`）、`src/week_1_analog/tests/1_sensors.cpp`（`UnoAnalogPin`、`UnoChip`）。
+
 ## 輸入限制
 
 | 項目 | 範圍 | 超出時 |
 |---|---|---|
 | 腳位（template） | 0 ～ 19，或 `Uno::NONE`（只有選填的腳） | 編譯錯誤；D0 / D1 編譯警告 |
 | `UnoPwmPin` 的腳位 | 3、5、6、9、10、11 | 編譯錯誤 |
+| `UnoAnalogPin` 的腳位 | 14 ～ 19（A0 ～ A5） | 編譯錯誤 |
+| `UnoPcmOut` 的腳位 | 9、10 | 編譯錯誤 |
+| `UnoIrCarrier` 的腳位 | 3、11 | 編譯錯誤 |
 | `MODE` | 0 ～ 3 | 編譯錯誤 |
 | `BAUD` | 2000 ～ 2000000，誤差 ≤ 5% | 編譯錯誤；誤差 > 2% 編譯警告 |
 | `UnoI2C` 的 `KHZ` | 1 ～ 400 | 編譯錯誤 |
 | `init(blk)`、`setBacklight(blk)` | 0 ～ 255；BLK 不是 PWM 腳時只有 0 = 關、其他 = 開 | — |
 | `read8(byte, timeoutMs)` | 0 ～ 65535 ms | — |
 | `UnoTone::start(hz)` | 16 ～ 20000，0 = 停止 | 夾到範圍內 |
+| `UnoPcmOut::start(rate, next)` | 1954 ～ 32000 Hz | 夾到範圍內 |
+| `readAnalogAverage(count)` | 1 ～ 64 | 夾到範圍內 |
+| `UnoBackground::add` | 最多 6 個函式 | 回傳 false |
 | `readFlash8/16(p)` | 必須指向 `PROGMEM` 的資料 | 不檢查：讀到錯的資料 |
 | `delayMs(ms)` | 0 ～ 65535 | — |
 

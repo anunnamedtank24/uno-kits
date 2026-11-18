@@ -36,8 +36,8 @@ using Screen = graphics::Canvas<SSD1306::OLED128x64<Bus, ScreenColor>>;
 using Receiver = NEC::HX1838<Uno::UnoInterruptPin<IR_PIN>, IR_QUEUE>;
 Screen screen;
 
-constexpr uint16_t ON = 1;
-constexpr uint16_t OFF = 0;
+constexpr ScreenColor::Value ON = ScreenColor::ON;     // a lit pixel
+constexpr ScreenColor::Value OFF = ScreenColor::OFF;   // a dark pixel
 constexpr int16_t START_X = (128 - SIZE) / 2;
 constexpr int16_t START_Y = (64 - SIZE) / 2;
 

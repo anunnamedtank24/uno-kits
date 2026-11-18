@@ -33,6 +33,7 @@ constexpr uint8_t DC_PIN = 8;               // DC
 constexpr uint8_t RES_PIN = 10;             // RES; Uno::NONE: not connected (software reset)
 constexpr uint8_t CS_PIN = Uno::NONE;       // CS: the M130T has none
 constexpr uint8_t BLK_PIN = 9;              // BLK (backlight); Uno::NONE: tied to VCC
+using ScreenColor = color::RGB565;          // the screen's colors (lib/color): RGB565 16 bit (fastest), RGB888 / RGB666 18 bit, RGB444 12 bit
 
 constexpr float M = 2.0f;               // slope of the first ray
 constexpr float N = 1.0f;              // slope of the second ray
@@ -61,26 +62,25 @@ static_assert(SPEED_MID - SPEED_SPAN > 0.0f, "the slowest speed must be above 0"
 static_assert(WAIT_MID - WAIT_SPAN >= 0.0f, "the shortest wait must be 0 or more");
 
 // one color family per ray: a new start picks one of them
-const uint16_t WARM_COLORS[] = {
-    color::RGB565::color(255, 120, 80),
-    color::RGB565::color(255, 180, 60),
-    color::RGB565::color(255, 90, 140),
-    color::RGB565::color(240, 220, 120),
+const ScreenColor::Value WARM_COLORS[] = {
+    ScreenColor::color(255, 120, 80),
+    ScreenColor::color(255, 180, 60),
+    ScreenColor::color(255, 90, 140),
+    ScreenColor::color(240, 220, 120),
 };
-const uint16_t COOL_COLORS[] = {
-    color::RGB565::color(80, 180, 255),
-    color::RGB565::color(90, 230, 200),
-    color::RGB565::color(150, 130, 255),
-    color::RGB565::color(180, 220, 255),
+const ScreenColor::Value COOL_COLORS[] = {
+    ScreenColor::color(80, 180, 255),
+    ScreenColor::color(90, 230, 200),
+    ScreenColor::color(150, 130, 255),
+    ScreenColor::color(180, 220, 255),
 };
 constexpr uint8_t COLOR_COUNT = 4;
 
 // ---------- parts ----------
 
 using Bus = Uno::UnoST7789<DC_PIN, RES_PIN, CS_PIN, BLK_PIN>;
-using ScreenColor = color::RGB565;                 // M130T: 16 bit (RGB888 / RGB666: 18 bit, RGB444: 12 bit)
 using Screen = graphics::Canvas<ST7789::M130T<Bus, ScreenColor>>;
-using RGB565 = color::RGB565;
+using Color = ScreenColor::Value;           // one color of the screen
 
 Screen screen;
 
@@ -94,7 +94,7 @@ constexpr int16_t START_LIMIT = START_RANGE < CENTER ? START_RANGE : CENTER - 1;
 struct Ray {
     float slope;        // M or N, never changes; only which way the ray goes is by chance
     int8_t side;        // +1 / -1: which of the two points in parameter space
-    const uint16_t *colors;
+    const Color *colors;
     int16_t x0;         // start point
     int16_t y0;
     int16_t x1;         // end point, at the edge
@@ -106,7 +106,7 @@ struct Ray {
     uint32_t lastMs;    // when length was last added to
     bool atEdge;        // fully drawn, waiting until restartMs
     uint32_t restartMs;
-    uint16_t color;
+    Color color;
 };
 
 Ray rays[2] = {
@@ -183,14 +183,14 @@ int16_t rayY(const Ray &ray, int16_t k) {
 }
 
 // pixels from ~ to of the ray, in one color
-void drawPixels(const Ray &ray, int16_t from, int16_t to, uint16_t color) {
+void drawPixels(const Ray &ray, int16_t from, int16_t to, Color color) {
     for (int16_t k = from; k <= to; k++) {
         screen.drawPoint(rayX(ray, k), rayY(ray, k), color);
     }
 }
 
 // the start dot and every pixel drawn so far
-void drawRay(const Ray &ray, uint16_t color) {
+void drawRay(const Ray &ray, Color color) {
     screen.drawFilledCircleRadius(ray.x0, ray.y0, DOT_RADIUS, color);
     drawPixels(ray, 0, ray.drawn, color);
 }
@@ -246,7 +246,7 @@ void updateRay(Ray &ray, uint32_t now) {
 
 void setup() {
     screen.init();
-    screen.drawFilledScreen(RGB565::BLACK);
+    screen.drawFilledScreen(ScreenColor::BLACK);
     randomSeed(analogRead(A0));
     turned = random(0, 6283) / 1000.0f;
     // already turning one way at the start

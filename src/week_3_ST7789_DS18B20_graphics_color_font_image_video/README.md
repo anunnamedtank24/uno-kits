@@ -57,7 +57,7 @@ DS18B20（`tests/2_temperature`、`assignments/1_temperature_display`）：
 | 7 | `testTriangles` | 三角形的三種寫法，空心要剛好貼在實心的邊上 |
 | 8 | `testCircles` | 圓的兩種寫法 |
 | 9 | `testBorders` | 空心的邊界寬度 1、6、40：彩色邊界蓋在同樣大小的灰色實心上，外面不能露出灰色 |
-| 10 | `testClip` | 剛好貼著螢幕邊緣的圖形（不裁切，所以圖形必須在螢幕上），不能繞到另一邊 |
+| 10 | `testClip` | 剛好貼著螢幕邊緣（0 和 239）的圖形：一點都不能被切掉，也不能繞到另一邊 |
 | 11 | `testTextChars` | 字型的每個字元，沒有空隙也沒有重疊 |
 | 12 | `testTextTypes` | 字串、`F()`、字元、8～32 位元整數 |
 | 13 | `testTextFloat` | 浮點數、`setDecimals`、nan、inf |
@@ -82,8 +82,8 @@ DS18B20（`tests/2_temperature`、`assignments/1_temperature_display`）：
 python lib/stream/source/stream.py      # pip install pillow pyserial；先關序列監看視窗
 ```
 
-- `UnoSerial` 用 D0/D1，所以這個檔案不能用 Arduino 的 `Serial`。
-- 打開串口會讓板子重置，`stream.py` 先開或後開都可以。
+- `UnoSerial` 用 D0 / D1，所以這個檔案不能用 Arduino 的 `Serial`。
+- 打開串口會讓板子重置：建議先開 `stream.py` 再燒錄；後開的話程式會從頭開始（見 [lib/stream](../../lib/stream/README.md#streampy)）。
 - 板子最多等 10 秒，畫面下方會顯示目前步驟、位置、幀號和狀態。
 
 ## 為什麼找得到 lib/ 的標頭檔

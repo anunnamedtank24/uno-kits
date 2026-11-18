@@ -53,7 +53,7 @@ lib/SSD1306/
 | `clear()` | 全部變暗 |
 | `setWindow(x0, y0, x1, y1)`、`writePixel(color)`、`endWrite()` | 跟 ST7789 一樣一個一個送像素，這裡是寫進 RAM 裡的畫面（螢幕外的像素丟掉）；`video` 用這三個畫 |
 | `display()` | 只送改過的部分，回傳螢幕有沒有回應 |
-| `displayAll()` | 全部重送（例如捲動停止之後） |
+| `displayAll()` | 全部重送（例如捲動停止之後），回傳螢幕有沒有回應 |
 
 ### 傳輸（`Datasheet`）
 

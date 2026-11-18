@@ -37,7 +37,8 @@ lib/NEC/
 | 參數 | 需要的 static 函式 | 現成的實作 |
 |---|---|---|
 | `InterruptPin` | `init(onChange)`（輸入腳，每次電位改變就在中斷裡呼叫 `onChange()`）、`read()`（true = HIGH）、`nowUs()`（中斷裡也能用）、`nowMs()`、`stopInterrupts()`、`restoreInterrupts(saved)` | `Uno::UnoInterruptPin` |
-| `Remote` | `static constexpr uint16_t ADDRESS`、`Key toKey(const Code &code)`（別的位址或不認識的指令回傳 `KEY_NONE`） | `NEC::Remote17KeyNumbersTop`、`Remote17KeyArrowsTop` |
+| `Carrier`（`Transmitter`） | `init()`、`on()`、`off()`、`delayUs()`、`nowMs()` | `Uno::UnoIrCarrier` |
+| `Remote` | `static constexpr uint16_t ADDRESS`、`Key toKey(const Code &code)`（別的位址或不認識的指令回傳 `KEY_NONE`）、`bool toCommand(Key key, uint8_t &command)`（發射用；沒有這個鍵回傳 false） | `NEC::Remote17KeyNumbersTop`、`Remote17KeyArrowsTop` |
 
 ## 函式
 
@@ -51,6 +52,11 @@ lib/NEC/
 | `Receiver::isHeld()` | 回傳鍵是不是還按著（碼還在一直來） |
 | `Receiver::badCount()` | 回傳時序像 NEC、但檢查碼不對的次數（雜訊或別種協定） |
 | `Receiver::clear()` | 丟掉還沒讀的碼 |
+| `Receiver::changeCount()` | 回傳 `init()` 之後腳位變了幾次（停在 65535）：按著鍵還是 0 = 接線問題，有變但沒有碼 = 協定問題 |
+| `Transmitter::send(address, command)`、`send(code)` | 送一次按下（會等 67.5 ms）；位址 > 255 用 extended NEC |
+| `Transmitter::sendKey<Remote>(key)` | 送遙控器的某個鍵；沒有這個鍵回傳 false |
+| `Transmitter::sendRepeat()` | 送一個重複碼 |
+| `Transmitter::hold(address, command, ms)`、`holdKey<Remote>(key, ms)` | 按住 ms：按下 + 每 108 ms 一個重複碼 |
 | `Remote::toKey(code)` | 回傳碼代表的鍵；別的遙控器或不認識的鍵是 `KEY_NONE` |
 | `keyDigit(key)` | 回傳 `KEY_0` ～ `KEY_9` 的數字 0 ～ 9，其他鍵 -1 |
 | `keyName(key)` | 回傳簡短的名稱（`"1"`、`"UP"`、`"*"`），印出來用 |

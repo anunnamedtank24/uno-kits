@@ -2,7 +2,7 @@
 
 | 需要 | 得到 |
 |---|---|
-| Arduino 的 `millis()`、`micros()`（Arduino UNO，ATmega328P） | 其他函式庫要的介面的 UNO 版本：Bus（`UnoST7789`、`UnoI2C`）、Link（`UnoSerial`）、Wire（`UnoOneWire`）、Pin、Pwm、InterruptPin、AnalogPin（`UnoPin`、`UnoPwmPin`、`UnoInterruptPin`、`UnoAnalogPin`）、Tone（`UnoTone`）、Carrier（`UnoIrCarrier`）、SampleOut（`UnoPcmOut`）；接錯腳在編譯時就擋下 |
+| Arduino 的 `millis()`、`micros()`（Arduino UNO，ATmega328P） | 其他函式庫要的介面的 UNO 版本：Bus（`UnoST7789`、`UnoI2C`）、Link（`UnoSerial`）、Wire（`UnoOneWire`）、Pin、Pwm、InterruptPin、AnalogPin（`UnoInputPin`、`UnoPwmPin`、`UnoInterruptPin`、`UnoAnalogPin`）、Tone（`UnoTone`）、Carrier（`UnoIrCarrier`）、SampleOut（`UnoPcmOut`）、背景執行（`UnoBackground`）；接錯腳在編譯時就擋下 |
 
 給要寫新套件、換主板或換零件的人；用法、接線、注意事項見 [README.md](README.md)。
 
@@ -22,7 +22,7 @@ lib/Uno/
 ├── Uno.h               底層工具（腳位、SPI、UART、PWM、Flash、時間、編譯期檢查）+ UnoBoard：每個介面的基底
 ├── Uno_pin.h           腳位家族：UnoBasicPin → UnoInputPin（= UnoPin）、UnoOutputPin、UnoPwmPin
 ├── Uno_interrupt_pin.h UnoInterruptPin<PIN, INTERNAL_PULLUP>     InterruptPin：電位改變就呼叫函式（腳位改變中斷）
-├── Uno_analog_pin.h    UnoAnalogPin<PIN, REFERENCE, MV>          AnalogPin：ADC 0 ～ 1023、mV；UnoChip：實際的 5V、晶片溫度
+├── Uno_analog_pin.h    UnoAnalogPin<PIN, REFERENCE, MILLIVOLTS> AnalogPin：ADC 0 ～ 1023、mV；UnoChip：實際的 5V、晶片溫度
 ├── Uno_ST7789.h        UnoST7789<DC, RES, CS, BLK, MODE>         Bus：ST7789 螢幕（硬體 SPI）
 ├── Uno_I2C.h           UnoI2C<SCL, SDA, INTERNAL_PULLUP, KHZ>    Bus：I2C 裝置（軟體，任何腳）
 ├── Uno_serial.h        UnoSerial<BAUD>                           Link：USB 串口
@@ -46,7 +46,7 @@ lib/Uno/
 | `readFlash8(p)`、`readFlash16(p)` | 讀 Flash（PROGMEM）裡的資料：字型、圖片、影片、聲音 |
 | `stopInterrupts()`、`restoreInterrupts(saved)` | 關中斷、恢復：一次讀完或改完中斷也會用的資料 |
 
-例如 `Uno::UnoPin<2>::nowMs()`、`Uno::UnoTone<9>::readFlash16(p)` 都可以。
+例如 `Uno::UnoInputPin<2>::nowMs()`、`Uno::UnoTone<9>::readFlash16(p)` 都可以。
 
 ### UnoST7789：ST7789 螢幕的 Bus
 
@@ -66,7 +66,7 @@ using Bus = Uno::UnoST7789<8, 10, Uno::NONE, 9>;    // SPI mode 3（預設）
 |---|---|
 | `init(blk)`、`setBacklight(blk)` | 設定腳位和 SPI；設定背光 0 ～ 255 |
 | `cmdMode`、`dataMode`、`select`、`deselect`、`rstHigh`、`rstLow` | 切換 DC、CS、RES |
-| `write8`、`write16` | 送出後馬上返回，CPU 趁傳送時準備下一個 byte；切換 DC、CS 前會先等送完 |
+| `write8`、`write16` | 送出後馬上回來，CPU 趁傳送時準備下一個 byte；切換 DC、CS 前會先等送完 |
 | `readMode`、`writeMode`、`readDummy`、`read8` | 空函式（模組只能寫） |
 | `delayMs`、`nowMs`、`readFlash8/16`、`FlashString` | 給上層計時、讀 Flash |
 
@@ -163,7 +163,7 @@ using BuzzerPin = Uno::UnoOutputPin<8>;         // 有源蜂鳴器接 D8
 | `UnoOutputPin::toggle()` | HIGH ↔ LOW |
 | `UnoOutputPin::isHigh()` | 現在輸出的電位 |
 
-`UnoPin` 是 `UnoInputPin` 的舊名，兩個一樣。
+`UnoPin` 是 `UnoInputPin` 的舊名，兩個一樣；舊程式照樣能編譯，文件和程式都寫 `UnoInputPin`。
 
 ### UnoPwmPin：一隻 PWM 腳的 Pwm
 
@@ -380,7 +380,7 @@ UnoBoard                          時間、等待、Flash、關中斷（Uno.h）
 |---|---|
 | 腳位功能表 | `PIN_FUNCTIONS[20]`，以及 `exists`、`has`、`optional`、`same`、`mask` |
 | 數位腳 | `pinOutput<P>()`、`pinInput<P>(pullUp)`、`pinHigh<P>()`、`pinLow<P>()`、`pinRead<P>()`；`P` 是 `NONE` 時什麼都不做（讀到 false） |
-| SPI / UART | `spiSet(mode)`：SPI 主模式，8 MHz；`uartSet(ubrr)`、`uartUbrr(baud)`：UART，8N1，倍速模式 |
+| SPI / UART | `spiSet(mode)`：SPI 主模式，8 MHz；`uartSet(ubrr)`、`uartUbrr(baud)`：UART，8N1，倍速模式；`uartRealBaud(baud)`、`uartErrorPermille(baud)`：實際的鮑率、誤差（‰，編譯時檢查用） |
 | PWM | `pwmSet<P>(duty)`：Timer1 / Timer2 用 fast PWM；Timer0（D5、D6）只開關輸出，不動設定（`millis` 要用） |
 | Flash / 時間 | `readFlash8/16`、`delayMs`（忙等，不靠 Timer0）、`nowMs`（`millis`） |
 
@@ -390,12 +390,18 @@ UnoBoard                          時間、等待、Flash、關中斷（Uno.h）
 |---|---|---|
 | 腳位（template） | 0 ～ 19，或 `Uno::NONE`（只有選填的腳） | 編譯錯誤；D0 / D1 編譯警告 |
 | `UnoPwmPin` 的腳位 | 3、5、6、9、10、11 | 編譯錯誤 |
+| `UnoAnalogPin` 的腳位 | 14 ～ 19（A0 ～ A5） | 編譯錯誤 |
+| `UnoPcmOut` 的腳位 | 9、10 | 編譯錯誤 |
+| `UnoIrCarrier` 的腳位 | 3、11 | 編譯錯誤 |
 | `MODE` | 0 ～ 3 | 編譯錯誤 |
 | `BAUD` | 2000 ～ 2000000，誤差 ≤ 5% | 編譯錯誤；誤差 > 2% 編譯警告 |
 | `UnoI2C` 的 `KHZ` | 1 ～ 400 | 編譯錯誤 |
 | `init(blk)`、`setBacklight(blk)` | 0 ～ 255；BLK 不是 PWM 腳時只有 0 = 關、其他 = 開 | — |
 | `read8(byte, timeoutMs)` | 0 ～ 65535 ms | — |
 | `UnoTone::start(hz)` | 16 ～ 20000，0 = 停止 | 夾到範圍內 |
+| `UnoPcmOut::start(rate, next)` | 1954 ～ 32000 Hz | 夾到範圍內 |
+| `readAnalogAverage(count)` | 1 ～ 64 | 夾到範圍內 |
+| `UnoBackground::add` | 最多 6 個函式 | 回傳 false |
 | `readFlash8/16(p)` | 必須指向 `PROGMEM` 的資料 | 不檢查：讀到錯的資料 |
 | `delayMs(ms)` | 0 ～ 65535 | — |
 

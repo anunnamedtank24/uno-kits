@@ -8,7 +8,7 @@
 //
 // the animation is black / white (the OLED has no colors), made by lib/video/source/convert.py:
 //   python source/convert.py assets/orbit.gif output --target flash --fit 64x64 --mono --keyframe 8
-// video::FlashPlayer draws a frame through setWindow / writeData16 (like on the ST7789);
+// video::FlashPlayer draws a frame through setWindow / writePixel (like on the ST7789);
 // on the OLED those fill its RAM copy, then display() sends only the columns that changed
 
 // ---------- settings ----------

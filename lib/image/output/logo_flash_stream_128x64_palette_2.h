@@ -7,7 +7,7 @@
 // source: assets/logo.png sha256 074ab34846ed4e06b1f5edafdb81e2d8a1f48c20f03c0117600cd4d5b36710f5
 // settings:
 //   target      flash: pixels in flash (output/*.h), drawn by image::FlashImage
-//   target      stream: pixels stay on the computer (output/stream/*.h), stream.py sends them to image::StreamImage; the board only has the size and the path (output/*.h); 256 colors would need 512 B RAM on the board
+//   target      stream: pixels stay on the computer (in output/*.h, after #if 0), stream.py sends them to image::StreamImage; the board only has the size and the path (output/*.h); palette 256 works (the board keeps it in RAM taken at run time, 2 bytes a color), but warns
 //   picture     256 x 128 px, png
 //   crop        none
 //   screen      128 x 64 px = stored 128 x 64 x scale 1 x 1

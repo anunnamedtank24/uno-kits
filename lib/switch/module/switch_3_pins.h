@@ -5,7 +5,7 @@
 
 namespace switches {
     // a switch module, 3 pins: GND, VCC, OUT (button, TTP223 touch, tilt, reed, Hall ... modules)
-    // the module drives OUT itself: the Pin needs no pull-up (Uno::UnoPin<PIN>)
+    // the module drives OUT itself: the Pin needs no pull-up (Uno::UnoInputPin<PIN>)
     //
     // ACTIVE_HIGH: true if OUT is HIGH while on (touch modules, most button modules), the default;
     //              false if LOW while on (some button, tilt and Hall modules): see src/week_4_SSD1306_switch_buzzer_audio/tests/2_switch.cpp

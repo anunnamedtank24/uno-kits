@@ -2,7 +2,7 @@
 
 | 需要 | 得到 |
 |---|---|
-| 一個 `Screen`：`width()`、`height()`、`fillWindow(x, y, w, h, color)`（`ST7789::M130T`、`SSD1306::OLED128x64`） | `graphics::Canvas<Screen>`：點、線、矩形、三角形、圓（空心、實心），文字和數字（`drawTexts`） |
+| 一個 `Screen`：`width()`、`height()`、`fillWindow(x, y, w, h, color)` 和它的顏色格式 `ColorFormat`（`ST7789::M130T<Bus, color::RGB565>`、`SSD1306::OLED128x64<Bus, color::BW<>>`） | `graphics::Canvas<Screen>`：點、線、矩形、三角形、圓（空心、實心），文字和數字（`drawTexts`） |
 
 「需要」是介面（duck typing），括號裡是這個專案現成的實作，換主板只要換它們。開發者看的細節（前提條件、介面需求、每個函式、參數、資源）在 [INTERFACE.md](INTERFACE.md)。
 

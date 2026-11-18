@@ -25,7 +25,7 @@ pio device monitor                      # 1 Mbaud
 
 | 腳 | 為什麼選它 |
 |---|---|
-| D4 | 只是讀高低，任何腳都可以；D4 沒有被其他週的零件用 |
+| D4 | 只是讀高低，任何腳都可以；D4 只有 week_1 的搖桿按鈕用，跟 L298N、HC-SR04、紅外線、OLED、蜂鳴器都不衝突 |
 
 # tests/1_line_tracking.cpp：循跡模組 HW-006
 

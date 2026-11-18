@@ -38,7 +38,6 @@ void setup() {
 | 其他（`RGB332`、`BW`） | 沒有 | — | 編譯錯誤 |
 
 `graphics`、`font`、`image`、`video` 都從螢幕拿顏色格式（`Screen::ColorFormat`），不用另外給。
-```
 
 完整的例子：`src/week_3_ST7789_DS18B20_graphics_color_font_image_video/tests/1_screen.cpp`。
 

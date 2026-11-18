@@ -52,6 +52,8 @@ motor.setSpeed(200);                // 步 / 秒
 motor.move(400);                    // 往前 400 步；loop 裡呼叫 motor.update()
 ```
 
+完整的例子：`src/week_7_L298N/tests/1_one_motor.cpp`（一顆）、`2_two_motors.cpp`（兩顆）、`3_voltage.cpp`（給馬達幾伏特）、`4_pwm.cpp`（PWM 是什麼）、`5_stepper.cpp`（步進）、`6_car.cpp`（兩輪車）、`7_background_remote.cpp`（遙控 + 背景執行）。
+
 跳線帽不拔（EN 一直開）：
 
 | 接法 | 用 | 能做的 |
@@ -150,7 +152,7 @@ using Board = L298N::L298NBoardJumpers<Uno::UnoPwmPin<IN1_PIN>, L298N::Ground, U
 | HIGH | LOW | LOW | - | - | **煞車**：兩端短路，馬達自己的發電把自己擋住，停得快 | `brake()` |
 | HIGH | HIGH | HIGH | + | + | 煞車（一樣） | — |
 | LOW | 任意 | 任意 | 斷開 | 斷開 | **滑行**：什麼都不接，慢慢停 | `coast()`、`drive(0)` |
-| PWM | HIGH | LOW | | | 正轉，速度 = 佔空比 | `drive(duty)` |
+| PWM | HIGH | LOW | | | 正轉，速度 = 工作週期 | `drive(duty)` |
 
 通道 B 一樣：ENB、IN3、IN4、OUT3、OUT4。
 

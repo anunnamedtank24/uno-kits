@@ -22,6 +22,8 @@ screen.drawTexts(0, 0, ScreenColor::color(255, 128, 0), "orange");   // 0 ～ 25
 image::FlashImage<Screen> pictures(screen);                          // 圖片也用 ScreenColor，不用再給一次
 ```
 
+完整的例子：`src/week_3_ST7789_DS18B20_graphics_color_font_image_video/tests/1_screen.cpp`（RGB565）、`src/week_4_SSD1306_switch_buzzer_audio/tests/1_oled.cpp`（`BW`）。
+
 - **顏色格式寫在螢幕上，一個地方就好**：graphics（圖形）、font（文字）、image（圖片）、video（動畫）都從螢幕拿，不會給錯。
 - **圖片、動畫的檔案**：`convert.py` 轉出來的顏色一律存成 RGB565（串流也是），畫的時候自動換成螢幕的格式。
 
@@ -52,8 +54,9 @@ uint8_t gray = color::RGB565::green(color::RGB565::GRAY);                // 0 �
 | 項目 | 範圍 | 超出時 |
 |---|---|---|
 | `color(r, g, b)` | 各 0 ～ 255 | —（低位被丟掉：例如 RGB565 的紅、藍留 5 bit，綠留 6 bit） |
+| `red/green/blue(c)`、`fromRGB565(c)` | 任意值 | —（多的高位被忽略） |
 | `Packed` 每個顏色的位元 | 1 ～ 8 | 編譯錯誤 |
-| `BW` 的門檻 | 0 ～ 255 | 編譯錯誤（`uint8_t`）；0 = 全部亮 |
+| `BW` 的門檻 | 0 ～ 255；0 = 全部亮 | 編譯錯誤（`uint8_t`） |
 
 ## 注意事項
 

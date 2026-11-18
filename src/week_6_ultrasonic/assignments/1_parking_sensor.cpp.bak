@@ -42,7 +42,7 @@ constexpr uint16_t PRINT_MS = 300;          // a status line this often
 
 // ---------- parts ----------
 
-using Button = switches::Switch3Pins<Uno::UnoPin<SWITCH_PIN>, SWITCH_ACTIVE_HIGH, DEBOUNCE_MS>;
+using Button = switches::Switch3Pins<Uno::UnoInputPin<SWITCH_PIN>, SWITCH_ACTIVE_HIGH, DEBOUNCE_MS>;
 using Ranger = ultrasonic::HCSR04<Uno::UnoOutputPin<TRIG_PIN>, Uno::UnoInterruptPin<ECHO_PIN>>;
 using Speaker = buzzer::PassiveBuzzer2Pins<Uno::UnoTone<BUZZER_PIN>>;
 using Link = Uno::UnoSerial<BAUD>;

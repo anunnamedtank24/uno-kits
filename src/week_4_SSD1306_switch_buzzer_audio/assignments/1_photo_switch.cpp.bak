@@ -31,7 +31,7 @@ constexpr uint8_t BW_THRESHOLD = 128;       // a picture's color lights a dot fr
 using Bus = Uno::UnoI2C<SCL_PIN, SDA_PIN, I2C_INTERNAL_PULLUP, I2C_KHZ>;
 using ScreenColor = color::BW<BW_THRESHOLD>;       // the OLED: dots on / off
 using Screen = SSD1306::OLED128x64<Bus, ScreenColor>;
-using Button = switches::Switch3Pins<Uno::UnoPin<SWITCH_PIN>, SWITCH_ACTIVE_HIGH, DEBOUNCE_MS>;
+using Button = switches::Switch3Pins<Uno::UnoInputPin<SWITCH_PIN>, SWITCH_ACTIVE_HIGH, DEBOUNCE_MS>;
 Screen screen;
 Button button;
 

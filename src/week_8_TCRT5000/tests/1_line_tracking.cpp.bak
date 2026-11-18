@@ -25,7 +25,7 @@ constexpr uint16_t STATUS_MS = 2000;        // a status line this often
 
 // ---------- parts ----------
 
-using Sensor = TCRT5000::Reflector<Uno::UnoPin<OUT_PIN>, ACTIVE_LOW, FILTER_MS>;   // = TCRT5000::HW006 with the defaults
+using Sensor = TCRT5000::Reflector<Uno::UnoInputPin<OUT_PIN>, ACTIVE_LOW, FILTER_MS>;   // = TCRT5000::HW006 with the defaults
 using Link = Uno::UnoSerial<BAUD>;
 
 Sensor sensor;

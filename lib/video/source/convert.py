@@ -22,7 +22,7 @@ Usage:
     python source/convert.py assets/orbit.gif output --target flash --fit 240x240 --scale 2 --max-bytes 8000
     python source/convert.py assets/orbit.gif output --target stream --fit 240x240 --palette 565
     python source/convert.py assets/orbit.gif output --target flash stream --width 120 --scale 2
-Output (struct animation::{name}, name = {file}_{target}_{w}x{h}_palette_{p} or --name):
+Output (struct animation::{name}, name = {file}_{target}_{w}x{h}_palette_{p}[_mono] or --name):
     --target flash / flash stream: output/{name}.h with the frames (FlashPlayer plays it, StreamPlayer can open it)
     --target stream:               output/{name}.h: size + path for the board, the frames after it in #if 0 (stream.py reads them)
                             + output/{name}.h without frames: size, colors, duration, path of the frames

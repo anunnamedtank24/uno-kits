@@ -67,9 +67,9 @@ lib/L298N/
 | `speed()`、`targetSpeed()` | 現在的速度、目標速度 |
 | `isBraking()` | 煞車中（直到再設速度） |
 | `setRampMs(ms)`、`rampMs()` | 從 0 到 255 要幾 ms，預設 300；0 = 不漸變。保護齒輪和電源：突然起動或反轉時電流很大，可能讓 UNO 重開機 |
-| `setMinDuty(duty)`、`minDuty()` | 死區：速度 1 ～ 255 對應到佔空比 duty ～ 255（0 = 佔空比就是速度）。馬達在低佔空比只會嗡嗡叫不會轉，用 `src/week_7_L298N/tests/4_pwm.cpp` 找這個值 |
+| `setMinDuty(duty)`、`minDuty()` | 死區：速度 1 ～ 255 對應到工作週期 duty ～ 255（0 = 工作週期就是速度）。馬達在低工作週期只會嗡嗡叫不會轉，用 `src/week_7_L298N/tests/4_pwm.cpp` 找這個值 |
 | `setReversed(bool)`、`isReversed()` | 馬達的線接反了：交換正反轉（不用重接線） |
-| `dutyFor(speed)` | 這個速度實際給的佔空比（算上死區和反向） |
+| `dutyFor(speed)` | 這個速度實際給的工作週期（算上死區和反向） |
 
 ### Stepper：雙極步進馬達
 
@@ -85,8 +85,8 @@ lib/L298N/
 | `update()` | 每次 loop 都要呼叫；剛走一步時回傳 true |
 | `isMoving()` | 還有步要走（或 `run` 中），以及最後一步之後的一個間隔（讓轉子到位） |
 | `position()`、`setPosition(p)`、`target()` | 現在的步數（往前 +）、把現在的位置叫做 p、目標 |
-| `setRunDuty(duty)` | 走的時候線圈的佔空比，預設 255。用來降低電流（見下面） |
-| `setHoldDuty(duty)` | 停的時候線圈的佔空比，預設 0 = 不通電（不熱，但軸可以被轉動）；> 0 可以出力固定位置，但會熱 |
+| `setRunDuty(duty)` | 走的時候線圈的工作週期，預設 255。用來降低電流（見 [README 的步進馬達要注意](README.md#步進馬達要注意)） |
+| `setHoldDuty(duty)` | 停的時候線圈的工作週期，預設 0 = 不通電（不熱，但軸可以被轉動）；> 0 可以出力固定位置，但會熱 |
 | `release()` | 兩個線圈馬上斷電 |
 
 | 模式 | 線圈的順序（A、B） | 1.8° 的馬達一圈 |

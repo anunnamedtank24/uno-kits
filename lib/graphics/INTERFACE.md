@@ -2,7 +2,7 @@
 
 | 需要 | 得到 |
 |---|---|
-| 一個 `Screen`：`width()`、`height()`、`fillWindow(x, y, w, h, color)`（`ST7789::M130T`、`SSD1306::OLED128x64`） | `graphics::Canvas<Screen>`：點、線、矩形、三角形、圓（空心、實心），文字和數字（`drawTexts`） |
+| 一個 `Screen`：`width()`、`height()`、`fillWindow(x, y, w, h, color)` 和它的顏色格式 `ColorFormat`（`ST7789::M130T<Bus, color::RGB565>`、`SSD1306::OLED128x64<Bus, color::BW<>>`） | `graphics::Canvas<Screen>`：點、線、矩形、三角形、圓（空心、實心），文字和數字（`drawTexts`） |
 
 給要寫新套件、換主板或換零件的人；用法、接線、注意事項見 [README.md](README.md)。
 
@@ -29,7 +29,7 @@ lib/graphics/
 
 | 參數 | 需要的函式 | 現成的實作 |
 |---|---|---|
-| `Screen` | `width()`、`height()`、`fillWindow(x, y, w, h, color)`（會裁切）；文字另外要型別 `BusType`，它有 `readFlash8`、`readFlash16`、型別 `FlashString` | `ST7789::M130T`、`ST7789::Window`、`SSD1306::OLED128x64`、`SSD1306::Frame` |
+| `Screen` | 型別 `ColorFormat`（顏色的型別 `ColorFormat::Value`）；`width()`、`height()`、`fillWindow(x, y, w, h, color)`（會裁切）；文字另外要型別 `BusType`，它有 `readFlash8`、`readFlash16`、型別 `FlashString` | `ST7789::M130T`、`ST7789::Window`、`SSD1306::OLED128x64`、`SSD1306::Frame` |
 
 ## 函式
 

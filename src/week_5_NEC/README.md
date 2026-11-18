@@ -1,6 +1,6 @@
 # week_5_NEC
 
-紅外線遙控器（[lib/NEC](../../lib/NEC/README.md)）的測試，以及三個用遙控器操作的作業：紅綠燈模組和一顆 LED（[lib/LED](../../lib/LED/README.md)）、OLED 上的方塊、五線譜和蜂鳴器。
+紅外線遙控器（[lib/NEC](../../lib/NEC/README.md)）的測試，以及四個用遙控器操作的作業：紅綠燈模組和一顆 LED（[lib/LED](../../lib/LED/README.md)）、OLED 上的方塊、五線譜和蜂鳴器、鋼琴。
 
 全部的檔案現在都是 `.bak`，要跑哪個就留下哪個：
 
@@ -12,8 +12,8 @@ pio run -t upload
 | 檔案 | 內容 | 需要的硬體 |
 |---|---|---|
 | `tests/1_receiver.cpp` | 把遙控器送的碼印到串口，找出你的遙控器是哪一種 | 紅外線接收器 + 遙控器 |
-| `tests/3_transmitter.cpp` | 紅外線**發射**：在串口按鍵，UNO 當 17 鍵遙控器送出；接收器同時收回來檢查 | 紅外線 LED（D3）+ 接收器（D2） |
 | `tests/2_sound_formats.cpp` | 每種聲音格式（音符、節奏、取樣）從 Flash 和電腦各播一次，實測結果印在 `stream.py` | 無源蜂鳴器（D9） |
+| `tests/3_transmitter.cpp` | 紅外線**發射**：在串口按鍵，UNO 當 17 鍵遙控器送出；接收器同時收回來檢查 | 紅外線 LED（D3）+ 接收器（D2） |
 | `assignments/1_rgb_remote.cpp` | 作業一：數字鍵調紅、綠、藍（紅綠燈模組的紅和綠 + 一顆藍色 LED） | 接收器 + 紅綠燈模組 + LED |
 | `assignments/2_moving_square.cpp` | 作業二：方向鍵讓 OLED 上的小正方形移動 1 像素 | 接收器 + OLED |
 | `assignments/3_staff.cpp` | 作業三：在五線譜上寫二分音符，按 OK 播放 | 接收器 + OLED + 無源蜂鳴器 |
@@ -23,7 +23,7 @@ pio run -t upload
 
 | 零件 | 腳 | UNO | 哪些程式 |
 |---|---|---|---|
-| 紅外線接收器（HX1838 / VS1838B / KY-022） | OUT（S） | **D2** | 全部 |
+| 紅外線接收器（HX1838 / VS1838B / KY-022） | OUT（S） | **D2** | `tests/2_sound_formats` 以外全部 |
 | | GND（-） | GND | |
 | | VCC（+） | 5V | |
 | 紅綠燈模組（R、Y、G、GND） | R | **D3**（模組上有電阻，直接接） | `assignments/1_rgb_remote` |
@@ -35,11 +35,13 @@ pio run -t upload
 | OLED（128×64 I2C） | SCL | **D13** | `assignments/2_moving_square`、`assignments/3_staff` |
 | | SDA | **D11** | |
 | | VCC、GND | 5V、GND | |
-| 無源蜂鳴器 | + | 100 Ω → **D9** | `assignments/3_staff` |
+| 無源蜂鳴器 | + | 100 Ω → **D9** | `tests/2_sound_formats`、`assignments/3_staff`、`assignments/4_piano` |
 | | - | GND | |
-| USB | D0、D1 | 串口 | `tests/1_receiver`、`assignments/1_rgb_remote`（印出狀態） |
+| 紅外線 LED（940 nm） | 長腳（+） | 220 Ω → **D3** | `tests/3_transmitter`（跟紅綠燈的 R 同一隻腳，不要同時接） |
+| | 短腳（-） | GND | |
+| USB | D0、D1 | 串口 | `tests/1_receiver`、`tests/2_sound_formats`（`stream.py`）、`tests/3_transmitter`、`assignments/1_rgb_remote`、`assignments/4_piano`（印出狀態） |
 
-用到的腳：**D2、D3、D5、D6、D9、D11、D13**（加上串口的 D0、D1）。全部接著也不會衝突：
+用到的腳：**D2、D3、D5、D6、D9、D11、D13**（加上串口的 D0、D1）。除了 D3（紅綠燈的 R 或紅外線 LED 二選一），全部接著也不會衝突：
 
 | 腳 | 為什麼選它 |
 |---|---|

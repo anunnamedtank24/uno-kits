@@ -27,6 +27,7 @@ constexpr uint8_t DC_PIN = 8;               // DC
 constexpr uint8_t RES_PIN = 10;             // RES; Uno::NONE: not connected (software reset)
 constexpr uint8_t CS_PIN = Uno::NONE;       // CS: the M130T has none
 constexpr uint8_t BLK_PIN = 9;              // BLK (backlight); Uno::NONE: tied to VCC
+using ScreenColor = color::RGB565;          // the screen's colors (lib/color): RGB565 16 bit (fastest), RGB888 / RGB666 18 bit, RGB444 12 bit
 // wiring: DS18B20 VCC -> 5V, GND -> GND
 constexpr uint8_t DQ_PIN = 2;               // DQ: needs a 4.7 kΩ pull-up to VCC (most modules have one)
 constexpr bool DQ_INTERNAL_PULLUP = true;   // the UNO's own ~35 kΩ pull-up as well (enough for short wires only)
@@ -50,10 +51,9 @@ constexpr int16_t FPS_Y = 165;
 // ---------- parts ----------
 
 using Bus = Uno::UnoST7789<DC_PIN, RES_PIN, CS_PIN, BLK_PIN>;
-using ScreenColor = color::RGB565;                 // M130T: 16 bit (RGB888 / RGB666: 18 bit, RGB444: 12 bit)
 using Screen = graphics::Canvas<ST7789::M130T<Bus, ScreenColor>>;
 using Sensor = DS18B20::KY001<Uno::UnoOneWire<DQ_PIN, DQ_INTERNAL_PULLUP>>;   // bare part: DS18B20::TO92, probe: DS18B20::WaterproofProbe
-using RGB565 = color::RGB565;
+using Color = ScreenColor::Value;           // one color of the screen
 using Font = font::menlo_width_12_first_32_last_126_default_63; // 12 x 35, ASCII 32 ~ 126
 
 Screen screen;
@@ -102,8 +102,8 @@ constexpr Rgb LABEL_COLOR = grayColor(LABEL_LUMA);
 constexpr uint8_t FULL_STEPS = 5;   // steps for the whole end color
 constexpr uint8_t SHARE_ALL = 16;   // shares: 1, 2, 4, 8, 16 of 16
 
-uint16_t toRgb565(const Rgb &color) {
-    return RGB565::color(color.r, color.g, color.b);
+Color toColor(const Rgb &color) {
+    return ScreenColor::color(color.r, color.g, color.b);
 }
 
 uint8_t mix(uint8_t from, uint8_t to, uint8_t share) {
@@ -111,16 +111,16 @@ uint8_t mix(uint8_t from, uint8_t to, uint8_t share) {
 }
 
 // change and unit in the same thousandths
-uint16_t changeColor(int32_t changeMilli, int32_t unitMilli) {
+Color changeColor(int32_t changeMilli, int32_t unitMilli) {
     int32_t steps = (changeMilli < 0 ? -changeMilli : changeMilli) / unitMilli;
     if (steps == 0) {
-        return toRgb565(NEUTRAL_COLOR);
+        return toColor(NEUTRAL_COLOR);
     }
     // doubling: 1 step = 1/16, then 1/8, 1/4, 1/2, all
     uint8_t share = steps >= FULL_STEPS ? SHARE_ALL : (uint8_t)(1 << (steps - 1));
     const Rgb &end = changeMilli > 0 ? RISING_COLOR : FALLING_COLOR;
     Rgb mixed = { mix(NEUTRAL_COLOR.r, end.r, share), mix(NEUTRAL_COLOR.g, end.g, share), mix(NEUTRAL_COLOR.b, end.b, share) };
-    return toRgb565(mixed);
+    return toColor(mixed);
 }
 
 // ---------- values ----------
@@ -139,9 +139,9 @@ Value rawValue = { 0, RAW_Y, "" };
 Value fpsValue = { 0, FPS_Y, "" };
 
 // returns x after the text
-int16_t showValue(Value &value, const char *text, uint16_t color) {
+int16_t showValue(Value &value, const char *text, Color color) {
     if (strcmp(value.text, text) != 0) {
-        screen.drawTexts(value.x, value.y, RGB565::BLACK, value.text);
+        screen.drawTexts(value.x, value.y, ScreenColor::BLACK, value.text);
         strncpy(value.text, text, sizeof(value.text) - 1);
         value.text[sizeof(value.text) - 1] = '\0';
     }
@@ -154,17 +154,17 @@ int16_t unitX = -1;
 // the 5 chars \ c i r c, then " C"
 const char UNIT[] = " \\circ C";
 
-void drawUnit(int16_t x, uint16_t color) {
+void drawUnit(int16_t x, Color color) {
     screen.drawTexts(x, tempValue.y, color, UNIT);
 }
 
 void showUnit(int16_t x) {
     if (x != unitX && unitX >= 0) {
-        drawUnit(unitX, RGB565::BLACK);
+        drawUnit(unitX, ScreenColor::BLACK);
     }
     unitX = x;
     if (unitX >= 0) {
-        drawUnit(unitX, toRgb565(LABEL_COLOR));
+        drawUnit(unitX, toColor(LABEL_COLOR));
     }
 }
 
@@ -242,10 +242,10 @@ void countFrame() {
 
 void setup() {
     screen.init();
-    screen.drawFilledScreen(RGB565::BLACK);
+    screen.drawFilledScreen(ScreenColor::BLACK);
     screen.setFont<Font>();
     // drawTexts() returns x after the text: the values start after the widest label (its space included)
-    uint16_t labelColor = toRgb565(LABEL_COLOR);
+    Color labelColor = toColor(LABEL_COLOR);
     int16_t valueX = screen.drawTexts(LEFT, tempValue.y, labelColor, "Temp: ");
     int16_t end = screen.drawTexts(LEFT, rawValue.y, labelColor, "Raw: ");
     valueX = end > valueX ? end : valueX;
@@ -263,7 +263,7 @@ void loop() {
     // one frame: every value drawn again
     char text[16];
     // raw: 1/16 °C = 62.5 thousandths of °C
-    uint16_t sensorColor = changeColor((int32_t)rawChange * 125 / 2, TEMP_UNIT_MILLI);
+    Color sensorColor = changeColor((int32_t)rawChange * 125 / 2, TEMP_UNIT_MILLI);
     if (hasRaw) {
         // 23.5: tenths of °C, rounded half away from zero
         int16_t centi = Sensor::toCentiCelsius(raw);
@@ -281,8 +281,8 @@ void loop() {
         showValue(rawValue, text, sensorColor);
     } else {
         showUnit(-1);
-        showValue(tempValue, "no sensor", toRgb565(NEUTRAL_COLOR));
-        showValue(rawValue, "no sensor", toRgb565(NEUTRAL_COLOR));
+        showValue(tempValue, "no sensor", toColor(NEUTRAL_COLOR));
+        showValue(rawValue, "no sensor", toColor(NEUTRAL_COLOR));
     }
 
     if (hasFps) {

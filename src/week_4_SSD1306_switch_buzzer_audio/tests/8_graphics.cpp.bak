@@ -35,8 +35,8 @@ using BigPrintable = font::menlo_height_23_first_32_last_126_default_63;    // 8
 using BigDigits = font::menlo_height_46_first_48_last_57_default_63;        // 16 x 46, '0' ~ '9' + '?'
 Screen screen;
 
-constexpr uint16_t ON = 1;
-constexpr uint16_t OFF = 0;
+constexpr ScreenColor::Value ON = ScreenColor::ON;     // a lit pixel
+constexpr ScreenColor::Value OFF = ScreenColor::OFF;   // a dark pixel
 constexpr int16_t LINE = 13;                // a text line: 12 px + 1 px gap
 
 // ---------- shapes ----------

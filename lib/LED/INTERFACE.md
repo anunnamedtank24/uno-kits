@@ -50,6 +50,20 @@ lib/LED/
 | `toDuty(brightness)` | 回傳亮度對應的工作週期：brightness² / 255 |
 | `levelToBrightness(level, levels)` | 回傳第 level 格（共 levels 格）的亮度，0 ～ 255 |
 
+`Effect<Led>`（`tool/effect.h`）：一個顏色（有 `set(brightness)`、static `nowMs()` 的，例如 `SingleLED`、`LED2Pins`），不會等：
+
+| 函式 | 說明 |
+|---|---|
+| `Effect(led)` | 建構：要控制的那一個顏色 |
+| `steady(brightness)` | 一直亮，不變 |
+| `blink(onMs, offMs, count = 0, brightness = 255)` | 亮 onMs、暗 offMs，count 次後關掉（0 = 一直閃） |
+| `breathe(periodMs, low = 0, high = 255)` | 在 low 和 high 之間平順地亮暗，一次呼吸 periodMs |
+| `fadeTo(brightness, ms)` | 從現在的亮度在 ms 內變到 brightness，之後停著 |
+| `heartbeat(periodMs = 1200, brightness = 255)` | 快跳兩下、停一下，一輪 periodMs |
+| `update()` | 越常呼叫越好：算現在的亮度 |
+| `kind()` | 回傳現在的效果：`STEADY`、`BLINK`、`BREATHE`、`FADE`、`HEARTBEAT` |
+| `isRunning()` | 有次數的 `blink`、`fadeTo` 結束後回傳 false |
+
 ## 參數
 
 | 參數 | 預設 | 說明 |

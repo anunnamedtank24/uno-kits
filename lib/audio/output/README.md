@@ -59,7 +59,7 @@ namespace melody {
 }
 ```
 
-**檔案開頭**：`// format: 2`（格式版本）、`// source: … sha256 …`（原始音檔和它的 hash）、`// settings:`（所有設定和結果：target、sound、quality、編碼、剪的範圍、偵測參數、取樣率、訊號 / 誤差、資料量）。
+**檔案開頭**：`// options: …`（轉換時的參數，`tools/assets.py` 靠它和 `source:` 找已經轉過的）、`// format: 2`（格式版本）、`// source: … sha256 …`（原始音檔和它的 hash）、`// settings:`（所有設定和結果：target、sound、quality、編碼、剪的範圍、偵測參數、取樣率、訊號 / 誤差、資料量）。
 
 ## 格式（format 2）
 

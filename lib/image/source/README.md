@@ -57,7 +57,7 @@ cd ../.. && python lib/stream/source/stream.py     # 串流：圖片、動畫、
 | `--fit WxH` | 維持比例，塞進 W×H 的框裡，盡量大 |
 | `--fill WxH` | 維持比例，蓋滿 W×H，超出的部分從中間裁掉 |
 | `--scale N` / `--scale NXxNY` | 板子把每個點重複畫 NX×NY 次（1 ～ 8）。資料只存「螢幕大小 ÷ scale」，也就是降低解析度換資料量 |
-| `--resample` | 縮放方法：`nearest`（像素風）、`bilinear`、`bicubic`、`lanczos`（預設） |
+| `--resample` | 縮放的算法：`nearest`（像素風）、`bilinear`、`bicubic`、`lanczos`（預設） |
 
 - 螢幕上超過 240×240 只會警告：圖片會裁切，但多出來的資料是浪費的。
 - 尺寸不是 scale 的整數倍時會四捨五入，並印警告說實際大小。

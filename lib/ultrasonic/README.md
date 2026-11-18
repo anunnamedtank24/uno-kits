@@ -123,4 +123,5 @@ Echo  ───────────┐▔▔▔▔▔▔▔▔▔▔▔▔�
 | `MIN_MM < MAX_MM`、`MAX_MM` ≤ 10000 | | 編譯錯誤 |
 | `setIntervalMs` | 60 ～ 65535 ms | 小於 60 的當成 60 |
 | `setTemperature` | -400 ～ 800（-40 ～ 80 °C） | 夾到範圍內 |
+| `Median` 的 `N` | 3 ～ 15 的奇數 | 編譯錯誤 |
 | 同一組（D0 ～ D7、D8 ～ D13、A0 ～ A5）有別的 `UnoInterruptPin` | | 後 `init` 的蓋掉前一個 |

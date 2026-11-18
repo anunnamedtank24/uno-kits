@@ -59,6 +59,7 @@ namespace picture {
 
 - **`--target stream`** 也只有一個檔案 `output/x.h`：前面是板子編譯的上半部（大小、`getPath()`），後面的像素放在 `#if 0` 裡（太大，燒不進 Flash，所以永遠不編譯），`stream.py` 從同一個檔案讀。檔名的 `stream` 和 struct 的 `target` 都寫著它是串流用的。
 - **檔案開頭**：
+  - `// options: …`：轉換時的參數（`tools/assets.py` 靠它和 `source:` 找已經轉過的）。
   - `// format: 1`：格式版本。
   - `// source: … sha256 …`：原始圖片和它的 hash。
   - `// settings:`：所有設定，包括原本的指令、裁切範圍、實際尺寸、顏色、編碼、資料量、估計的時間。

@@ -27,7 +27,7 @@ lib/ST7789/
 ├── module/
 │   └── M130T.h       M130T<Bus, ColorFormat>：1.3 吋 240×240、沒有 CS 的模組（尺寸 + init）
 └── tool/
-    └── init.h        initDefault()：適用任何面板的最精簡初始化
+    └── init.h        initDefault(screen, blk)：適用任何面板的最精簡初始化（顏色模式跟著 ColorFormat）
 ```
 
 繼承順序：`Datasheet` → `Window` → `M130T`，再往上是 `graphics::Shapes`、`graphics::Text`。
@@ -38,7 +38,7 @@ lib/ST7789/
 |---|---|---|
 | `Bus` | `init(blk)`、`setBacklight(blk)`、`delayMs`、`nowMs`、`readFlash8/16`、型別 `FlashString`；`cmdMode`、`dataMode`（DC）、`select`、`deselect`（CS）；`HAS_RES`、`rstHigh`、`rstLow`（RES）；`write8`、`write16`；`readMode`、`writeMode`、`readDummy`、`read8`（只能寫的模組留空） | `Uno::UnoST7789` |
 
-- `write8`、`write16` 可以在 byte 送完之前就返回，但 DC、CS 切換前必須等它送完。
+- `write8`、`write16` 可以在 byte 送完之前就回來，但 DC、CS 切換前必須等它送完。
 - 完整清單在 `basic/datasheet.h` 開頭。
 
 ## 函式

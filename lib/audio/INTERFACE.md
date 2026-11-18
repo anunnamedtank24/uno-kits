@@ -24,6 +24,7 @@
 ```
 lib/audio/
 ├── audio.h                   入口：全部（程式只 include 它）
+├── asset.h                   MELODY(路徑, 選項) 巨集：編譯前自動轉換（tools/assets.py）
 ├── note.h                    noteHz(A, 4) = 440、midiHz、Pitch、REST、beatMs：手寫旋律
 ├── format.h                  交換格式：KIND_*、編碼、TARGET_*、decodeStep、Adpcm
 ├── player.h                  Player<Sound, GAP_MS>：tone / beep / beeps / slide、Flash 的音符和節奏
@@ -104,6 +105,14 @@ lib/audio/
 
 - **一次一個聲音**：開始新的就取代舊的。音符和取樣都用 Timer1，不能同時播。
 - **節奏不會飄**：下一個音從「上一個音應該結束的時間」算起，`update()` 晚一點呼叫，也不會讓整首變慢。
+
+### format.h（寫新的播放器時用）
+
+| 函式 | 說明 |
+|---|---|
+| `stepBytes(encoding)` | 回傳音符 / 節奏的一步佔幾個 byte |
+| `decodeStep(encoding, first, second, rhythmHz, hz, ms)` | 把一步的兩個字解成 hz（0 = 安靜）和 ms；節奏的「開」用 rhythmHz |
+| `Adpcm::reset()`、`decode<readFlash16>(code)` | IMA ADPCM：每個 4 bit 的碼解成一個 8 bit 取樣（0 ～ 255），跟 `convert.py` 的解碼器一樣 |
 
 ## 參數
 

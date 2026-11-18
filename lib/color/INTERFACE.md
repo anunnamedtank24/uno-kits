@@ -2,7 +2,9 @@
 
 | 需要 | 得到 |
 |---|---|
-| （不需要） | `color::Packed<R, G, B, ORDER>`（和 `RGB565`、`BGR565`、`RGB666`、`RGB888`、`BGR888`、`GBR888`、`RGB444`、`RGB332`）、`color::BW<THRESHOLD>`：都是一個 **ColorFormat**；`color::convert<To, From>()` |
+| （不需要） | 顏色格式：`color::RGB565`、`BGR565`、`RGB666`、`RGB888`、`BGR888`、`GBR888`、`RGB444`、`RGB332`、`BW<門檻>`，以及任何位元數、任何順序的 `color::Packed<R, G, B, 順序>` |
+| （不需要） | 每個格式都有一樣的東西：常用顏色（`RED`、`BLACK`…）、`color(r, g, b)`、`red(c)` / `green(c)` / `blue(c)`、互相換算 |
+| （不需要） | 每個格式都能當螢幕的 `ColorFormat`：`ST7789::M130T<Bus, color::RGB565>`，graphics、font、image、video 就都用它畫 |
 
 給要寫新套件、新螢幕、新顏色格式的人。用法見 [README.md](README.md)。`namespace color`。
 
@@ -21,9 +23,7 @@
 lib/color/
 ├── color.h        入口
 ├── packed.h       Packed<R, G, B, ORDER>、Order、ValueOf、常用格式的 using、convert
-├── BW.h           BW<THRESHOLD>：1 bit 黑白
-├── README.md      使用者看的
-└── INTERFACE.md   這份
+└── BW.h           BW<THRESHOLD>：1 bit 黑白
 ```
 
 ## 提供的介面：ColorFormat
@@ -70,10 +70,10 @@ lib/color/
 
 | 項目 | 範圍 | 超出時 |
 |---|---|---|
-| `Packed` 的 R、G、B | 1 ～ 8 | 編譯錯誤 |
-| `color(r, g, b)` | 各 0 ～ 255 | —（低位被丟掉） |
+| `color(r, g, b)` | 各 0 ～ 255 | —（低位被丟掉：例如 RGB565 的紅、藍留 5 bit，綠留 6 bit） |
 | `red/green/blue(c)`、`fromRGB565(c)` | 任意值 | —（多的高位被忽略） |
-| `BW` 的 THRESHOLD | 0 ～ 255 | 編譯錯誤 |
+| `Packed` 每個顏色的位元 | 1 ～ 8 | 編譯錯誤 |
+| `BW` 的門檻 | 0 ～ 255；0 = 全部亮 | 編譯錯誤（`uint8_t`） |
 
 ## 資源
 

@@ -6,7 +6,7 @@
 // format: 3
 // source: assets/orbit.gif sha256 edfbe76ce84a80124bcf308ed8d307928d17db467616e88e405377a86f3c32e5
 // settings:
-//   target      stream: frames stay on the computer (output/stream/*.h), stream.py sends them to video::StreamPlayer; the board only has the size and the path (output/*.h); 256 colors would need 512 B RAM on the board
+//   target      stream: frames stay on the computer (in output/*.h, after #if 0), stream.py sends them to video::StreamPlayer; the board only has the size and the path (output/*.h); palette 256 works (the board keeps it in RAM taken at run time, 2 bytes a color), but warns
 //   video       gif, 120 x 120 px: 24 frames, 1440 ms, 16.7 fps
 //   crop        none
 //   screen      120 x 120 px = stored 120 x 120 x scale 1 x 1

@@ -29,6 +29,7 @@ constexpr uint8_t DC_PIN = 8;               // DC
 constexpr uint8_t RES_PIN = 10;             // RES; Uno::NONE: not connected (software reset)
 constexpr uint8_t CS_PIN = Uno::NONE;       // CS: the M130T has none
 constexpr uint8_t BLK_PIN = 9;              // BLK (backlight); Uno::NONE: tied to VCC
+using ScreenColor = color::RGB565;          // the screen's colors (lib/color): RGB565 16 bit (fastest), RGB888 / RGB666 18 bit, RGB444 12 bit
 
 constexpr uint16_t SPEED = 24;          // px per second
 constexpr int16_t BORDER = 3;           // ring width, px
@@ -89,9 +90,8 @@ constexpr uint8_t PALETTE_SIZE = sizeof(PALETTE) / sizeof(PALETTE[0]);
 // ---------- parts ----------
 
 using Bus = Uno::UnoST7789<DC_PIN, RES_PIN, CS_PIN, BLK_PIN>;
-using ScreenColor = color::RGB565;                 // M130T: 16 bit (RGB888 / RGB666: 18 bit, RGB444: 12 bit)
 using Screen = graphics::Canvas<ST7789::M130T<Bus, ScreenColor>>;
-using RGB565 = color::RGB565;
+using Color = ScreenColor::Value;           // one color of the screen
 using Font = font::menlo_height_23_first_32_last_126_default_63;
 
 Screen screen;
@@ -148,9 +148,9 @@ int32_t ringCost(int16_t fadeRadius) {
     return 100 + 12L * fadeRadius;
 }
 
-uint16_t levelColor(uint8_t index, uint8_t level) {
+Color levelColor(uint8_t index, uint8_t level) {
     const Rgb &rgb = PALETTE[index];
-    return RGB565::color((uint8_t)((uint16_t)rgb.r * level / LEVELS),
+    return ScreenColor::color((uint8_t)((uint16_t)rgb.r * level / LEVELS),
                          (uint8_t)((uint16_t)rgb.g * level / LEVELS),
                          (uint8_t)((uint16_t)rgb.b * level / LEVELS));
 }
@@ -185,7 +185,7 @@ struct Run {
     int16_t start;
     int16_t end;
     int16_t blackEnd;
-    uint16_t color;
+    Color color;
 };
 
 // the run on a line of the screen: fixed at `line` (a row or a column, by `horizontal`),
@@ -220,22 +220,22 @@ void sendRun(const Run &run, bool horizontal, int16_t line, int16_t origin, int8
     int16_t count = last - first + 1;
     int16_t blackCount = constrain(run.blackEnd - first + 1, 0, count);
     int16_t colorCount = count - blackCount;
-    uint16_t firstColor = direction > 0 ? RGB565::BLACK : run.color;
-    uint16_t secondColor = direction > 0 ? run.color : RGB565::BLACK;
+    Color firstColor = direction > 0 ? ScreenColor::BLACK : run.color;
+    Color secondColor = direction > 0 ? run.color : ScreenColor::BLACK;
     int16_t firstCount = direction > 0 ? blackCount : colorCount;
     int16_t secondCount = count - firstCount;
     while (firstCount--) {
-        screen.writeData16(firstColor);
+        screen.writePixel(firstColor);
     }
     while (secondCount--) {
-        screen.writeData16(secondColor);
+        screen.writePixel(secondColor);
     }
     screen.endWrite();
 }
 
 // the ring of outer radius oldRadius (width BORDER) moves to newRadius (>= oldRadius) in color:
 // the strip from the old inner edge to the new outer edge, black inside the new ring
-void moveRing(int16_t cx, int16_t cy, int16_t oldRadius, int16_t newRadius, uint16_t color) {
+void moveRing(int16_t cx, int16_t cy, int16_t oldRadius, int16_t newRadius, Color color) {
     int32_t outerLimit = circleLimit(newRadius);
     int32_t innerLimit = circleLimit(oldRadius - BORDER);   // not sent: inside the old ring
     int32_t blackLimit = circleLimit(newRadius - BORDER);   // sent black
@@ -267,14 +267,14 @@ void moveRing(int16_t cx, int16_t cy, int16_t oldRadius, int16_t newRadius, uint
 // ---------- caption: "No. {drops}" at the bottom left, drawn over the rings ----------
 
 constexpr int16_t CAPTION_Y = SIZE - 27;
-constexpr uint16_t CAPTION_COLOR = RGB565::color(CAPTION_GRAY[0], CAPTION_GRAY[1], CAPTION_GRAY[2]);
+constexpr Color CAPTION_COLOR = ScreenColor::color(CAPTION_GRAY[0], CAPTION_GRAY[1], CAPTION_GRAY[2]);
 
 char caption[12] = "";
 int16_t captionEnd = CAPTION_X;   // x after the caption
 bool captionDirty = false;        // a ring was drawn over it
 
 void setCaption(uint16_t number) {
-    screen.drawTexts(CAPTION_X, CAPTION_Y, RGB565::BLACK, caption);
+    screen.drawTexts(CAPTION_X, CAPTION_Y, ScreenColor::BLACK, caption);
     snprintf(caption, sizeof(caption), "No. %u", number);
     captionDirty = true;
 }
@@ -355,7 +355,7 @@ void updateRing(Ring &ring, uint32_t now) {
     } else if (radius == ring.radius) {
         return;
     }
-    moveRing(ring.cx, ring.cy, ring.radius, radius, level == 0 ? RGB565::BLACK : levelColor(ring.color, level));
+    moveRing(ring.cx, ring.cy, ring.radius, radius, level == 0 ? ScreenColor::BLACK : levelColor(ring.color, level));
     if (touchesCaption(ring.cx, ring.cy, ring.radius - BORDER, radius)) {
         captionDirty = true;
     }
@@ -366,7 +366,7 @@ void updateRing(Ring &ring, uint32_t now) {
 
 void setup() {
     screen.init();
-    screen.drawFilledScreen(RGB565::BLACK);
+    screen.drawFilledScreen(ScreenColor::BLACK);
     screen.setFont<Font>();
     randomSeed(analogRead(A0));
 }

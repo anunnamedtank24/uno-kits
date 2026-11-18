@@ -41,7 +41,7 @@ lib/ultrasonic/
 | `init()` | 設定兩隻腳和中斷；下一次 `update()` 開始第一次測量 |
 | `update()` | 時間到就送 Trig、檢查 Echo；量完一次回傳 true（不會等） |
 | `measure()` | 量一次並等它結束（最多約 40 ms，還要加上離上一次不到間隔的時間），回傳結果 |
-| `result()` | 上一次的結果（見下表） |
+| `result()` | 上一次的結果（`RESULT_OK`、`RESULT_TOO_NEAR`…，見 [README 的結果](README.md#結果)） |
 | `distanceMm()` | 上一次的距離，mm（`RESULT_OK` 時才對，其他是 0） |
 | `echoUs()` | 上一次 Echo 的 HIGH 有幾 µs（沒結束的是 0） |
 | `setIntervalMs(ms)`、`intervalMs()` | 兩次測量的間隔，預設和最小都是 60 ms |
@@ -51,6 +51,16 @@ lib/ultrasonic/
 | `count()` | `init()` 之後開始量了幾次 |
 | `onChange()` | Echo 的中斷函式；公開是為了讓測試可以包一層 |
 
+`Median<Ranger, N>`（`tool/median.h`）：
+
+| 函式 | 說明 |
+|---|---|
+| `init()` | 也 init 感測器 |
+| `update()` | 呼叫感測器的 `update()`；有新的量測（好的或不好的）時回傳 true |
+| `distanceMm()` | 回傳最近 N 次好的量測的中位數（第一次之前是 0） |
+| `goodCount()` | 回傳最近 N 次裡有幾次是 `RESULT_OK` |
+| `isValid()` | 至少一半是好的時回傳 true |
+
 ## 參數
 
 | 參數 | 預設 | 說明 |
@@ -58,6 +68,7 @@ lib/ultrasonic/
 | `Trigger` | — | `Uno::UnoOutputPin<PIN>` |
 | `Echo` | — | `Uno::UnoInterruptPin<PIN>`（不開上拉，模組自己輸出） |
 | `MIN_MM`、`MAX_MM` | HC-SR04：20、4000 | 量得到的範圍；`MAX_MM` 也決定等 Echo 多久（`MAX_MM` 的來回時間多 10 %） |
+| `N`（`Median`） | 5 | 取幾次的中位數：3 ～ 15 的奇數；越大越穩，但慢 N / 2 次量測 |
 
 ## 輸入限制
 
@@ -67,12 +78,13 @@ lib/ultrasonic/
 | `MIN_MM < MAX_MM`、`MAX_MM` ≤ 10000 | | 編譯錯誤 |
 | `setIntervalMs` | 60 ～ 65535 ms | 小於 60 的當成 60 |
 | `setTemperature` | -400 ～ 800（-40 ～ 80 °C） | 夾到範圍內 |
+| `Median` 的 `N` | 3 ～ 15 的奇數 | 編譯錯誤 |
 | 同一組（D0 ～ D7、D8 ～ D13、A0 ～ A5）有別的 `UnoInterruptPin` | | 後 `init` 的蓋掉前一個 |
 
 ## 資源
 
 | 項目 | 用量 |
 |---|---|
-| RAM | 約 30 bytes |
+| RAM | 約 30 bytes（static）；`Median<…, N>` 另外 3 × N + 5 bytes |
 | 硬體 | 兩隻腳；Echo 用腳位改變中斷（每次變化約 5 µs） |
 | 時間 | `update()` 送 Trig 時等 12 ～ 16 µs，其他時候不會等 |

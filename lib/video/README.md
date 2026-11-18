@@ -65,7 +65,7 @@ while (true) {
 
 ### 在 OLED 上播
 
-`SSD1306::Frame`（[SSD1306](../SSD1306/README.md)）也有 `setWindow`、`writeData16`、`endWrite`，所以 `FlashPlayer` 可以直接用：
+`SSD1306::Frame`（[SSD1306](../SSD1306/README.md)）也有 `setWindow`、`writePixel`、`endWrite`，所以 `FlashPlayer` 可以直接用：
 
 ```bash
 python source/convert.py assets/orbit.gif output --target flash --fit 64x64 --mono --keyframe 8
@@ -105,7 +105,7 @@ player.start<Orbit>(32, 0);
 | 型態 | `ANIMATION(...)` 就是那個 `animation::` struct，跟手動轉換的一樣用 |
 | 限制 | 兩個參數都要是字串常數（不能是變數） |
 
-完整的說明：[lib/README.md](../README.md#字型圖片影片聲音直接用檔案)；例子：`src/week_4_SSD1306_switch_buzzer_audio/tests/5_files.cpp`（四種都有）。下面「用法」是手動轉換的方式，一樣能用。
+完整的說明：[lib/README.md](../README.md#字型圖片影片聲音直接用檔案)；例子：`src/week_4_SSD1306_switch_buzzer_audio/tests/5_files.cpp`（四種都有）。上面「用法」是手動轉換的方式，一樣能用。
 
 ## 三種目標
 

@@ -18,6 +18,7 @@ constexpr uint8_t DC_PIN = 8;               // DC
 constexpr uint8_t RES_PIN = 10;             // RES; Uno::NONE: not connected (software reset)
 constexpr uint8_t CS_PIN = Uno::NONE;       // CS: the M130T has none
 constexpr uint8_t BLK_PIN = 9;              // BLK (backlight); Uno::NONE: tied to VCC
+using ScreenColor = color::RGB565;          // the screen's colors (lib/color): RGB565 16 bit (fastest), RGB888 / RGB666 18 bit, RGB444 12 bit
 constexpr uint32_t BAUD = 1000000;          // USB serial for stream.py (its --baud)
 
 constexpr uint32_t ONLY_TESTS = 0;          // 0: every test; bit i = only test i, e.g. (1UL << 14) | (1UL << 20)
@@ -32,11 +33,10 @@ constexpr uint8_t STREAM_CHUNK = 64;        // test 19: bytes per request to str
 // ---------- parts ----------
 
 using Bus = Uno::UnoST7789<DC_PIN, RES_PIN, CS_PIN, BLK_PIN>;
-using ScreenColor = color::RGB565;                 // M130T: 16 bit (RGB888 / RGB666: 18 bit, RGB444: 12 bit)
 using Screen = graphics::Canvas<ST7789::M130T<Bus, ScreenColor>>;
 using Link = Uno::UnoSerial<BAUD>;
 using StreamLink = stream::Puller<Link, STREAM_CHUNK>;   // asks stream.py for files
-using RGB565 = color::RGB565;
+using Color = ScreenColor::Value;           // one color of the screen
 using SmallPrintable = font::menlo_height_23_first_32_last_126_default_63;  // 8 x 23, ASCII 32 ~ 126
 using BigDigits = font::menlo_height_46_first_48_last_57_default_63;       // 16 x 46, '0' ~ '9' + '?'
 using Orbit = animation::orbit_flash_120x120_palette_16; // 60 x 60 drawn as 120 x 120, 8 colors, 24 frames, 60 ms
@@ -45,7 +45,7 @@ using StreamPlayer = video::StreamPlayer<Screen, StreamLink>;
 Screen screen;
 
 void clear() {
-    screen.drawFilledScreen(RGB565::BLACK);
+    screen.drawFilledScreen(ScreenColor::BLACK);
 }
 
 // ---------- tests ----------
@@ -53,13 +53,13 @@ void clear() {
 // 0. solid colors: checks init, RGB/BGR order and inversion
 //    expected: red -> green -> blue -> white -> black
 void testColors() {
-    const uint16_t colors[] = {
-        RGB565::RED, 
-        RGB565::GREEN, 
-        RGB565::BLUE, 
-        RGB565::WHITE, 
-        RGB565::BLACK, 
-        RGB565::YELLOW,
+    const Color colors[] = {
+        ScreenColor::RED, 
+        ScreenColor::GREEN, 
+        ScreenColor::BLUE, 
+        ScreenColor::WHITE, 
+        ScreenColor::BLACK, 
+        ScreenColor::YELLOW,
     };
     for (uint8_t i = 0; i < sizeof(colors) / sizeof(colors[0]); i++) {
         screen.drawFilledScreen(colors[i]);
@@ -69,27 +69,27 @@ void testColors() {
 // 1. 1-px border + corner marks: checks size and offset
 //    expected: white frame touching all 4 edges, red/green/blue/yellow corners
 void testBorder() {
-    screen.drawHollowRectSize(0, 0, screen.width(), screen.height(), RGB565::WHITE);
-    screen.drawFilledRectSize(0, 0, 10, 10, RGB565::RED);
-    screen.drawFilledRectSize(screen.width() - 10, 0, 10, 10, RGB565::GREEN);
-    screen.drawFilledRectSize(0, screen.height() - 10, 10, 10, RGB565::BLUE);
-    screen.drawFilledRectSize(screen.width() - 10, screen.height() - 10, 10, 10, RGB565::YELLOW);
+    screen.drawHollowRectSize(0, 0, screen.width(), screen.height(), ScreenColor::WHITE);
+    screen.drawFilledRectSize(0, 0, 10, 10, ScreenColor::RED);
+    screen.drawFilledRectSize(screen.width() - 10, 0, 10, 10, ScreenColor::GREEN);
+    screen.drawFilledRectSize(0, screen.height() - 10, 10, 10, ScreenColor::BLUE);
+    screen.drawFilledRectSize(screen.width() - 10, screen.height() - 10, 10, 10, ScreenColor::YELLOW);
 }
 
 // 2. ST7789::Window::fillWindow and ST7789::Window::writeWindow
 //    expected: 3 solid rects on top, 4 gradient tiles below,
 //              3 tiles touching the left, right and bottom edges
-uint16_t gradient[16 * 16];
+Color gradient[16 * 16];
 
 void testRamRect() {
-    screen.fillWindow(10, 10, 60, 40, RGB565::RED);
-    screen.fillWindow(90, 10, 60, 40, RGB565::GREEN);
-    screen.fillWindow(170, 10, 60, 40, RGB565::BLUE);
+    screen.fillWindow(10, 10, 60, 40, ScreenColor::RED);
+    screen.fillWindow(90, 10, 60, 40, ScreenColor::GREEN);
+    screen.fillWindow(170, 10, 60, 40, ScreenColor::BLUE);
 
     // red grows to the right, blue grows down
     for (uint8_t y = 0; y < 16; y++) {
         for (uint8_t x = 0; x < 16; x++) {
-            gradient[y * 16 + x] = RGB565::color(x * 16, (x + y) * 8, y * 16);
+            gradient[y * 16 + x] = ScreenColor::color(x * 16, (x + y) * 8, y * 16);
         }
     }
     for (uint8_t i = 0; i < 4; i++) {
@@ -105,7 +105,7 @@ void testRamRect() {
 void testPoint() {
     for (int16_t y = 5; y < (int16_t)screen.height(); y += 10) {
         for (int16_t x = 5; x < (int16_t)screen.width(); x += 10) {
-            screen.drawPoint(x, y, RGB565::WHITE);
+            screen.drawPoint(x, y, ScreenColor::WHITE);
         }
     }
 }
@@ -114,64 +114,64 @@ void testPoint() {
 //    expected: each group of 3 lines (red / green / blue) is identical: x 20..119
 void testHVLines() {
     // horizontal: x 20 ~ 119
-    screen.drawHLineSize(20, 20, 100, RGB565::RED);
-    screen.drawHLinePoints(119, 20, 30, RGB565::GREEN);   // reversed order on purpose
-    screen.drawHLineCenter(70, 40, 100, RGB565::BLUE);
+    screen.drawHLineSize(20, 20, 100, ScreenColor::RED);
+    screen.drawHLinePoints(119, 20, 30, ScreenColor::GREEN);   // reversed order on purpose
+    screen.drawHLineCenter(70, 40, 100, ScreenColor::BLUE);
     // vertical: y 120 ~ 219
-    screen.drawVLineSize(20, 120, 100, RGB565::RED);
-    screen.drawVLinePoints(30, 219, 120, RGB565::GREEN);
-    screen.drawVLineCenter(40, 170, 100, RGB565::BLUE);
+    screen.drawVLineSize(20, 120, 100, ScreenColor::RED);
+    screen.drawVLinePoints(30, 219, 120, ScreenColor::GREEN);
+    screen.drawVLineCenter(40, 170, 100, ScreenColor::BLUE);
 }
 
 // 5. lines, 3 forms
 //    expected: left fan (Points), middle star (Angle, every 30 deg), right box X (Delta)
 void testLines() {
     for (int16_t y = 0; y < 240; y += 24) {
-        screen.drawLinePoints(0, 120, 70, y, RGB565::CYAN);
+        screen.drawLinePoints(0, 120, 70, y, ScreenColor::CYAN);
     }
     for (int16_t deg = 0; deg < 360; deg += 30) {
-        screen.drawLineAngle(120, 120, 40, deg, deg == 0 ? RGB565::RED : RGB565::YELLOW); // red = 0 deg, right
+        screen.drawLineAngle(120, 120, 40, deg, deg == 0 ? ScreenColor::RED : ScreenColor::YELLOW); // red = 0 deg, right
     }
-    screen.drawLineAngle(120, 120, 40, 90, RGB565::GREEN); // green = 90 deg, up
-    screen.drawLineDelta(170, 90, 60, 60, RGB565::MAGENTA);
-    screen.drawLineDelta(230, 90, -60, 60, RGB565::MAGENTA);
+    screen.drawLineAngle(120, 120, 40, 90, ScreenColor::GREEN); // green = 90 deg, up
+    screen.drawLineDelta(170, 90, 60, 60, ScreenColor::MAGENTA);
+    screen.drawLineDelta(230, 90, -60, 60, ScreenColor::MAGENTA);
 }
 
 // 6. rectangles, 3 forms
 //    expected: top row outline, bottom row filled; in each row the 3 shapes have the same size
 void testRects() {
-    screen.drawHollowRectSize(10, 20, 60, 80, RGB565::RED);
-    screen.drawHollowRectPoints(149, 99, 90, 20, RGB565::GREEN);  // reversed corners on purpose
-    screen.drawHollowRectCenter(200, 60, 60, 80, RGB565::BLUE);
+    screen.drawHollowRectSize(10, 20, 60, 80, ScreenColor::RED);
+    screen.drawHollowRectPoints(149, 99, 90, 20, ScreenColor::GREEN);  // reversed corners on purpose
+    screen.drawHollowRectCenter(200, 60, 60, 80, ScreenColor::BLUE);
 
-    screen.drawFilledRectSize(10, 140, 60, 80, RGB565::RED);
-    screen.drawFilledRectPoints(149, 219, 90, 140, RGB565::GREEN);
-    screen.drawFilledRectCenter(200, 180, 60, 80, RGB565::BLUE);
+    screen.drawFilledRectSize(10, 140, 60, 80, ScreenColor::RED);
+    screen.drawFilledRectPoints(149, 219, 90, 140, ScreenColor::GREEN);
+    screen.drawFilledRectCenter(200, 180, 60, 80, ScreenColor::BLUE);
 }
 
 // 7. triangles, 3 forms
 //    expected: top row outline, bottom row filled
 void testTriangles() {
-    screen.drawHollowTrianglePoints(10, 100, 40, 20, 70, 90, RGB565::CYAN);
-    screen.drawHollowTriangleSize(90, 20, 60, 80, RGB565::YELLOW);
-    screen.drawHollowTriangleCenter(200, 60, 60, 80, RGB565::MAGENTA);
+    screen.drawHollowTrianglePoints(10, 100, 40, 20, 70, 90, ScreenColor::CYAN);
+    screen.drawHollowTriangleSize(90, 20, 60, 80, ScreenColor::YELLOW);
+    screen.drawHollowTriangleCenter(200, 60, 60, 80, ScreenColor::MAGENTA);
 
-    screen.drawFilledTrianglePoints(10, 220, 40, 140, 70, 210, RGB565::CYAN);
-    screen.drawFilledTriangleSize(90, 140, 60, 80, RGB565::YELLOW);
-    screen.drawFilledTriangleCenter(200, 180, 60, 80, RGB565::MAGENTA);
-    screen.drawHollowTriangleCenter(200, 180, 60, 80, RGB565::WHITE); // outline must sit on the fill edge
+    screen.drawFilledTrianglePoints(10, 220, 40, 140, 70, 210, ScreenColor::CYAN);
+    screen.drawFilledTriangleSize(90, 140, 60, 80, ScreenColor::YELLOW);
+    screen.drawFilledTriangleCenter(200, 180, 60, 80, ScreenColor::MAGENTA);
+    screen.drawHollowTriangleCenter(200, 180, 60, 80, ScreenColor::WHITE); // outline must sit on the fill edge
 }
 
 // 8. circles, 2 forms
 //    expected: left column Radius, right column Points (same size); small white dot = the given point
 void testCircles() {
-    screen.drawHollowCircleRadius(60, 60, 40, RGB565::GREEN);
-    screen.drawHollowCirclePoints(180, 60, 204, 92, RGB565::GREEN); // distance = 40
-    screen.drawPoint(204, 92, RGB565::WHITE);
+    screen.drawHollowCircleRadius(60, 60, 40, ScreenColor::GREEN);
+    screen.drawHollowCirclePoints(180, 60, 204, 92, ScreenColor::GREEN); // distance = 40
+    screen.drawPoint(204, 92, ScreenColor::WHITE);
 
-    screen.drawFilledCircleRadius(60, 180, 40, RGB565::ORANGE);
-    screen.drawFilledCirclePoints(180, 180, 180, 140, RGB565::ORANGE); // distance = 40
-    screen.drawHollowCircleRadius(180, 180, 40, RGB565::WHITE);       // outline must sit on the fill edge
+    screen.drawFilledCircleRadius(60, 180, 40, ScreenColor::ORANGE);
+    screen.drawFilledCirclePoints(180, 180, 180, 140, ScreenColor::ORANGE); // distance = 40
+    screen.drawHollowCircleRadius(180, 180, 40, ScreenColor::WHITE);       // outline must sit on the fill edge
 }
 
 // 9. border width of hollow shapes: (x, y, w, h) / corners / radius are the outer edge, the border grows inward
@@ -182,14 +182,14 @@ void testBorders() {
     const int16_t borders[] = { 1, 6, 40 };
     for (uint8_t i = 0; i < 3; i++) {
         int16_t x = 10 + i * 78;
-        screen.drawFilledRectSize(x, 8, 64, 64, RGB565::GRAY);
-        screen.drawHollowRectSize(x, 8, 64, 64, RGB565::RED, borders[i]);
+        screen.drawFilledRectSize(x, 8, 64, 64, ScreenColor::GRAY);
+        screen.drawHollowRectSize(x, 8, 64, 64, ScreenColor::RED, borders[i]);
 
-        screen.drawFilledTrianglePoints(x, 150, x + 20, 80, x + 63, 140, RGB565::GRAY);
-        screen.drawHollowTrianglePoints(x, 150, x + 20, 80, x + 63, 140, RGB565::GREEN, borders[i]);
+        screen.drawFilledTrianglePoints(x, 150, x + 20, 80, x + 63, 140, ScreenColor::GRAY);
+        screen.drawHollowTrianglePoints(x, 150, x + 20, 80, x + 63, 140, ScreenColor::GREEN, borders[i]);
 
-        screen.drawFilledCircleRadius(x + 32, 196, 32, RGB565::GRAY);
-        screen.drawHollowCircleRadius(x + 32, 196, 32, RGB565::CYAN, borders[i]);
+        screen.drawFilledCircleRadius(x + 32, 196, 32, ScreenColor::GRAY);
+        screen.drawHollowCircleRadius(x + 32, 196, 32, ScreenColor::CYAN, borders[i]);
     }
 }
 
@@ -199,12 +199,12 @@ void testBorders() {
 //               white line from the left edge (y 180) to the right edge (y 40), gray line on the bottom row;
 //               nothing wraps around
 void testClip() {
-    screen.drawFilledRectSize(0, 0, 40, 40, RGB565::RED);
-    screen.drawFilledCircleRadius(199, 120, 40, RGB565::GREEN);
-    screen.drawFilledTrianglePoints(130, 0, 100, 60, 160, 60, RGB565::BLUE);
-    screen.drawHollowCircleRadius(120, 199, 40, RGB565::YELLOW);
-    screen.drawLinePoints(0, 180, 239, 40, RGB565::WHITE);
-    screen.drawHLineSize(0, 239, 240, RGB565::GRAY);
+    screen.drawFilledRectSize(0, 0, 40, 40, ScreenColor::RED);
+    screen.drawFilledCircleRadius(199, 120, 40, ScreenColor::GREEN);
+    screen.drawFilledTrianglePoints(130, 0, 100, 60, 160, 60, ScreenColor::BLUE);
+    screen.drawHollowCircleRadius(120, 199, 40, ScreenColor::YELLOW);
+    screen.drawLinePoints(0, 180, 239, 40, ScreenColor::WHITE);
+    screen.drawHLineSize(0, 239, 240, ScreenColor::GRAY);
 }
 
 // ---------- text tests (font SmallPrintable: 8 x 23, 30 chars x 10 lines) ----------
@@ -221,7 +221,7 @@ void testTextChars() {
             x = 0;
             y += LINE;
         }
-        x = screen.drawTexts(x, y, RGB565::WHITE, (char)code);
+        x = screen.drawTexts(x, y, ScreenColor::WHITE, (char)code);
     }
 }
 
@@ -233,14 +233,14 @@ void testTextChars() {
 void testTextTypes() {
     char buffer[] = "buffer";
 
-    screen.drawTexts(0, LINE * 0, RGB565::WHITE, "const char*: ", "abc");
-    screen.drawTexts(0, LINE * 1, RGB565::WHITE, "char[]: ", buffer);
-    screen.drawTexts(0, LINE * 2, RGB565::WHITE, "F(): ", F("Arduino"));
-    screen.drawTexts(0, LINE * 3, RGB565::WHITE, "char: ", 'A', 'z');
-    screen.drawTexts(0, LINE * 4, RGB565::WHITE, "int8/uint8: ", (int8_t)-5, ' ', (uint8_t)200);
-    screen.drawTexts(0, LINE * 5, RGB565::WHITE, "int: ", -123, ' ', 65535U, ' ', true);
-    screen.drawTexts(0, LINE * 6, RGB565::WHITE, "long: ", -2147483647L - 1);
-    screen.drawTexts(0, LINE * 7, RGB565::WHITE, "ulong: ", 4294967295UL);
+    screen.drawTexts(0, LINE * 0, ScreenColor::WHITE, "const char*: ", "abc");
+    screen.drawTexts(0, LINE * 1, ScreenColor::WHITE, "char[]: ", buffer);
+    screen.drawTexts(0, LINE * 2, ScreenColor::WHITE, "F(): ", F("Arduino"));
+    screen.drawTexts(0, LINE * 3, ScreenColor::WHITE, "char: ", 'A', 'z');
+    screen.drawTexts(0, LINE * 4, ScreenColor::WHITE, "int8/uint8: ", (int8_t)-5, ' ', (uint8_t)200);
+    screen.drawTexts(0, LINE * 5, ScreenColor::WHITE, "int: ", -123, ' ', 65535U, ' ', true);
+    screen.drawTexts(0, LINE * 6, ScreenColor::WHITE, "long: ", -2147483647L - 1);
+    screen.drawTexts(0, LINE * 7, ScreenColor::WHITE, "ulong: ", 4294967295UL);
 }
 
 // 13. float / double, setDecimals
@@ -249,16 +249,16 @@ void testTextTypes() {
 //       nan inf: nan inf -inf   1e10: ovf
 //       decimals 0: 3           decimals 4: 3.1416
 void testTextFloat() {
-    screen.drawTexts(0, LINE * 0, RGB565::WHITE, "float: ", 3.14159f);
-    screen.drawTexts(0, LINE * 1, RGB565::WHITE, "round: ", 2.345f, ' ', -1.5f);
-    screen.drawTexts(0, LINE * 2, RGB565::WHITE, "double: ", 2.5);
-    screen.drawTexts(0, LINE * 3, RGB565::WHITE, "nan inf: ", NAN, ' ', INFINITY, ' ', -INFINITY);
-    screen.drawTexts(0, LINE * 4, RGB565::WHITE, "1e10: ", 1e10f);
+    screen.drawTexts(0, LINE * 0, ScreenColor::WHITE, "float: ", 3.14159f);
+    screen.drawTexts(0, LINE * 1, ScreenColor::WHITE, "round: ", 2.345f, ' ', -1.5f);
+    screen.drawTexts(0, LINE * 2, ScreenColor::WHITE, "double: ", 2.5);
+    screen.drawTexts(0, LINE * 3, ScreenColor::WHITE, "nan inf: ", NAN, ' ', INFINITY, ' ', -INFINITY);
+    screen.drawTexts(0, LINE * 4, ScreenColor::WHITE, "1e10: ", 1e10f);
 
     screen.setDecimals(0);
-    screen.drawTexts(0, LINE * 5, RGB565::CYAN, "decimals 0: ", 2.5f);
+    screen.drawTexts(0, LINE * 5, ScreenColor::CYAN, "decimals 0: ", 2.5f);
     screen.setDecimals(4);
-    screen.drawTexts(0, LINE * 6, RGB565::CYAN, "decimals 4: ", 3.14159f);
+    screen.drawTexts(0, LINE * 6, ScreenColor::CYAN, "decimals 4: ", 3.14159f);
     screen.setDecimals(2);
 }
 
@@ -274,14 +274,14 @@ void testTextArrays() {
     const char *words[] = {"ab", "cd", "ef"};
     const uint8_t bytes[] = {10, 20, 255};
 
-    screen.drawTexts(0, LINE * 0, RGB565::WHITE, "int[]: ", ints);
+    screen.drawTexts(0, LINE * 0, ScreenColor::WHITE, "int[]: ", ints);
     screen.setSeparator(", ");
-    screen.drawTexts(0, LINE * 1, RGB565::WHITE, "int[]: ", ints);
-    screen.drawTexts(0, LINE * 2, RGB565::WHITE, "float[]: ", floats);
-    screen.drawTexts(0, LINE * 3, RGB565::WHITE, "char*[]: ", words);
-    screen.drawTexts(0, LINE * 4, RGB565::WHITE, "uint8[]: ", bytes);
+    screen.drawTexts(0, LINE * 1, ScreenColor::WHITE, "int[]: ", ints);
+    screen.drawTexts(0, LINE * 2, ScreenColor::WHITE, "float[]: ", floats);
+    screen.drawTexts(0, LINE * 3, ScreenColor::WHITE, "char*[]: ", words);
+    screen.drawTexts(0, LINE * 4, ScreenColor::WHITE, "uint8[]: ", bytes);
     screen.setSeparator("|");
-    screen.drawTexts(0, LINE * 5, RGB565::CYAN, "mixed: ", ints, " / ", words);
+    screen.drawTexts(0, LINE * 5, ScreenColor::CYAN, "mixed: ", ints, " / ", words);
     screen.setSeparator("");
 }
 
@@ -291,14 +291,14 @@ void testTextArrays() {
 //       12?34                                                  (font BigDigits, ':' not in it)
 //       ?5?3?50                                                ('-' and '.' not in it)
 void testTextDefault() {
-    screen.drawTexts(0, LINE * 0, RGB565::WHITE, "tab:\t|");
-    screen.drawTexts(0, LINE * 1, RGB565::WHITE, "utf-8:\xC3\xA9|");
-    screen.drawTexts(0, LINE * 2, RGB565::WHITE, "newline:\n|");
-    screen.drawTexts(0, LINE * 3, RGB565::WHITE, "code 200:", (char)200, '|');
+    screen.drawTexts(0, LINE * 0, ScreenColor::WHITE, "tab:\t|");
+    screen.drawTexts(0, LINE * 1, ScreenColor::WHITE, "utf-8:\xC3\xA9|");
+    screen.drawTexts(0, LINE * 2, ScreenColor::WHITE, "newline:\n|");
+    screen.drawTexts(0, LINE * 3, ScreenColor::WHITE, "code 200:", (char)200, '|');
 
     screen.setFont<BigDigits>();
-    screen.drawTexts(0, 100, RGB565::YELLOW, "12:34");
-    screen.drawTexts(0, 150, RGB565::YELLOW, -5, ' ', 3.5f);
+    screen.drawTexts(0, 100, ScreenColor::YELLOW, "12:34");
+    screen.drawTexts(0, 150, ScreenColor::YELLOW, -5, ' ', 3.5f);
     screen.setFont<SmallPrintable>();
 }
 
@@ -310,26 +310,26 @@ void testTextDefault() {
 //       "empty ok", "fontHeight=23", "F() in flash false" 
 //       "left edge" at x 0, "right edge" ending at x 239, "bottom" on the last text line (y 217)
 void testTextLayout() {
-    screen.drawFilledRectSize(0, 0, 120, 30, RGB565::BLUE);
-    screen.drawFilledRectSize(120, 0, 120, 30, RGB565::RED);
-    screen.drawTexts(40, 4, RGB565::WHITE, "transparent text");
+    screen.drawFilledRectSize(0, 0, 120, 30, ScreenColor::BLUE);
+    screen.drawFilledRectSize(120, 0, 120, 30, ScreenColor::RED);
+    screen.drawTexts(40, 4, ScreenColor::WHITE, "transparent text");
 
-    screen.drawTexts(10, 34, RGB565::RED, "ABC");
-    screen.drawTexts(12, 34, RGB565::GREEN, "ABC");
+    screen.drawTexts(10, 34, ScreenColor::RED, "ABC");
+    screen.drawTexts(12, 34, ScreenColor::GREEN, "ABC");
 
-    int16_t x = screen.drawTexts(10, 64, RGB565::WHITE, "x=");
-    x = screen.drawTexts(x, 64, RGB565::CYAN, 123);
-    screen.drawFilledRectSize(x, 64, 3, screen.fontHeight(), RGB565::MAGENTA);
-    screen.drawTexts(x + 6, 64, RGB565::WHITE, "(", x, ")");
+    int16_t x = screen.drawTexts(10, 64, ScreenColor::WHITE, "x=");
+    x = screen.drawTexts(x, 64, ScreenColor::CYAN, 123);
+    screen.drawFilledRectSize(x, 64, 3, screen.fontHeight(), ScreenColor::MAGENTA);
+    screen.drawTexts(x + 6, 64, ScreenColor::WHITE, "(", x, ")");
 
-    int16_t empty = screen.drawTexts(50, 94, RGB565::WHITE);
-    screen.drawTexts(10, 94, RGB565::WHITE, empty == 50 ? "empty ok" : "empty FAIL");
-    screen.drawTexts(10, 124, RGB565::WHITE, "fontHeight=", screen.fontHeight());
-    screen.drawTexts(10, 190, RGB565::WHITE, F("F() in flash"), ' ', false);
+    int16_t empty = screen.drawTexts(50, 94, ScreenColor::WHITE);
+    screen.drawTexts(10, 94, ScreenColor::WHITE, empty == 50 ? "empty ok" : "empty FAIL");
+    screen.drawTexts(10, 124, ScreenColor::WHITE, "fontHeight=", screen.fontHeight());
+    screen.drawTexts(10, 190, ScreenColor::WHITE, F("F() in flash"), ' ', false);
 
-    screen.drawTexts(0, 160, RGB565::YELLOW, "left edge");
-    screen.drawTexts(240 - 10 * 8, 160, RGB565::YELLOW, "right edge");
-    screen.drawTexts(10, 240 - 23, RGB565::YELLOW, "bottom");
+    screen.drawTexts(0, 160, ScreenColor::YELLOW, "left edge");
+    screen.drawTexts(240 - 10 * 8, 160, ScreenColor::YELLOW, "right edge");
+    screen.drawTexts(10, 240 - 23, ScreenColor::YELLOW, "bottom");
 }
 
 // 17. setAutoLineBreak, setLineSpacing
@@ -342,17 +342,17 @@ void testTextLayout() {
 void testTextLineBreak() {
     screen.setAutoLineBreak(true);
 
-    screen.drawTexts(0, 0, RGB565::WHITE, "line 1\nline 2\n", 3, " follows");
+    screen.drawTexts(0, 0, ScreenColor::WHITE, "line 1\nline 2\n", 3, " follows");
 
-    int16_t x = screen.drawTexts(0, 72, RGB565::YELLOW, "this sentence is too long for one line");
-    screen.drawFilledRectSize(x, 72 + screen.fontHeight(), 3, screen.fontHeight(), RGB565::MAGENTA);
+    int16_t x = screen.drawTexts(0, 72, ScreenColor::YELLOW, "this sentence is too long for one line");
+    screen.drawFilledRectSize(x, 72 + screen.fontHeight(), 3, screen.fontHeight(), ScreenColor::MAGENTA);
 
-    screen.drawTexts(120, 124, RGB565::CYAN, "start x 120 wraps");
+    screen.drawTexts(120, 124, ScreenColor::CYAN, "start x 120 wraps");
 
-    screen.drawTexts(232, 0, RGB565::MAGENTA, "AB");
+    screen.drawTexts(232, 0, ScreenColor::MAGENTA, "AB");
 
     screen.setLineSpacing(20);
-    screen.drawTexts(0, 170, RGB565::GREEN, "gap 20\ngap 20");
+    screen.drawTexts(0, 170, ScreenColor::GREEN, "gap 20\ngap 20");
 
     screen.setLineSpacing(0);
     screen.setAutoLineBreak(false);
@@ -365,19 +365,19 @@ void testVideoFlash() {
     // players live on the stack: their RAM is only used during the test
     video::FlashPlayer<Screen> player(screen);
     if (!player.start<Orbit>(60, 40)) {
-        screen.drawTexts(10, 10, RGB565::RED, "does not fit");
+        screen.drawTexts(10, 10, ScreenColor::RED, "does not fit");
         return;
     }
     uint32_t startMs = millis();
     while (millis() - startMs < VIDEO_MS) {
         player.update();
     }
-    screen.drawTexts(10, 180, RGB565::WHITE, "frame ", player.frame(), " skipped ", player.skippedFrames());
+    screen.drawTexts(10, 180, ScreenColor::WHITE, "frame ", player.frame(), " skipped ", player.skippedFrames());
 
     // a slow program: nothing calls update() for LATE_MS
     delay(LATE_MS);
     player.update();
-    screen.drawTexts(10, 204, RGB565::YELLOW, "late: frame ", player.frame(), " skipped ", player.skippedFrames());
+    screen.drawTexts(10, 204, ScreenColor::YELLOW, "late: frame ", player.frame(), " skipped ", player.skippedFrames());
 }
 
 // 19. video::StreamPlayer over USB serial: the board knows the file, the computer only runs
@@ -392,15 +392,15 @@ void testVideoFlash() {
 //       loop off     at 100 %: stops at the last frame, "ended"
 //     (opening the port resets the board: start stream.py first, it waits for the board)
 void showStreamStatus(StreamPlayer &player, const char *step) {
-    screen.drawFilledRectSize(0, 170, screen.width(), 70, RGB565::BLACK);
+    screen.drawFilledRectSize(0, 170, screen.width(), 70, ScreenColor::BLACK);
     if (!player.isConnected()) {
-        screen.drawTexts(10, 170, RGB565::YELLOW, "waiting for stream.py");
-        screen.drawTexts(10, 194, RGB565::WHITE, "error ", player.error());
+        screen.drawTexts(10, 170, ScreenColor::YELLOW, "waiting for stream.py");
+        screen.drawTexts(10, 194, ScreenColor::WHITE, "error ", player.error());
         return;
     }
-    screen.drawTexts(10, 170, RGB565::GREEN, step);
-    screen.drawTexts(10, 194, RGB565::WHITE, player.positionMs(), " ms, frame ", player.frame());
-    screen.drawTexts(10, 218, RGB565::WHITE, player.isPlaying() ? "playing" : "paused", player.isEnded() ? " ended" : "");
+    screen.drawTexts(10, 170, ScreenColor::GREEN, step);
+    screen.drawTexts(10, 194, ScreenColor::WHITE, player.positionMs(), " ms, frame ", player.frame());
+    screen.drawTexts(10, 218, ScreenColor::WHITE, player.isPlaying() ? "playing" : "paused", player.isEnded() ? " ended" : "");
 }
 
 void testVideoStream() {
@@ -451,12 +451,12 @@ void testVideoStream() {
 //     shapes: red rect past the left edge, green disc past the right edge, blue triangle past the top,
 //             yellow ring past the bottom, white line past the left and right edges, magenta text past the right edge
 void testOffScreen() {
-    screen.drawFilledRectSize(-30, 100, 60, 40, RGB565::RED);
-    screen.drawFilledCircleRadius(230, 120, 40, RGB565::GREEN);
-    screen.drawFilledTrianglePoints(100, -40, 160, -40, 130, 40, RGB565::BLUE);
-    screen.drawHollowCircleRadius(120, 230, 40, RGB565::YELLOW);
-    screen.drawLinePoints(-40, 200, 280, 20, RGB565::WHITE);
-    screen.drawTexts(200, 60, RGB565::MAGENTA, "off screen");
+    screen.drawFilledRectSize(-30, 100, 60, 40, ScreenColor::RED);
+    screen.drawFilledCircleRadius(230, 120, 40, ScreenColor::GREEN);
+    screen.drawFilledTrianglePoints(100, -40, 160, -40, 130, 40, ScreenColor::BLUE);
+    screen.drawHollowCircleRadius(120, 230, 40, ScreenColor::YELLOW);
+    screen.drawLinePoints(-40, 200, 280, 20, ScreenColor::WHITE);
+    screen.drawTexts(200, 60, ScreenColor::MAGENTA, "off screen");
 }
 
 void (*const tests[])() = {
@@ -499,9 +499,9 @@ int16_t testIndex(Test test) {
 void showTitle(Test test) {
     const int16_t x = 88;
     const int16_t y = (240 - 23) / 2;
-    int16_t end = screen.drawTexts(x, y, RGB565::WHITE, "test ", testIndex(test));
+    int16_t end = screen.drawTexts(x, y, ScreenColor::WHITE, "test ", testIndex(test));
     delay(TITLE_MS);
-    screen.drawFilledRectSize(x, y, end - x, screen.fontHeight(), RGB565::BLACK);
+    screen.drawFilledRectSize(x, y, end - x, screen.fontHeight(), ScreenColor::BLACK);
 }
 
 // runs every test of a list (only those in ONLY_TESTS, if any): its title first, HOLD_MS after it

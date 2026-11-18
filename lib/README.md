@@ -4,50 +4,56 @@
 
 ## 檔案
 
+依照四大類（見[分類和名稱](#分類和名稱)）排列：
+
 ```
 lib/
+│   ── 主板 ──
 ├── Uno/            ATmega328P：腳位（數位、PWM、類比、中斷）、SPI、UART、計時器、背景執行；各種介面的 UNO 版本
+│   ── 驅動 ──
 ├── ST7789/         ST7789 彩色螢幕：指令、窗口、模組（M130T）
 ├── SSD1306/        SSD1306 OLED：指令、板子 RAM 裡的畫面、模組（128×64、128×32）
-├── graphics/       圖形和文字：畫在任何有 fillWindow 的螢幕上
-├── color/          顏色格式：RGB565、RGB888、RGB444、RGB332、BW…；螢幕的 ColorFormat
+├── DS18B20/        DS18B20 溫度感測器（1-Wire）
+├── TCRT5000/       TCRT5000 反射式紅外線感測器：HW-006 循跡模組、四腳類比板
+├── L298N/          L298N 雙 H 橋馬達驅動：直流馬達、步進馬達、紅色模組；device：兩輪車
+├── NEC/            紅外線遙控器的 NEC 協定：接收、發射、按鍵、模組（HX1838、紅外線 LED、17 鍵遙控器）
+├── switch/         開關（GND、VCC、OUT）；tool：單擊、雙擊、長按
+├── buzzer/         有源 / 無源蜂鳴器
+├── LED/            LED（PWM 調亮度）：一顆、RGB；tool：閃爍、呼吸、漸變、心跳
+├── ultrasonic/     超音波測距（Trig / Echo）：HC-SR04；tool：中位數濾波
+├── analog/         類比感測器：旋鈕、光敏電阻、搖桿、NTC 熱敏、聲音模組
+│   ── 素材 ──
 ├── font/           字型（.ttf → .h）：程式裡寫 FONT("任何路徑") 就自動轉
 ├── image/          靜態圖片（.jpg / .png / .webp / .heic → .h）：Flash 或從電腦串流
 ├── video/          動畫和影片（.gif / .mp4 / .mov / .webm … → .h）：Flash 或從電腦串流
 ├── audio/          聲音（.wav / .mp3 / .m4a / .ogg … → 音符、節奏或取樣）和播放器：Flash 或從電腦串流
-├── DS18B20/        DS18B20 溫度感測器（1-Wire）
-├── switch/         開關（GND、VCC、OUT）；tool：單擊、雙擊、長按
-├── buzzer/         有源 / 無源蜂鳴器
-├── NEC/            紅外線遙控器的 NEC 協定：接收、發射、按鍵、模組（HX1838、紅外線 LED、17 鍵遙控器）
-├── LED/            LED（PWM 調亮度）：一顆、RGB；tool：閃爍、呼吸、漸變、心跳
-├── ultrasonic/     超音波測距（Trig / Echo）：HC-SR04；tool：中位數濾波
-├── TCRT5000/       TCRT5000 反射式紅外線感測器：HW-006 循跡模組、四腳類比板
-├── L298N/          L298N 雙 H 橋馬達驅動：直流馬達、步進馬達、紅色模組；device：兩輪車
-├── analog/         類比感測器：旋鈕、光敏電阻、搖桿、NTC 熱敏、聲音模組
+│   ── 基礎 ──
+├── color/          顏色格式：RGB565、RGB888、RGB444、RGB332、BW…；螢幕的 ColorFormat
+├── graphics/       圖形和文字：畫在任何有 fillWindow 的螢幕上
 └── stream/         跟電腦要檔案的協定：板子的 Puller、電腦的 stream.py（圖片、動畫、聲音共用）
 ```
 
-| 資料夾 | namespace | 入口 | 依賴的介面 |
-|---|---|---|---|
-| [Uno](Uno/README.md) | `Uno` | 用到哪個介面就 include 哪個檔案 | Arduino（`millis`、`micros`） |
-| [ST7789](ST7789/README.md) | `ST7789` | `ST7789.h` | Bus |
-| [SSD1306](SSD1306/README.md) | `SSD1306` | `SSD1306.h` | Bus |
-| [graphics](graphics/README.md) | `graphics` | `graphics.h` | Screen |
-| [color](color/README.md) | `color` | `color.h` | — |
-| [font](font/README.md) | `font` | `font.h` | — |
-| [image](image/README.md) | `image`、`picture` | `image.h` | Screen（含 ColorFormat）、Stream |
-| [video](video/README.md) | `video`、`animation` | `video.h` | Screen（含 ColorFormat）、Stream |
-| [audio](audio/README.md) | `audio`、`melody` | `audio.h` | Sound、SampleOut、Stream |
-| [DS18B20](DS18B20/README.md) | `DS18B20` | `DS18B20.h` | Wire |
-| [switch](switch/README.md) | `switches` | `switch.h` | Pin |
-| [buzzer](buzzer/README.md) | `buzzer` | `buzzer.h` | Pin、Tone |
-| [NEC](NEC/README.md) | `NEC` | `NEC.h` | InterruptPin、Carrier、Remote |
-| [LED](LED/README.md) | `LED` | `LED.h` | Pwm |
-| [ultrasonic](ultrasonic/README.md) | `ultrasonic` | `ultrasonic.h` | Trigger、Echo |
-| [TCRT5000](TCRT5000/README.md) | `TCRT5000` | `TCRT5000.h` | Pin、AnalogPin |
-| [L298N](L298N/README.md) | `L298N` | `L298N.h` | Pin（輸出）、Pwm |
-| [analog](analog/README.md) | `analog` | `analog.h` | AnalogPin、Pin |
-| [stream](stream/README.md) | `stream` | `stream.h` | Link |
+| 大類 | 資料夾 | namespace | 入口 | 依賴的介面 |
+|---|---|---|---|---|
+| 主板 | [Uno](Uno/README.md) | `Uno` | 用到哪個介面就 include 哪個檔案 | Arduino（`millis`、`micros`） |
+| 驅動 | [ST7789](ST7789/README.md) | `ST7789` | `ST7789.h` | Bus、ColorFormat |
+| 驅動 | [SSD1306](SSD1306/README.md) | `SSD1306` | `SSD1306.h` | Bus、ColorFormat |
+| 驅動 | [DS18B20](DS18B20/README.md) | `DS18B20` | `DS18B20.h` | Wire |
+| 驅動 | [TCRT5000](TCRT5000/README.md) | `TCRT5000` | `TCRT5000.h` | Pin、AnalogPin |
+| 驅動 | [L298N](L298N/README.md) | `L298N` | `L298N.h` | Pin（輸出）、Pwm |
+| 驅動 | [NEC](NEC/README.md) | `NEC` | `NEC.h` | InterruptPin、Carrier、Remote |
+| 驅動 | [switch](switch/README.md) | `switches` | `switch.h` | Pin |
+| 驅動 | [buzzer](buzzer/README.md) | `buzzer` | `buzzer.h` | Pin、Tone |
+| 驅動 | [LED](LED/README.md) | `LED` | `LED.h` | Pwm |
+| 驅動 | [ultrasonic](ultrasonic/README.md) | `ultrasonic` | `ultrasonic.h` | Trigger、Echo |
+| 驅動 | [analog](analog/README.md) | `analog` | `analog.h` | AnalogPin、Pin |
+| 素材 | [font](font/README.md) | `font` | `font.h` | — |
+| 素材 | [image](image/README.md) | `image`、`picture` | `image.h` | Screen（含 ColorFormat）、Stream |
+| 素材 | [video](video/README.md) | `video`、`animation` | `video.h` | Screen（含 ColorFormat）、Stream |
+| 素材 | [audio](audio/README.md) | `audio`、`melody` | `audio.h` | Sound、SampleOut、Stream |
+| 基礎 | [color](color/README.md) | `color` | `color.h` | — |
+| 基礎 | [graphics](graphics/README.md) | `graphics` | `graphics.h` | Screen（含 ColorFormat） |
+| 基礎 | [stream](stream/README.md) | `stream` | `stream.h` | Link |
 
 ## 分類和名稱
 
@@ -89,10 +95,12 @@ lib/
 | 不多佔空間 | 模組都是 template 和 inline，沒用到的不會編譯進程式 |
 
 所以不用把資料夾改成 `{晶片}_module/`：只要程式不直接 include 模組，同名也不會用錯。
-- **改過的名稱**：
-  - `I2C/` → `SSD1306/`：I2C 是接線方式，這個資料夾裝的是 SSD1306 晶片的指令；I2C 本身在 `Uno_I2C.h`。
-  - `temp_sensor/` → `DS18B20/`：用晶片命名，類別從 `temp_sensor::DS18B20` 改成 `DS18B20::Thermometer`。
-  - `infrared/` → `NEC/`：「紅外線」太籠統，程式處理的是 NEC 協定；接收器和遙控器是 `module/`。
+
+**改過的名稱**（舊的程式要跟著改）：
+
+- `I2C/` → `SSD1306/`：I2C 是接線方式，這個資料夾裝的是 SSD1306 晶片的指令；I2C 本身在 `Uno_I2C.h`。
+- `temp_sensor/` → `DS18B20/`：用晶片命名，類別從 `temp_sensor::DS18B20` 改成 `DS18B20::Thermometer`。
+- `infrared/` → `NEC/`：「紅外線」太籠統，程式處理的是 NEC 協定；接收器和遙控器是 `module/`。
 
 ## 字型、圖片、影片、聲音：直接用檔案
 
@@ -121,7 +129,7 @@ using Chime = MELODY("success.m4a");                                          //
 
 `output/selected.h` 每次編譯前自動寫，列出 `output/` **全部**的 .h，所以手動轉的、巨集轉的都能直接用名稱（`picture::sunset_flash_…`），不用手動編輯。全部列出**不佔 Flash**：資料在 `inline` 函式裡的 `static const … PROGMEM` 陣列，函式沒被呼叫就不會產生，連結器也會丟掉沒用到的（實測 Flash、RAM 跟只列用到的完全一樣）。
 
-不要的檔案：`python tools/assets.py --unused` 列出沒有程式（包括 `.bak`）用的，自己刪。
+不要的檔案：`python tools/assets.py --unused` 列出沒有程式（包括 `.bak`）用的，自己刪。全部刪掉或全部重新轉換：`python src/clean.py`（`--rebuild`），見 [src/README.md](../src/README.md#cleanpy)。
 
 ## 以後加東西放哪
 
@@ -153,12 +161,12 @@ UNO 的實作全部繼承 `Uno::UnoBoard`（`nowMs`、`nowUs`、`delayMs`、`del
 |---|---|---|---|
 | Bus（SPI 螢幕） | `ST7789` | `init`、`write8/16`、`cmdMode`、`dataMode`、`select`…、`delayMs`、`nowMs`、`readFlash8/16` | `Uno::UnoST7789`（`Uno_ST7789.h`） |
 | Bus（I2C） | `SSD1306` | `init`、`start`、`write8`、`read8`、`stop`、`delayMs`、`nowMs`、`readFlash8/16` | `Uno::UnoI2C`（`Uno_I2C.h`） |
-| Screen | `graphics`、`image`、`video` | `width`、`height`、`fillWindow`、`writeWindow`、型別 `BusType`（它的 `readFlash8/16`、`nowMs`）；`video` 另外要 `setWindow`、`writeData16`、`endWrite` | `ST7789::M130T`、`SSD1306::OLED128x64` |
+| Screen | `graphics`、`image`、`video` | 型別 `ColorFormat`、`BusType`（它的 `readFlash8/16`、`nowMs`）、`width`、`height`、`fillWindow`、`writeWindow`；`video` 另外要 `setWindow`、`writePixel`、`endWrite` | `ST7789::M130T`、`SSD1306::OLED128x64` |
 | Link | `stream::Puller` | `init`、`available`、`read8`、`write8`、`clearInput`、`readFlash8` | `Uno::UnoSerial`（`Uno_serial.h`） |
 | Stream | `image::StreamImage`、`video::StreamPlayer`、`audio::StreamPlayer`、`StreamSamplePlayer` | `CHUNK_SIZE`、`OK`、`ERROR_*`、`begin`、`write8/16/32`、`writePath`、`waitAnswer`、`available`、`pullLength`、`receive`、類別 `Answer` | `stream::Puller<Link, CHUNK>`（`lib/stream`） |
 | ColorFormat | `ST7789::Window`、`SSD1306::Frame`（螢幕宣告它），graphics、font、image、video 從 `Screen::ColorFormat` 拿 | `Value`、`BITS`、常數、`color(r, g, b)`、`red/green/blue`、`fromRGB565`；ST7789 另外要 `R/G/B_BITS`、`ORDER`、`…Field` | `color::Packed<…>`（`RGB565`、`RGB888`、`RGB444`…）、`color::BW<門檻>`（`lib/color`） |
 | Wire | `DS18B20` | `init`、`reset`、`write8`、`read8`、`readBit`、`nowMs` | `Uno::UnoOneWire`（`Uno_one_wire.h`） |
-| Pin（輸入） | `switch`、`TCRT5000`、搖桿的按鈕 | `init`、`read`、`nowMs` | `Uno::UnoInputPin`（= `UnoPin`）、`UnoInterruptPin`、`UnoAnalogPin`（`Uno_pin.h`） |
+| Pin（輸入） | `switch`、`TCRT5000`、搖桿的按鈕 | `init`、`read`、`nowMs` | `Uno::UnoInputPin`（`Uno_pin.h`）、`UnoInterruptPin`、`UnoAnalogPin`（都能讀數位） |
 | Pin（輸出） | `buzzer::ActiveBuzzer2Pins`、`3Pins`、`ultrasonic::Ranger`（Trigger，只用 `init`、`write`）、`L298N::Bridge`（IN） | `init`、`write`、`nowMs`、`nowUs`、`readFlash8/16` | `Uno::UnoOutputPin`（`Uno_pin.h`） |
 | Pwm | `LED` 的所有模組、`L298N::Bridge`（EN）、`InputPwmBridge`（IN，另外要 `nowMs`、`nowUs`、`stopInterrupts`） | `init`、`write(duty)` | `Uno::UnoPwmPin`（`Uno_pin.h`） |
 | InterruptPin | `NEC::Receiver`、`ultrasonic::Ranger`（Echo） | `init(onChange)`、`read`、`nowUs`、`nowMs`、`stopInterrupts`、`restoreInterrupts` | `Uno::UnoInterruptPin`（`Uno_interrupt_pin.h`） |
@@ -176,7 +184,7 @@ UNO 的實作全部繼承 `Uno::UnoBoard`（`nowMs`、`nowUs`、`delayMs`、`del
 
 | 什麼時候 | 誰說 | 在哪裡看到 | 寫在哪 |
 |---|---|---|---|
-| 在電腦上跑 Python（`convert.py`、`check.py`、`stream.py`、`tools/assets.py`、`src/hide.py`） | 那個腳本 | 終端機 | 腳本自己 `print` |
+| 在電腦上跑 Python（`convert.py`、`check.py`、`stream.py`、`tools/assets.py`、`src/hide.py`、`src/clean.py`） | 那個腳本 | 終端機 | 腳本自己 `print` |
 | 編譯 C++ | 函式庫的 `static_assert`、警告 | 終端機（`pio run`）、VS Code 的問題清單 | 檢查的那一行旁邊（標頭檔裡） |
 | 板子執行時 | 函式回傳結果代碼；程式決定要不要顯示 | **不在終端機**：串口（`pio device monitor`、`stream.py` 的 `[BOARD]`）、螢幕、LED | 函式庫回傳代碼，程式印出來 |
 
@@ -238,7 +246,7 @@ UNO 的實作全部繼承 `Uno::UnoBoard`（`nowMs`、`nowUs`、`delayMs`、`del
 Uno_ST7789.h ─(Bus)─▶ ST7789::Datasheet ▶ Window ▶ M130T ──────┐
 Uno_I2C.h ───(Bus)─▶ SSD1306::Datasheet ▶ Frame ▶ OLED128x64 ─┤ Screen
                                                                 ▼
-                     font ─▶ graphics::Shapes ▶ Text = graphics::Canvas<Screen>
+                     graphics::Shapes ▶ Text（◀─ font）= graphics::Canvas<Screen>
                                                                 │
                      image::FlashImage、StreamImage ◀───────────┤（writeWindow：任何螢幕）
                      video::FlashPlayer、StreamPlayer ◀─────────┘（setWindow：任何螢幕）
@@ -313,7 +321,7 @@ Uno_ir_carrier.h ─(Carrier)─▶ NEC::Transmitter（IRLED、KY005）◀─(Ke
 | 用 | 不用 |
 |---|---|
 | 函式、回傳、呼叫 | 方法、返回值、調用 |
-| 腳位、Flash、RAM、週期 | 引腳、flash、記憶體（指 RAM 時）、cycle |
+| 腳位、Flash、RAM、週期、工作週期 | 引腳、flash、記憶體（指 RAM 時）、cycle、佔空比 |
 | 預設、範圍、上限、下限 | 默認、區間 |
 | 介面（duck typing 的 struct） | 接口、協議 |
 | 「超出時」只用：編譯錯誤、編譯警告、裁切、夾到範圍內、不畫 / 安靜、回傳錯誤、`convert.py` 報錯、不檢查、— | 其他說法 |
@@ -325,8 +333,8 @@ Uno_ir_carrier.h ─(Carrier)─▶ NEC::Transmitter（IRLED、KY005）◀─(Ke
 
 | 處理 | 什麼時候 | 例子 |
 |---|---|---|
-| **編譯錯誤** | 編譯時就知道一定不行 | 腳位不存在、SPI 腳被拿來當 DC / RES / CS / BLK、沒有 CS 卻不是 SPI mode 3、鮑率誤差 > 5%、`FlashPlayer` 拿到只有 stream 的動畫、`StreamPlayer` 拿到 256 色動畫 |
-| **編譯警告** | 能動，但不建議 | 兩個訊號同一隻腳、用到 D0 / D1、BLK 不是 PWM 腳或用 Timer0、鮑率誤差 > 2%、`StreamPlayer` 拿到只有 flash 的動畫 |
+| **編譯錯誤** | 編譯時就知道一定不行 | 腳位不存在、SPI 腳被拿來當 DC / RES / CS / BLK、沒有 CS 卻不是 SPI mode 3、鮑率誤差 > 5%、`FlashImage` / `FlashPlayer` 拿到只有 stream 的圖片、動畫、螢幕不支援的顏色格式（ST7789 + RGB332 / BW、SSD1306 + 彩色） |
+| **編譯警告** | 能動，但不建議 | 兩個訊號同一隻腳、用到 D0 / D1、BLK 不是 PWM 腳或用 Timer0、鮑率誤差 > 2%、`StreamImage` / `StreamPlayer` 拿到只有 flash 的圖片、動畫或 256 色（`PaletteInRam`：執行時 `malloc`） |
 | **裁切** | 執行時，畫到螢幕外 | 所有圖形、文字、`writeWindow`、圖片：只畫螢幕上的部分 |
 | **夾到範圍內** | 執行時，參數超出 | SSD1306：`setMultiplexRatio`、`setClock`、`setPrecharge`（其他指令只取 datasheet 定義的位元）；`UnoTone`：16 ～ 20000 Hz |
 | **不畫 / 安靜** | 執行時，參數本身沒意義 | 寬或高 ≤ 0、半徑 < 0、邊界 ≤ 0、空字串；動畫放不下螢幕；`audio::Player` 的 hz、count、ms 是 0 |
@@ -410,7 +418,7 @@ font、image、video、audio 的資料都由 `source/convert.py` 事先轉好。
 | 階段 | 怎麼改 | 改了要做什麼 |
 |---|---|---|
 | ① 轉換時（`convert.py`，或 `FONT(...)` 等巨集：編譯前自動轉） | 命令列參數 / 巨集的選項字串，寫進 `.h` 的資料本身 | 巨集：改字串再燒錄（自動重轉）；手動：重新轉換、重新燒錄 |
-| ② 編譯時（template 參數、用哪個型態） | 程式裡的型別，例如 `StreamImage<Screen, StreamLink, color::RGB565>` | 重新燒錄 |
+| ② 編譯時（template 參數、用哪個型態） | 程式裡的型別，例如 `StreamImage<Screen, StreamLink>`、螢幕的 `ColorFormat` | 重新燒錄 |
 | ③ 開始時（`start`、`open`、`play` 的參數） | 每次開始一個新的都能不同，但播放中不能改 | — |
 | ④ 隨時 | 一般的函式，播放中也能呼叫 | — |
 
@@ -456,7 +464,7 @@ font、image、video、audio 的資料都由 `source/convert.py` 事先轉好。
 
 ## 共同的寫法
 
-- **編譯期檢查**：腳位、鮑率、動畫目標用 `static_assert` 報錯；不建議的用法用 deprecated 成員印警告（`Uno::warn::*`、`video::warn::*`）。
+- **編譯期檢查**：腳位、鮑率、動畫目標用 `static_assert` 報錯；不建議的用法用 deprecated 成員印警告（`Uno::warn::*`、`image::warn::*`、`video::warn::*`、`audio::warn::*`）；訊息的寫法見[提示和錯誤](#提示和錯誤)。
 - **命名**：
   - 資料夾、檔案、namespace 都小寫；縮寫和專有名詞維持原樣（ST7789、SSD1306、DS18B20、NEC、HX1838、I2C、LED、RGB565、M130T、Uno）。
   - 多個字的名稱用底線（`flash_player.h`、`Uno_serial.h`、`remote_17_key.h`）。

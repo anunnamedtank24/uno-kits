@@ -24,7 +24,8 @@
 
 ```
 lib/video/
-├── video.h            入口：播放器 + output/selected.h
+├── video.h            入口：播放器 + asset.h + output/selected.h
+├── asset.h            ANIMATION(路徑, 選項) 巨集：編譯前自動轉換（tools/assets.py）
 ├── decoder.h          Decoder<Screen>：幀格式，畫一幀；HeapPalette：執行時配置的調色盤
 ├── flash_player.h     FlashPlayer<Screen>：播放 Flash 裡的幀（--target flash）
 ├── stream_player.h    StreamPlayer<Screen, Stream>：播放電腦傳來的幀（--target stream）
@@ -37,7 +38,7 @@ lib/video/
 
 | 參數 | 需要的函式 | 現成的實作 |
 |---|---|---|
-| `Screen` | `width()`、`height()`、`setWindow(x0, y0, x1, y1)`、`writeData16(color)`、`endWrite()`；型別 `BusType`，它有 `readFlash8/16`、`nowMs` | `ST7789::M130T`、`SSD1306::OLED128x64` |
+| `Screen` | 型別 `ColorFormat`；`width()`、`height()`、`setWindow(x0, y0, x1, y1)`、`writePixel(ColorFormat::Value)`、`endWrite()`；型別 `BusType`，它有 `readFlash8/16`、`nowMs` | `ST7789::M130T`、`SSD1306::OLED128x64` |
 | `Stream`（`StreamPlayer`） | `CHUNK_SIZE`（≥ 16）、`OK`、`ERROR_*`、`begin()`、`write8/16/32()`、`writePath()`、`available()`、`waitAnswer()`，和 `Answer` 類別 | `stream::Puller<Uno::UnoSerial<BAUD>, CHUNK>`（[lib/stream](../stream/README.md)） |
 | `Animation` | `output/selected.h` 裡的 struct（見 [output/README.md](output/README.md#產生的-struct)） | `animation::*` |
 
@@ -67,7 +68,7 @@ lib/video/
 | `positionMs()`、`frame()`、`durationMs()`、`frameCount()` | 回傳目前位置、目前幀、總長、總幀數 |
 | `drawnCount()`、`error()` | 回傳畫了幾幀、錯誤代碼 |
 
-- 控制指令（`play`、`seek`…）立刻送出，等電腦回答才返回（最多 1 秒），回傳 true 表示電腦收到了。
+- 控制指令（`play`、`seek`…）立刻送出，等電腦回答才回來（最多 1 秒），回傳 true 表示電腦收到了。
 
 | `error()` | 原因 |
 |---|---|
@@ -81,6 +82,22 @@ lib/video/
 | `ERROR_TOO_BIG`（7） | 放不下螢幕（或放大後一列超過 120 點） |
 
 前五個跟 [lib/stream](../stream/INTERFACE.md#函式) 的一樣，image、audio 也是同樣的數字。
+
+
+### Decoder、HeapPalette（寫新的來源時用）
+
+`FlashPlayer`、`StreamPlayer` 負責時間和讀資料，畫一幀在 `Decoder`；要從別的地方讀幀，寫一個有 `uint8_t read8()` 的 Reader 交給它：
+
+| 函式 | 說明 |
+|---|---|
+| `Decoder(screen)` | 建構：畫在哪個螢幕 |
+| `setArea(x, y, width, height, scaleX, scaleY)` | 位置、大小、放大倍數；放不下螢幕時回傳 false（之後什麼都不畫） |
+| `setColorMode(colorMode)` | `COLORS_16` / `256` / `565` |
+| `setColor(index, rgb565)` | 16 色：一個一個設定調色盤（換成螢幕的格式） |
+| `setFlashPalette(palette)`、`setRamPalette(colors)` | 256 色：Flash 裡的 RGB565，或已經是螢幕格式的 RAM 調色盤（例如 `HeapPalette`，畫幀的期間不能釋放） |
+| `drawFrame(reader)` | 讀一幀並畫出來；資料壞了（窗口在動畫外面）回傳 false |
+| `lastDelay()`、`lastType()` | 剛畫的那一幀要停多久（ms）、I / P 幀 |
+| `HeapPalette<Color>` | 跟 image 的一樣：`take(count)`、`release()`、`colors()`，物件消失時自動放掉 |
 
 ## 參數
 

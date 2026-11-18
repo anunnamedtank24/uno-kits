@@ -81,7 +81,7 @@ using ScreenColor = color::BW<BW_THRESHOLD>;       // the OLED: dots on / off
 using Screen = graphics::Canvas<SSD1306::OLED128x64<Bus, ScreenColor>>;
 Screen screen;
 
-constexpr uint16_t ON = 1;
+constexpr ScreenColor::Value ON = ScreenColor::ON;     // a lit pixel
 constexpr int16_t WIDTH = 128;
 constexpr int16_t HEIGHT = 64;
 

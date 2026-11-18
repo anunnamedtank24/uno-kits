@@ -41,8 +41,8 @@ using StreamLink = stream::Puller<Link, STREAM_CHUNK>;   // asks stream.py for f
 using BigPrintable = font::menlo_height_23_first_32_last_126_default_63;  // 8 x 23, ASCII 32 ~ 126
 Screen screen;
 
-constexpr uint16_t ON = 1;
-constexpr uint16_t OFF = 0;
+constexpr ScreenColor::Value ON = ScreenColor::ON;     // a lit pixel
+constexpr ScreenColor::Value OFF = ScreenColor::OFF;   // a dark pixel
 
 // two lines of the 23 px font
 constexpr int16_t LINE_1 = 6;
