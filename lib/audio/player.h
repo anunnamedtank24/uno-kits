@@ -42,9 +42,9 @@ namespace audio {
         // notes: a flash array of count pairs { hz, ms } (see note.h); repeat: from the start again
         inline void play(const uint16_t *notes, uint16_t count, bool repeat = false);
 
-        // a melody of output/selected.h (source/convert.py), --sound passive or active, --target uno:
-        // play<melody::ode_to_joy_uno_passive_medium>()
-        // (--sound pcm: audio::SamplePlayer; --target mac only: audio::StreamPlayer)
+        // a melody of output/selected.h (source/convert.py), --sound passive or active, --target flash:
+        // play<melody::ode_to_joy_flash_passive_medium>()
+        // (--sound pcm: audio::SamplePlayer; --target stream only: audio::StreamPlayer)
         template <class Melody>
         inline void play(bool repeat = false);
 
@@ -223,8 +223,8 @@ namespace audio {
     inline void Player<Sound, GAP_MS>::play(bool repeat) {
         static_assert(Melody::kind != KIND_PCM,
                       "audio::Player: a PCM sound (--sound pcm) is played by audio::SamplePlayer");
-        static_assert(Melody::target & TARGET_UNO,
-                      "audio::Player: made with --target mac only (no data on the board): use audio::StreamPlayer");
+        static_assert(Melody::target & TARGET_FLASH,
+                      "audio::Player: made with --target stream only (no data on the board): use audio::StreamPlayer");
         static_assert(Melody::count <= 65535, "audio::Player: at most 65535 steps");
         static_assert(warn::PitchLost<(Melody::kind == KIND_NOTES && !Sound::HAS_PITCH)>::ok, "");
         play(Melody::getNotes(), (uint16_t)Melody::count, Melody::encoding, Melody::rhythmHz, repeat);

@@ -3,28 +3,41 @@
 
 #include <stdint.h>
 #include "format.h"
-#include "stream_link.h"
 
 namespace audio {
-    // plays notes or a rhythm (--sound passive / active) sent by the computer (lib/audio/source/stream.py),
+    // plays notes or a rhythm (--sound passive / active) sent by the computer (lib/stream/source/stream.py),
     // so a melody of any length takes no flash; open it, then call update() every loop
     //
-    // Sound: as for Player (HAS_PITCH, init, start, stop, nowMs, readFlash16), plus
-    //   uint8_t readFlash8(const uint8_t *)   reads the path
-    // Link: see stream_link.h (Uno::UnoSerial)
-    // CHUNK: bytes asked for at a time (RAM); a piece is pulled when a step needs it (at most ~1 ms of waiting)
+    // Sound: as for Player (HAS_PITCH, init, start, stop, nowMs, readFlash16)
+    // Stream: the link to stream.py (lib/stream: stream::Puller<Uno::UnoSerial<BAUD>, CHUNK>, CHUNK 4 ~ 255:
+    //   bytes asked for at a time; a piece is pulled when a step needs it, at most ~1 ms of waiting),
+    //   a struct providing CHUNK_SIZE, OK, ERROR_NOT_FOUND ~ ERROR_BROKEN, begin(), write8(), writePath(),
+    //   waitAnswer(), and a class Answer: begin(), read8(), read16(), failed()
     //
     // GAP_MS: as for Player
-    template <class Sound, class Link, uint8_t CHUNK = 32, uint8_t GAP_MS = 20>
+    //
+    // protocol (after Stream's own, see lib/stream/puller.h):
+    //   board: 'A', CHUNK, path length, path
+    //   answer: 'H', kind, encoding, rate (uint16), count (uint32), rhythmHz (uint16), data size (uint32), data
+    //           or 'E', code, message length, message
+    template <class Sound, class Stream, uint8_t GAP_MS = 20>
     class StreamPlayer {
     public:
-        static_assert(CHUNK >= 4, "audio::StreamPlayer: CHUNK must be 4 ~ 255");
+        static_assert(Stream::CHUNK_SIZE >= 4, "audio::StreamPlayer: the Stream's CHUNK must be 4 ~ 255");
+
+        // results of open() and error(): Stream's
+        static constexpr uint8_t OK = Stream::OK;
+        static constexpr uint8_t ERROR_NOT_FOUND = Stream::ERROR_NOT_FOUND;
+        static constexpr uint8_t ERROR_UNREADABLE = Stream::ERROR_UNREADABLE;
+        static constexpr uint8_t ERROR_WRONG_KIND = Stream::ERROR_NOT_STREAMABLE;   // a PCM sound
+        static constexpr uint8_t ERROR_NO_ANSWER = Stream::ERROR_NO_ANSWER;
+        static constexpr uint8_t ERROR_BROKEN = Stream::ERROR_BROKEN;
 
         // silent
         inline void init();
 
-        // asks stream.py for a melody (any --target; --target mac is made for it), waits for the answer
-        // (at most 3 s) and starts it; returns STREAM_OK or an error (stream_link.h)
+        // asks stream.py for a melody (any --target; --target stream is made for it), waits for the answer
+        // (at most 3 s) and starts it; returns OK or an error
         template <class Melody>
         inline uint8_t open(bool repeat = false);
 
@@ -44,16 +57,14 @@ namespace audio {
         // the step playing now: 0 = first
         inline uint32_t noteIndex() const;
 
-        // the last error (STREAM_OK if none): a broken stream stops the melody
+        // the last error (OK if none): a broken stream stops the melody
         inline uint8_t error() const;
 
     private:
-        using Stream = StreamLink<Link>;
-
         const char *_path = nullptr;
         bool _repeat = false;
         bool _playing = false;
-        uint8_t _error = STREAM_OK;
+        uint8_t _error = OK;
         uint8_t _encoding = NOTES_HZ_MS;
         uint16_t _rhythmHz = 0;
         uint32_t _count = 0;
@@ -63,14 +74,9 @@ namespace audio {
         uint16_t _stepMs = 0;
         uint16_t _soundMs = 0;
 
-        uint8_t _buffer[CHUNK];
-        uint8_t _length = 0;
-        uint8_t _position = 0;
-        bool _failed = false;
+        typename Stream::Answer _answer;
 
         inline uint8_t request();
-        inline uint8_t read8();
-        inline uint16_t read16();
         inline bool startStep();
         inline void sound(uint16_t hz);
         inline void silence();
@@ -79,8 +85,8 @@ namespace audio {
 
     // ================= definitions =================
 
-    template <class Sound, class Link, uint8_t CHUNK, uint8_t GAP_MS>
-    inline void StreamPlayer<Sound, Link, CHUNK, GAP_MS>::setVolume(uint8_t volume) {
+    template <class Sound, class Stream, uint8_t GAP_MS>
+    inline void StreamPlayer<Sound, Stream, GAP_MS>::setVolume(uint8_t volume) {
         Sound::setVolume(volume);
         // from 0 back up in the middle of a note: the Sound had stopped, start it again
         if (volume != 0 && _hz != 0) {
@@ -88,57 +94,61 @@ namespace audio {
         }
     }
 
-    template <class Sound, class Link, uint8_t CHUNK, uint8_t GAP_MS>
-    inline uint8_t StreamPlayer<Sound, Link, CHUNK, GAP_MS>::volume() const {
+    template <class Sound, class Stream, uint8_t GAP_MS>
+    inline uint8_t StreamPlayer<Sound, Stream, GAP_MS>::volume() const {
         return Sound::volume();
     }
 
-    template <class Sound, class Link, uint8_t CHUNK, uint8_t GAP_MS>
-    inline void StreamPlayer<Sound, Link, CHUNK, GAP_MS>::init() {
+    template <class Sound, class Stream, uint8_t GAP_MS>
+    inline void StreamPlayer<Sound, Stream, GAP_MS>::init() {
         Sound::init();
         _playing = false;
         _hz = 0;
     }
 
-    template <class Sound, class Link, uint8_t CHUNK, uint8_t GAP_MS>
+    template <class Sound, class Stream, uint8_t GAP_MS>
     template <class Melody>
-    inline uint8_t StreamPlayer<Sound, Link, CHUNK, GAP_MS>::open(bool repeat) {
+    inline uint8_t StreamPlayer<Sound, Stream, GAP_MS>::open(bool repeat) {
         static_assert(Melody::kind != KIND_PCM,
                       "audio::StreamPlayer: a PCM sound (--sound pcm) is played by audio::StreamSamplePlayer");
-        static_assert(warn::NotForMac<!(Melody::target & TARGET_MAC)>::ok, "");
+        static_assert(warn::NotForStream<!(Melody::target & TARGET_STREAM)>::ok, "");
         static_assert(warn::PitchLost<(Melody::kind == KIND_NOTES && !Sound::HAS_PITCH)>::ok, "");
         _path = Melody::getPath();
         _repeat = repeat;
         return request();
     }
 
-    template <class Sound, class Link, uint8_t CHUNK, uint8_t GAP_MS>
-    inline uint8_t StreamPlayer<Sound, Link, CHUNK, GAP_MS>::request() {
+    template <class Sound, class Stream, uint8_t GAP_MS>
+    inline uint8_t StreamPlayer<Sound, Stream, GAP_MS>::request() {
         silence();
         _playing = false;
-        _error = STREAM_OK;
-        _failed = false;
-        _length = 0;
-        _position = 0;
-        if (_path == nullptr || !Stream::template request<&Sound::readFlash8>(_path, CHUNK)) {
+        _error = OK;
+        if (_path == nullptr) {
             _error = ERROR_NO_ANSWER;
             return _error;
         }
-        uint8_t answer = read8();
-        if (answer == 'E') {
-            uint8_t code = read8();
-            _error = _failed ? ERROR_BROKEN : code;
+        Stream::begin();
+        Stream::write8('A');
+        Stream::write8(Stream::CHUNK_SIZE);
+        Stream::writePath(_path);
+        if (!Stream::waitAnswer()) {
+            _error = ERROR_NO_ANSWER;
             return _error;
         }
-        uint8_t kind = read8();
-        _encoding = read8();
-        read16();                           // rate: PCM only
-        _count = read16();
-        _count |= (uint32_t)read16() << 16;
-        _rhythmHz = read16();
-        read16();                           // data size: the computer knows where it ends
-        read16();
-        if (_failed || answer != 'H' || _encoding > RHYTHM_MS) {
+        _answer.begin();
+        uint8_t answer = _answer.read8();
+        if (answer == 'E') {
+            uint8_t code = _answer.read8();
+            _error = _answer.failed() ? ERROR_BROKEN : code;
+            return _error;
+        }
+        uint8_t kind = _answer.read8();
+        _encoding = _answer.read8();
+        _answer.read16();                   // rate: PCM only
+        _count = _answer.read32();
+        _rhythmHz = _answer.read16();
+        _answer.read32();                   // data size: the computer knows where it ends
+        if (_answer.failed() || answer != 'H' || _encoding > RHYTHM_MS) {
             _error = ERROR_BROKEN;
             return _error;
         }
@@ -147,7 +157,7 @@ namespace audio {
             return _error;
         }
         if (_count == 0) {
-            return STREAM_OK;
+            return OK;
         }
         _index = 0;
         _playing = true;
@@ -155,11 +165,11 @@ namespace audio {
         if (!startStep()) {
             return _error;
         }
-        return STREAM_OK;
+        return OK;
     }
 
-    template <class Sound, class Link, uint8_t CHUNK, uint8_t GAP_MS>
-    inline void StreamPlayer<Sound, Link, CHUNK, GAP_MS>::update() {
+    template <class Sound, class Stream, uint8_t GAP_MS>
+    inline void StreamPlayer<Sound, Stream, GAP_MS>::update() {
         if (!_playing) {
             return;
         }
@@ -183,68 +193,37 @@ namespace audio {
         startStep();
     }
 
-    template <class Sound, class Link, uint8_t CHUNK, uint8_t GAP_MS>
-    inline void StreamPlayer<Sound, Link, CHUNK, GAP_MS>::stop() {
+    template <class Sound, class Stream, uint8_t GAP_MS>
+    inline void StreamPlayer<Sound, Stream, GAP_MS>::stop() {
         _playing = false;
         silence();
     }
 
-    template <class Sound, class Link, uint8_t CHUNK, uint8_t GAP_MS>
-    inline bool StreamPlayer<Sound, Link, CHUNK, GAP_MS>::isPlaying() const {
+    template <class Sound, class Stream, uint8_t GAP_MS>
+    inline bool StreamPlayer<Sound, Stream, GAP_MS>::isPlaying() const {
         return _playing;
     }
 
-    template <class Sound, class Link, uint8_t CHUNK, uint8_t GAP_MS>
-    inline uint16_t StreamPlayer<Sound, Link, CHUNK, GAP_MS>::currentHz() const {
+    template <class Sound, class Stream, uint8_t GAP_MS>
+    inline uint16_t StreamPlayer<Sound, Stream, GAP_MS>::currentHz() const {
         return _hz;
     }
 
-    template <class Sound, class Link, uint8_t CHUNK, uint8_t GAP_MS>
-    inline uint32_t StreamPlayer<Sound, Link, CHUNK, GAP_MS>::noteIndex() const {
+    template <class Sound, class Stream, uint8_t GAP_MS>
+    inline uint32_t StreamPlayer<Sound, Stream, GAP_MS>::noteIndex() const {
         return _index;
     }
 
-    template <class Sound, class Link, uint8_t CHUNK, uint8_t GAP_MS>
-    inline uint8_t StreamPlayer<Sound, Link, CHUNK, GAP_MS>::error() const {
+    template <class Sound, class Stream, uint8_t GAP_MS>
+    inline uint8_t StreamPlayer<Sound, Stream, GAP_MS>::error() const {
         return _error;
     }
 
-    // the next byte of the answer, pulling a piece when the buffer is used up; 0 after a failure
-    template <class Sound, class Link, uint8_t CHUNK, uint8_t GAP_MS>
-    inline uint8_t StreamPlayer<Sound, Link, CHUNK, GAP_MS>::read8() {
-        if (_failed) {
-            return 0;
-        }
-        if (_position == _length) {
-            uint8_t length = 0;
-            if (!Stream::pullLength(CHUNK, length)) {
-                _failed = true;
-                return 0;
-            }
-            for (uint8_t i = 0; i < length; i++) {
-                if (!Stream::receive(_buffer[i])) {
-                    _failed = true;
-                    return 0;
-                }
-            }
-            _length = length;
-            _position = 0;
-        }
-        return _buffer[_position++];
-    }
-
-    // little-endian
-    template <class Sound, class Link, uint8_t CHUNK, uint8_t GAP_MS>
-    inline uint16_t StreamPlayer<Sound, Link, CHUNK, GAP_MS>::read16() {
-        uint16_t value = read8();
-        return (uint16_t)(value | ((uint16_t)read8() << 8));
-    }
-
-    template <class Sound, class Link, uint8_t CHUNK, uint8_t GAP_MS>
-    inline bool StreamPlayer<Sound, Link, CHUNK, GAP_MS>::startStep() {
-        uint16_t first = read16();
-        uint16_t second = _encoding == NOTES_HZ_MS ? read16() : 0;
-        if (_failed) {
+    template <class Sound, class Stream, uint8_t GAP_MS>
+    inline bool StreamPlayer<Sound, Stream, GAP_MS>::startStep() {
+        uint16_t first = _answer.read16();
+        uint16_t second = _encoding == NOTES_HZ_MS ? _answer.read16() : 0;
+        if (_answer.failed()) {
             fail(ERROR_BROKEN);
             return false;
         }
@@ -260,22 +239,22 @@ namespace audio {
         return true;
     }
 
-    template <class Sound, class Link, uint8_t CHUNK, uint8_t GAP_MS>
-    inline void StreamPlayer<Sound, Link, CHUNK, GAP_MS>::sound(uint16_t hz) {
+    template <class Sound, class Stream, uint8_t GAP_MS>
+    inline void StreamPlayer<Sound, Stream, GAP_MS>::sound(uint16_t hz) {
         if (hz != _hz) {
             Sound::start(hz);
             _hz = hz;
         }
     }
 
-    template <class Sound, class Link, uint8_t CHUNK, uint8_t GAP_MS>
-    inline void StreamPlayer<Sound, Link, CHUNK, GAP_MS>::silence() {
+    template <class Sound, class Stream, uint8_t GAP_MS>
+    inline void StreamPlayer<Sound, Stream, GAP_MS>::silence() {
         Sound::stop();
         _hz = 0;
     }
 
-    template <class Sound, class Link, uint8_t CHUNK, uint8_t GAP_MS>
-    inline void StreamPlayer<Sound, Link, CHUNK, GAP_MS>::fail(uint8_t error) {
+    template <class Sound, class Stream, uint8_t GAP_MS>
+    inline void StreamPlayer<Sound, Stream, GAP_MS>::fail(uint8_t error) {
         _error = error;
         stop();
     }

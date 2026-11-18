@@ -1,0 +1,121 @@
+#include <Arduino.h>
+#include "Uno_serial.h"
+#include "Uno_pin.h"
+#include "buzzer.h"
+#include "audio.h"
+
+// UNO + active buzzer (two legs, it beeps by itself when powered): every function of audio::Player
+// what each test should sound like goes to the USB serial:
+//   pio device monitor        (platformio.ini: monitor_speed = BAUD)
+//
+// tests run one after another, PAUSE_MS apart, then start over
+// silent all the time: + and - swapped (or it is a passive buzzer: try tests/4_passive_buzzer)
+
+// ---------- settings ----------
+
+// wiring: active buzzer - -> GND
+constexpr uint8_t BUZZER_PIN = 8;           // + (the longer leg, or the side marked +)
+// a 3-pin module (VCC, I/O, GND): I/O -> BUZZER_PIN, VCC -> 5V, and buzzer::ActiveBuzzer3Pins<BuzzerPin> below
+constexpr uint32_t BAUD = 1000000;          // USB serial: the same as monitor_speed in platformio.ini
+
+constexpr uint8_t GAP_MS = 20;              // silence between two notes of a melody
+constexpr uint16_t PAUSE_MS = 1000;         // between two tests
+
+// ---------- parts ----------
+
+using BuzzerPin = Uno::UnoOutputPin<BUZZER_PIN>;
+using Link = Uno::UnoSerial<BAUD>;
+using Beeper = buzzer::ActiveBuzzer2Pins<BuzzerPin>;
+audio::Player<Beeper, GAP_MS> beeper;
+
+// update() until the sound is over: the player itself never waits
+void waitDone() {
+    while (beeper.isPlaying()) {
+        beeper.update();
+    }
+}
+
+// ---------- tests ----------
+
+// 0. tone() / stop(): one long tone, 1 s (an active buzzer ignores the hz, any > 0 is on)
+void testOnOff() {
+    Link::printText("on 1 s");
+    beeper.tone(Beeper::HZ);
+    delay(1000);
+    beeper.stop();
+}
+
+// 1. beep(): one short beep, 100 ms
+void testBeep() {
+    Link::printText("one beep, 100 ms");
+    beeper.beep(Beeper::HZ, 100);
+    waitDone();
+}
+
+// 2. beeps(): 3 beeps, then 8 fast ones (the fast ones must still be 8, not a buzz)
+void testBeeps() {
+    Link::printText("3 beeps, then 8 fast ones");
+    beeper.beeps(Beeper::HZ, 3, 150, 150);
+    waitDone();
+    delay(400);
+    beeper.beeps(Beeper::HZ, 8, 30, 40);
+    waitDone();
+}
+
+// 3. a melody on an active buzzer: only the rhythm (Morse SOS: 3 short, 3 long, 3 short)
+void testSos() {
+    Link::printText("SOS: ... --- ...");
+    beeper.play<melody::sos_flash_active_medium>();
+    waitDone();
+}
+
+// 4. another rhythm: Twinkle Twinkle at one pitch (14 notes, the 7th and the last longer)
+void testRhythm() {
+    Link::printText("Twinkle Twinkle, rhythm only (one pitch)");
+    beeper.play<melody::twinkle_star_flash_active_medium>();
+    waitDone();
+}
+
+// 5. the player does not wait: count loop() rounds during a 500 ms beep
+//    expected: thousands of rounds (the board is free while it beeps)
+void testNoWait() {
+    Link::printText("500 ms beep, loops meanwhile: ");
+    beeper.beep(Beeper::HZ, 500);
+    uint32_t rounds = 0;
+    while (beeper.isPlaying()) {
+        beeper.update();
+        rounds++;
+    }
+    Link::printNumber(rounds);
+}
+
+void (*const tests[])() = {
+    testOnOff,
+    testBeep,
+    testBeeps,
+    testSos,
+    testRhythm,
+    testNoWait,
+};
+constexpr uint8_t TEST_COUNT = sizeof(tests) / sizeof(tests[0]);
+
+// ---------- main ----------
+
+void setup() {
+    Link::init();
+    beeper.init();
+    Link::printText("\r\nactive buzzer (2 pins) on ");
+    Link::printPin(BUZZER_PIN);
+    Link::printText("\r\n");
+}
+
+void loop() {
+    for (uint8_t i = 0; i < TEST_COUNT; i++) {
+        Link::printText("test ");
+        Link::printNumber(i);
+        Link::printText(": ");
+        tests[i]();
+        Link::printText("\r\n");
+        delay(PAUSE_MS);
+    }
+}

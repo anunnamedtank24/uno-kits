@@ -12,15 +12,20 @@ namespace SSD1306 {
     // drawing only changes the copy; display() sends the changed parts:
     // per page, the columns from the first to the last changed one
     //
-    // color: 0 = dot off, anything else = dot on (e.g. color::RGB565::BLACK / WHITE)
+    // ColorFormat: 1 bit (color::BW<THRESHOLD>, or any struct with Value and BITS = 1): 0 = dot off, else on;
+    // graphics, font, image and video then draw with it (a picture's colors go through BW's brightness threshold)
     // fillWindow / writeWindow are clipped to the panel, so graphics::Shapes / Text work on top
-    // setWindow / writeData16 / endWrite stream pixels like an ST7789 window (for video::FlashPlayer):
+    // setWindow / writePixel / endWrite stream pixels like an ST7789 window (for video::FlashPlayer):
     // here they fill the RAM copy, pixels off the panel are dropped
     //
     // needs horizontal addressing (setAddressingMode(ADDRESSING_HORIZONTAL)): the modules' init() sets it
-    template <class Bus, uint8_t WIDTH, uint8_t HEIGHT>
+    template <class Bus, class ColorFormat_, uint8_t WIDTH, uint8_t HEIGHT>
     class Frame : public Datasheet<Bus> {
     public:
+        using ColorFormat = ColorFormat_;
+        using Color = typename ColorFormat::Value;
+        static_assert(ColorFormat::BITS == 1, "SSD1306::Frame: the panel is black / white: the ColorFormat must be 1 bit (color::BW<>)");
+
         static_assert(WIDTH >= 1 && WIDTH <= 128, "SSD1306::Frame: WIDTH must be 1 ~ 128");
         static_assert(HEIGHT >= 8 && HEIGHT <= 64 && HEIGHT % 8 == 0, "SSD1306::Frame: HEIGHT must be 8 ~ 64, a multiple of 8");
 
@@ -35,10 +40,10 @@ namespace SSD1306 {
         // ---------- drawing (the RAM copy only) ----------
 
         // solid color, clipped to the panel; w <= 0 or h <= 0 draws nothing
-        inline void fillWindow(int16_t x, int16_t y, int16_t w, int16_t h, uint16_t color);
+        inline void fillWindow(int16_t x, int16_t y, int16_t w, int16_t h, Color color);
 
         // color list (w * h colors, row by row), clipped: the colors of cut parts are skipped
-        inline void writeWindow(int16_t x, int16_t y, int16_t w, int16_t h, const uint16_t *colors);
+        inline void writeWindow(int16_t x, int16_t y, int16_t w, int16_t h, const Color *colors);
 
         // false outside the panel
         inline bool getPixel(int16_t x, int16_t y) const;
@@ -48,9 +53,9 @@ namespace SSD1306 {
 
         // ---------- streaming (the same calls as ST7789::Window, e.g. for video players) ----------
 
-        // window (inclusive): the next writeData16() calls fill it row by row, from the top left
+        // window (inclusive): the next writePixel() calls fill it row by row, from the top left
         inline void setWindow(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1);
-        inline void writeData16(uint16_t color);
+        inline void writePixel(Color color);
 
         // nothing to finish: the pixels are already in the RAM copy (display() sends them)
         inline void endWrite();
@@ -86,18 +91,18 @@ namespace SSD1306 {
 
     // ================= definitions =================
 
-    template <class Bus, uint8_t WIDTH, uint8_t HEIGHT>
-    inline uint16_t Frame<Bus, WIDTH, HEIGHT>::width() const {
+    template <class Bus, class ColorFormat_, uint8_t WIDTH, uint8_t HEIGHT>
+    inline uint16_t Frame<Bus, ColorFormat_, WIDTH, HEIGHT>::width() const {
         return WIDTH;
     }
 
-    template <class Bus, uint8_t WIDTH, uint8_t HEIGHT>
-    inline uint16_t Frame<Bus, WIDTH, HEIGHT>::height() const {
+    template <class Bus, class ColorFormat_, uint8_t WIDTH, uint8_t HEIGHT>
+    inline uint16_t Frame<Bus, ColorFormat_, WIDTH, HEIGHT>::height() const {
         return HEIGHT;
     }
 
-    template <class Bus, uint8_t WIDTH, uint8_t HEIGHT>
-    inline void Frame<Bus, WIDTH, HEIGHT>::fillWindow(int16_t x, int16_t y, int16_t w, int16_t h, uint16_t color) {
+    template <class Bus, class ColorFormat_, uint8_t WIDTH, uint8_t HEIGHT>
+    inline void Frame<Bus, ColorFormat_, WIDTH, HEIGHT>::fillWindow(int16_t x, int16_t y, int16_t w, int16_t h, Color color) {
         if (!clip(x, y, w, h)) {
             return;
         }
@@ -120,9 +125,9 @@ namespace SSD1306 {
         }
     }
 
-    template <class Bus, uint8_t WIDTH, uint8_t HEIGHT>
-    inline void Frame<Bus, WIDTH, HEIGHT>::writeWindow(int16_t x, int16_t y, int16_t w, int16_t h,
-                                                       const uint16_t *colors) {
+    template <class Bus, class ColorFormat_, uint8_t WIDTH, uint8_t HEIGHT>
+    inline void Frame<Bus, ColorFormat_, WIDTH, HEIGHT>::writeWindow(int16_t x, int16_t y, int16_t w, int16_t h,
+                                                       const Color *colors) {
         int16_t visibleX = x;
         int16_t visibleY = y;
         int16_t visibleW = w;
@@ -132,7 +137,7 @@ namespace SSD1306 {
         }
         for (int16_t row = 0; row < visibleH; row++) {
             int16_t screenY = visibleY + row;
-            const uint16_t *line = colors + (uint32_t)(screenY - y) * w + (visibleX - x);
+            const Color *line = colors + (uint32_t)(screenY - y) * w + (visibleX - x);
             uint8_t bit = (uint8_t)(1 << (screenY & 7));
             uint8_t *bytes = _buffer + (uint16_t)(screenY >> 3) * WIDTH + visibleX;
             for (int16_t col = 0; col < visibleW; col++) {
@@ -146,24 +151,24 @@ namespace SSD1306 {
         }
     }
 
-    template <class Bus, uint8_t WIDTH, uint8_t HEIGHT>
-    inline bool Frame<Bus, WIDTH, HEIGHT>::getPixel(int16_t x, int16_t y) const {
+    template <class Bus, class ColorFormat_, uint8_t WIDTH, uint8_t HEIGHT>
+    inline bool Frame<Bus, ColorFormat_, WIDTH, HEIGHT>::getPixel(int16_t x, int16_t y) const {
         if (x < 0 || y < 0 || x >= WIDTH || y >= HEIGHT) {
             return false;
         }
         return (_buffer[(uint16_t)(y >> 3) * WIDTH + x] >> (y & 7)) & 0x01;
     }
 
-    template <class Bus, uint8_t WIDTH, uint8_t HEIGHT>
-    inline void Frame<Bus, WIDTH, HEIGHT>::clear() {
+    template <class Bus, class ColorFormat_, uint8_t WIDTH, uint8_t HEIGHT>
+    inline void Frame<Bus, ColorFormat_, WIDTH, HEIGHT>::clear() {
         for (uint16_t i = 0; i < BYTES; i++) {
             _buffer[i] = 0;
         }
         markAllDirty();
     }
 
-    template <class Bus, uint8_t WIDTH, uint8_t HEIGHT>
-    inline void Frame<Bus, WIDTH, HEIGHT>::setWindow(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1) {
+    template <class Bus, class ColorFormat_, uint8_t WIDTH, uint8_t HEIGHT>
+    inline void Frame<Bus, ColorFormat_, WIDTH, HEIGHT>::setWindow(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1) {
         _windowLeft = x0;
         _windowRight = x1;
         _cursorX = x0;
@@ -178,8 +183,8 @@ namespace SSD1306 {
         }
     }
 
-    template <class Bus, uint8_t WIDTH, uint8_t HEIGHT>
-    inline void Frame<Bus, WIDTH, HEIGHT>::writeData16(uint16_t color) {
+    template <class Bus, class ColorFormat_, uint8_t WIDTH, uint8_t HEIGHT>
+    inline void Frame<Bus, ColorFormat_, WIDTH, HEIGHT>::writePixel(Color color) {
         if (_cursorX < WIDTH && _cursorY < HEIGHT) {
             uint8_t *byte = _buffer + (uint16_t)(_cursorY >> 3) * WIDTH + _cursorX;
             uint8_t bit = (uint8_t)(1 << (_cursorY & 7));
@@ -198,12 +203,12 @@ namespace SSD1306 {
         }
     }
 
-    template <class Bus, uint8_t WIDTH, uint8_t HEIGHT>
-    inline void Frame<Bus, WIDTH, HEIGHT>::endWrite() {
+    template <class Bus, class ColorFormat_, uint8_t WIDTH, uint8_t HEIGHT>
+    inline void Frame<Bus, ColorFormat_, WIDTH, HEIGHT>::endWrite() {
     }
 
-    template <class Bus, uint8_t WIDTH, uint8_t HEIGHT>
-    inline bool Frame<Bus, WIDTH, HEIGHT>::display() {
+    template <class Bus, class ColorFormat_, uint8_t WIDTH, uint8_t HEIGHT>
+    inline bool Frame<Bus, ColorFormat_, WIDTH, HEIGHT>::display() {
         if (!_dirtyInitialized) {
             markAllDirty();
         }
@@ -231,14 +236,14 @@ namespace SSD1306 {
         return ok;
     }
 
-    template <class Bus, uint8_t WIDTH, uint8_t HEIGHT>
-    inline bool Frame<Bus, WIDTH, HEIGHT>::displayAll() {
+    template <class Bus, class ColorFormat_, uint8_t WIDTH, uint8_t HEIGHT>
+    inline bool Frame<Bus, ColorFormat_, WIDTH, HEIGHT>::displayAll() {
         markAllDirty();
         return display();
     }
 
-    template <class Bus, uint8_t WIDTH, uint8_t HEIGHT>
-    inline void Frame<Bus, WIDTH, HEIGHT>::markAllDirty() {
+    template <class Bus, class ColorFormat_, uint8_t WIDTH, uint8_t HEIGHT>
+    inline void Frame<Bus, ColorFormat_, WIDTH, HEIGHT>::markAllDirty() {
         for (uint8_t page = 0; page < PAGES; page++) {
             _dirtyStart[page] = 0;
             _dirtyEnd[page] = WIDTH - 1;
@@ -246,8 +251,8 @@ namespace SSD1306 {
         _dirtyInitialized = true;
     }
 
-    template <class Bus, uint8_t WIDTH, uint8_t HEIGHT>
-    inline void Frame<Bus, WIDTH, HEIGHT>::markDirty(uint8_t page, uint8_t start, uint8_t end) {
+    template <class Bus, class ColorFormat_, uint8_t WIDTH, uint8_t HEIGHT>
+    inline void Frame<Bus, ColorFormat_, WIDTH, HEIGHT>::markDirty(uint8_t page, uint8_t start, uint8_t end) {
         if (!_dirtyInitialized) {
             // the first display() sends everything anyway
             return;
@@ -261,8 +266,8 @@ namespace SSD1306 {
         }
     }
 
-    template <class Bus, uint8_t WIDTH, uint8_t HEIGHT>
-    inline bool Frame<Bus, WIDTH, HEIGHT>::clip(int16_t &x, int16_t &y, int16_t &w, int16_t &h) const {
+    template <class Bus, class ColorFormat_, uint8_t WIDTH, uint8_t HEIGHT>
+    inline bool Frame<Bus, ColorFormat_, WIDTH, HEIGHT>::clip(int16_t &x, int16_t &y, int16_t &w, int16_t &h) const {
         if (w <= 0 || h <= 0) {
             return false;
         }

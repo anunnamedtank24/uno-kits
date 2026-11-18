@@ -1,0 +1,160 @@
+#include <Arduino.h>
+#include "Uno_ST7789.h"
+#include "Uno_serial.h"
+#include "ST7789.h"
+#include "graphics.h"
+#include "color.h"
+#include "font.h"
+#include "image.h"
+#include "stream.h"
+
+// UNO + M130T (1.3" 240x240, no CS): color pictures of lib/image, one test after another
+// test 5 needs lib/stream/source/stream.py (python lib/stream/source/stream.py)
+
+// ---------- settings ----------
+
+// wiring: M130T VCC -> 3.3V, GND -> GND, SCL -> D13, SDA -> D11 (hardware SPI: fixed)
+constexpr uint8_t DC_PIN = 8;               // DC
+constexpr uint8_t RES_PIN = 10;             // RES; Uno::NONE: not connected (software reset)
+constexpr uint8_t CS_PIN = Uno::NONE;       // CS: the M130T has none
+constexpr uint8_t BLK_PIN = 9;              // BLK (backlight); Uno::NONE: tied to VCC
+constexpr uint32_t BAUD = 1000000;          // USB serial for stream.py (its --baud)
+
+constexpr uint32_t ONLY_TESTS = 0;          // 0: every test; bit i = only test i, e.g. (1UL << 0) | (1UL << 5)
+constexpr uint16_t TITLE_MS = 800;          // "test n" before each test
+constexpr uint16_t HOLD_MS = 2000;          // the picture stays this long
+constexpr uint8_t STREAM_CHUNK = 64;        // test 5: bytes per request to stream.py
+
+// ---------- parts ----------
+
+using Bus = Uno::UnoST7789<DC_PIN, RES_PIN, CS_PIN, BLK_PIN>;
+using ScreenColor = color::RGB565;                 // M130T: 16 bit (RGB888 / RGB666: 18 bit, RGB444: 12 bit)
+using Screen = graphics::Canvas<ST7789::M130T<Bus, ScreenColor>>;
+using Link = Uno::UnoSerial<BAUD>;
+using StreamLink = stream::Puller<Link, STREAM_CHUNK>;   // asks stream.py for files
+using RGB565 = color::RGB565;
+using SmallPrintable = font::menlo_height_23_first_32_last_126_default_63;  // 8 x 23, ASCII 32 ~ 126
+Screen screen;
+
+void clear() {
+    screen.drawFilledScreen(RGB565::BLACK);
+}
+
+// the time a draw took, under the picture
+void showMs(int16_t y, uint32_t ms) {
+    screen.drawTexts(4, y, RGB565::WHITE, ms, " ms");
+}
+
+// ---------- tests ----------
+
+// 0. palette 16, scale 2: 60 x 40 stored, 120 x 80 on the screen (from sunset.jpg)
+//    expected: a sunset (sky from purple to orange, a yellow sun, three dark hills), flat color bands
+void testPalette16() {
+    image::FlashImage<Screen> pictures(screen);
+    uint32_t start = millis();
+    pictures.draw<picture::sunset_flash_120x80_palette_16>(60, 40);
+    showMs(140, millis() - start);
+}
+
+// 1. palette 256: 80 x 53, no scale (from sunset.webp)
+//    expected: the same sunset, smaller, smoother sky than test 0
+void testPalette256() {
+    image::FlashImage<Screen> pictures(screen);
+    uint32_t start = millis();
+    pictures.draw<picture::sunset_flash_80x53_palette_256>(80, 60);
+    showMs(140, millis() - start);
+}
+
+// 2. palette 565 (full color): 60 x 40 (from sunset.png)
+//    expected: the same sunset, small, every pixel its own color
+void testPalette565() {
+    image::FlashImage<Screen> pictures(screen);
+    uint32_t start = millis();
+    pictures.draw<picture::sunset_flash_60x40_palette_565>(90, 70);
+    showMs(140, millis() - start);
+}
+
+// 3. palette 2 (black / white): the logo (transparent png) and a dithered sunset
+//    expected: a white ring with a lightning bolt and bars; below it a dotted sunset
+void testPalette2() {
+    image::FlashImage<Screen> pictures(screen);
+    pictures.draw<picture::logo_flash_stream_128x64_palette_2>(56, 20);
+    pictures.draw<picture::sunset_flash_stream_96x64_palette_2>(72, 120);
+}
+
+// 4. clipping: the same picture partly off every edge
+//    expected: four pieces of the sunset in the corners, nothing wraps around
+void testClip() {
+    image::FlashImage<Screen> pictures(screen);
+    pictures.draw<picture::sunset_flash_120x80_palette_16>(-60, -40);
+    pictures.draw<picture::sunset_flash_120x80_palette_16>(180, -40);
+    pictures.draw<picture::sunset_flash_120x80_palette_16>(-60, 200);
+    pictures.draw<picture::sunset_flash_120x80_palette_16>(180, 200);
+}
+
+// 5. image::StreamImage: 240 x 240 full color from the computer (sunset.heic, --target stream)
+//    expected (stream.py running): the whole screen a sunset, then the time at the top left;
+//    without stream.py: "error 4" (no answer) after 3 s
+void testStream() {
+    image::StreamImage<Screen, StreamLink> pictures(screen);
+    uint32_t start = millis();
+    uint8_t result = pictures.draw<picture::sunset_stream_240x240_palette_565>(0, 0);
+    uint32_t elapsed = millis() - start;
+    if (result == pictures.OK) {
+        showMs(4, elapsed);
+    } else {
+        screen.drawTexts(4, 100, RGB565::RED, "error ", result);
+    }
+}
+
+void (*const tests[])() = {
+    testPalette16,
+    testPalette256,
+    testPalette565,
+    testPalette2,
+    testClip,
+    testStream,
+};
+
+using Test = void (*)();
+
+static_assert(ONLY_TESTS < (1UL << (sizeof(tests) / sizeof(tests[0]))), "ONLY_TESTS: a bit for a test that is not there");
+
+// the test's index in tests[], -1 if it is not there
+int16_t testIndex(Test test) {
+    for (uint8_t i = 0; i < sizeof(tests) / sizeof(tests[0]); i++) {
+        if (tests[i] == test) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+// "test {n}" in the middle of the screen for TITLE_MS
+void showTitle(Test test) {
+    const int16_t x = 88;
+    const int16_t y = (240 - 23) / 2;
+    int16_t end = screen.drawTexts(x, y, RGB565::WHITE, "test ", testIndex(test));
+    delay(TITLE_MS);
+    screen.drawFilledRectSize(x, y, end - x, screen.fontHeight(), RGB565::BLACK);
+}
+
+// ---------- main ----------
+
+void setup() {
+    screen.init();
+    clear();
+    screen.setFont<SmallPrintable>();
+}
+
+void loop() {
+    for (uint8_t i = 0; i < sizeof(tests) / sizeof(tests[0]); i++) {
+        if (ONLY_TESTS != 0 && !(ONLY_TESTS & (1UL << i))) {
+            continue;
+        }
+        showTitle(tests[i]);
+        tests[i]();
+        delay(HOLD_MS);
+        clear();
+    }
+}

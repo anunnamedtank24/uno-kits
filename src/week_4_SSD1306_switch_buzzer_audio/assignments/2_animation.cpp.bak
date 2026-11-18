@@ -1,0 +1,58 @@
+#include <Arduino.h>
+#include "Uno_I2C.h"
+#include "SSD1306.h"
+#include "video.h"
+#include "color.h"
+
+// UNO + 128x64 I2C OLED: an animation (lib/video), looping
+//
+// the animation is black / white (the OLED has no colors), made by lib/video/source/convert.py:
+//   python source/convert.py assets/orbit.gif output --target flash --fit 64x64 --mono --keyframe 8
+// video::FlashPlayer draws a frame through setWindow / writeData16 (like on the ST7789);
+// on the OLED those fill its RAM copy, then display() sends only the columns that changed
+
+// ---------- settings ----------
+
+// wiring: OLED VCC -> 5V, GND -> GND
+constexpr uint8_t SCL_PIN = 13;             // SCL: any pin (I2C made by the program)
+constexpr uint8_t SDA_PIN = 11;             // SDA: any pin
+constexpr bool I2C_INTERNAL_PULLUP = true;  // the UNO's ~35 kΩ pull-ups as well (the modules have their own)
+constexpr uint16_t I2C_KHZ = 400;           // 1 ~ 400 (really ~160): lower it if the picture breaks up
+constexpr bool FLIP = false;                // true: the OLED turned 180° (pins at the bottom)
+
+constexpr int16_t X = 32;                   // the animation's top left: (128 - 64) / 2 = the middle
+constexpr int16_t Y = 0;
+constexpr uint8_t BW_THRESHOLD = 128;       // a picture's color lights a dot from this brightness on (0 ~ 255)
+
+// ---------- parts ----------
+
+using Bus = Uno::UnoI2C<SCL_PIN, SDA_PIN, I2C_INTERNAL_PULLUP, I2C_KHZ>;
+using ScreenColor = color::BW<BW_THRESHOLD>;       // the OLED: dots on / off
+using Screen = SSD1306::OLED128x64<Bus, ScreenColor>;
+using Orbit = animation::orbit_flash_64x64_palette_16_mono; // 64 x 64, 24 frames, 1440 ms
+Screen screen;
+video::FlashPlayer<Screen> player(screen);
+
+// nothing answered at 0x3C, or the animation does not fit: stop
+void halt() {
+    while (true) {
+    }
+}
+
+// ---------- main ----------
+
+void setup() {
+    if (!screen.init(FLIP)) {
+        halt();
+    }
+    if (!player.start<Orbit>(X, Y)) {
+        halt();
+    }
+}
+
+void loop() {
+    // a frame is due: drawn into the RAM copy, then sent
+    if (player.update()) {
+        screen.display();
+    }
+}

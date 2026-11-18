@@ -1,0 +1,153 @@
+#include <Arduino.h>
+#include "Uno_serial.h"
+#include "Uno_pin.h"
+#include "Uno_background.h"
+#include "L298N.h"
+
+// UNO + L298N + 2 DC motors: the car runs in the background (Uno::UnoBackground), steered by keys on the USB serial
+//   wiring as tests/6_car
+//   pio device monitor        (platformio.ini: monitor_speed = BAUD), then press keys (no Enter needed):
+//     w  forward        s  backward       a  spin left       d  spin right
+//     q  arc left       e  arc right      space / x  stop
+//     f  forward until it has gone UNTIL_MS (until)          t  forward, then spin (timed, queued)
+//
+// the moves have no time (w, s, a, d, q, e): the car keeps going by itself; the failsafe stops it FAILSAFE_MS
+// after the last key, so hold the key down (the terminal repeats it) and let go to stop, like a remote
+// loop() only reads keys and prints, with delay() in it: the car still ramps and changes moves (background)
+
+// ---------- settings ----------
+
+// wiring: L298N with both EN jumpers ON (ENA, ENB not connected): the speed is PWM on IN
+//   OUT1, OUT2 -> one motor   OUT3, OUT4 -> the other (which is which: IN12_SIDE)
+//   +12V -> battery + (the motors' voltage)   GND -> battery - AND the UNO's GND   +5V: nothing
+// an IN: a PWM pin (3, 5, 6, 9, 10, 11), or GROUND when it is wired to GND (then that wheel goes one way only)
+constexpr uint8_t GROUND = 255;
+constexpr uint8_t IN1_PIN = 5;              // IN1
+constexpr uint8_t IN2_PIN = 6;              // IN2
+constexpr uint8_t IN3_PIN = 3;              // IN3
+constexpr uint8_t IN4_PIN = 11;             // IN4
+// what the wiring does (first with the wheels in the air: forward must turn both forward)
+//   a wheel going backward when it should go forward: change its FORWARD to BACKWARD (or swap its two wires)
+//   the left and right swapped: RIGHT -> LEFT
+constexpr L298N::Side IN12_SIDE = L298N::RIGHT;         // the wheel on IN1 / IN2 (OUT1, OUT2)
+constexpr L298N::Turn IN12_POSITIVE = L298N::FORWARD;   // how it turns when IN1 - IN2 > 0 (IN1 HIGH, IN2 LOW)
+constexpr L298N::Turn IN34_POSITIVE = L298N::FORWARD;   // how the other turns when IN3 - IN4 > 0
+constexpr uint32_t BAUD = 1000000;          // USB serial: the same as monitor_speed in platformio.ini
+
+constexpr uint8_t SPEED = 180;              // 0 ~ 255
+constexpr int16_t ARC_DIFFERENCE = 120;     // the speed difference of q / e
+constexpr uint16_t FAILSAFE_MS = 600;       // the terminal repeats a held key every ~ 30 ~ 500 ms
+constexpr uint16_t UNTIL_MS = 2000;         // f: forward until the move has gone this long
+constexpr uint16_t TIMED_FORWARD_MS = 1000; // t: forward this long,
+constexpr uint16_t TIMED_SPIN_MS = 500;     //    then spin this long
+constexpr uint16_t RAMP_MS = 200;           // 0 -> 255 takes this long; 0 = at once
+constexpr uint8_t MIN_DUTY = 0;             // the motors' dead zone (tests/4_pwm)
+constexpr uint8_t LEFT_TRIM = 100;          // the car drifts on "forward": lower the faster side (%)
+constexpr uint8_t RIGHT_TRIM = 100;
+constexpr uint16_t PRINT_MS = 500;          // the wheels' speeds this often
+
+// ---------- parts ----------
+
+// an IN pin's type: a PWM pin, or L298N::Ground
+template <uint8_t PIN> struct InPin { using Type = Uno::UnoPwmPin<PIN>; };
+template <> struct InPin<GROUND> { using Type = L298N::Ground; };
+
+using Board = L298N::L298NBoardJumpers<InPin<IN1_PIN>::Type, InPin<IN2_PIN>::Type,
+                                       InPin<IN3_PIN>::Type, InPin<IN4_PIN>::Type>;
+using Car = L298N::TwoWheelCar<Board, IN12_SIDE, IN12_POSITIVE, IN34_POSITIVE>;
+using Link = Uno::UnoSerial<BAUD>;
+
+Car car;
+
+// "D5", or "GND" for an IN on GND
+void printIn(uint8_t pin) {
+    if (pin == GROUND) {
+        Link::printText("GND");
+    } else {
+        Link::printPin(pin);
+    }
+}
+
+// which IN pins drive which wheel
+void printWiring() {
+    Link::printText(IN12_SIDE == L298N::RIGHT ? "right = IN1 " : "left = IN1 ");
+    printIn(IN1_PIN);
+    Link::printText(", IN2 ");
+    printIn(IN2_PIN);
+    Link::printText(IN12_SIDE == L298N::RIGHT ? " (OUT1, OUT2); left = IN3 " : " (OUT1, OUT2); right = IN3 ");
+    printIn(IN3_PIN);
+    Link::printText(", IN4 ");
+    printIn(IN4_PIN);
+    Link::printText(" (OUT3, OUT4)\r\n");
+}
+
+// ---------- keys ----------
+
+void runKey(uint8_t key) {
+    switch (key) {
+        case 'w':
+            car.forward(SPEED);
+            break;
+        case 's':
+            car.backward(SPEED);
+            break;
+        case 'a':
+            car.spin(-SPEED);
+            break;
+        case 'd':
+            car.spin(SPEED);
+            break;
+        case 'q':
+            car.arc(SPEED, -ARC_DIFFERENCE);
+            break;
+        case 'e':
+            car.arc(SPEED, ARC_DIFFERENCE);
+            break;
+        case ' ':
+        case 'x':
+            car.stop();
+            Link::printText("stop\r\n");
+            break;
+        case 'f':
+            car.forward(SPEED);
+            car.until([] { return car.moveMs() >= UNTIL_MS; });
+            Link::printText("forward until UNTIL_MS\r\n");
+            break;
+        case 't':
+            car.forward(SPEED, TIMED_FORWARD_MS);
+            car.spin(SPEED, TIMED_SPIN_MS);
+            Link::printText("forward, then spin (timed)\r\n");
+            break;
+        default:
+            break;
+    }
+}
+
+// ---------- main ----------
+
+void setup() {
+    Link::init();
+    car.init();
+    car.setFailsafeMs(FAILSAFE_MS);
+    car.setRampMs(RAMP_MS);
+    car.setMinDuty(MIN_DUTY);
+    car.setTrim(LEFT_TRIM, RIGHT_TRIM);
+    Uno::UnoBackground::add([] { car.update(); });
+    Link::printText("\r\ncar: ");
+    printWiring();
+    Link::printText("in the background: w s a d q e, space = stop, f = until, t = timed\r\n");
+}
+
+void loop() {
+    uint8_t key;
+    while (Link::available()) {
+        Link::read8(key, 0);
+        runKey(key);
+    }
+    Link::printText("left ");
+    Link::printNumber(car.leftSpeed());
+    Link::printText("  right ");
+    Link::printNumber(car.rightSpeed());
+    Link::printText(car.isRunning() ? "  moving\r\n" : "  still\r\n");
+    delay(PRINT_MS);                        // the car goes on meanwhile: the background runs update()
+}

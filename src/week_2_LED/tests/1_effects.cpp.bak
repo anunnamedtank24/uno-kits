@@ -1,0 +1,137 @@
+#include <Arduino.h>
+#include "Uno_serial.h"
+#include "Uno_pin.h"
+#include "LED.h"
+
+// UNO + one LED: the brightness steps and every effect of LED::Effect, one test after another, told on the USB serial
+//   pio device monitor        (platformio.ini: monitor_speed = BAUD)
+//
+// the brightness is as the eye sees it (0 ~ 255): the steps of test 0 look evenly brighter,
+// although the PWM duty grows much faster at the top
+
+// ---------- settings ----------
+
+// wiring: LED short leg -> GND
+constexpr uint8_t LED_PIN = 6;              // long leg through 220 Ω: a PWM pin (3, 5, 6, 9, 10, 11)
+constexpr uint32_t BAUD = 1000000;          // USB serial: the same as monitor_speed in platformio.ini
+
+constexpr uint32_t ONLY_TESTS = 0;          // 0: every test; bit i = only test i, e.g. (1UL << 2) | (1UL << 4)
+constexpr uint16_t TEST_MS = 5000;          // each effect runs this long
+constexpr uint16_t PAUSE_MS = 1000;         // off between the tests
+constexpr uint8_t STEPS = 8;                // test 0: brightness steps from 0 to 255
+constexpr uint16_t STEP_MS = 600;           // test 0: each step this long
+constexpr uint16_t BLINK_MS = 200;          // test 1: on and off this long,
+constexpr uint8_t BLINK_TIMES = 5;          //         this many times
+constexpr uint16_t BREATHE_MS = 2000;       // test 2: one breath
+constexpr uint8_t BREATHE_LOW = 0;          // test 2: the darkest and
+constexpr uint8_t BREATHE_HIGH = 255;       //         the brightest point of a breath
+constexpr uint16_t FADE_MS = 2000;          // test 3: off -> on, then on -> off, each this long
+constexpr uint16_t HEARTBEAT_MS = 1200;     // test 4: one beat (two quick pulses and a rest)
+
+// ---------- parts ----------
+
+using Light = LED::LED2Pins<Uno::UnoPwmPin<LED_PIN>>;
+using Link = Uno::UnoSerial<BAUD>;
+
+Light light;
+LED::Effect<Light> effect(light);
+
+// effect.update() for ms (the effects never wait: something must keep calling update())
+void run(uint16_t ms) {
+    uint32_t start = millis();
+    while (millis() - start < ms) {
+        effect.update();
+    }
+}
+
+// ---------- tests ----------
+
+// 0. steady brightness in STEPS steps
+//    expected: each step looks a little brighter than the one before, evenly
+void testSteps() {
+    for (uint8_t i = 0; i <= STEPS; i++) {
+        uint8_t brightness = (uint8_t)((uint16_t)255 * i / STEPS);
+        Link::printText("  steady ");
+        Link::printNumber(brightness, 3);
+        Link::printText("\r\n");
+        effect.steady(brightness);
+        run(STEP_MS);
+    }
+}
+
+// 1. blink BLINK_TIMES times
+//    expected: BLINK_TIMES flashes, then off (isRunning() turns false)
+void testBlink() {
+    effect.blink(BLINK_MS, BLINK_MS, BLINK_TIMES);
+    while (effect.isRunning()) {
+        effect.update();
+    }
+    Link::printText("  done\r\n");
+}
+
+// 2. breathe
+//    expected: smoothly brighter and darker, one breath every BREATHE_MS
+void testBreathe() {
+    effect.breathe(BREATHE_MS, BREATHE_LOW, BREATHE_HIGH);
+    run(TEST_MS);
+}
+
+// 3. fade on, then off
+//    expected: from off to full in FADE_MS, then back to off
+void testFade() {
+    effect.fadeTo(255, FADE_MS);
+    run(FADE_MS);
+    effect.fadeTo(0, FADE_MS);
+    run(FADE_MS);
+}
+
+// 4. heartbeat
+//    expected: two quick pulses, a rest, again
+void testHeartbeat() {
+    effect.heartbeat(HEARTBEAT_MS);
+    run(TEST_MS);
+}
+
+using Test = void (*)();
+
+struct NamedTest {
+    Test run;
+    const char *name;
+};
+
+const NamedTest tests[] = {
+    {testSteps, "steady steps"},
+    {testBlink, "blink"},
+    {testBreathe, "breathe"},
+    {testFade, "fade"},
+    {testHeartbeat, "heartbeat"},
+};
+
+constexpr uint8_t TEST_COUNT = sizeof(tests) / sizeof(tests[0]);
+static_assert(ONLY_TESTS < (1UL << TEST_COUNT), "ONLY_TESTS: a bit for a test that is not there");
+
+// ---------- main ----------
+
+void setup() {
+    Link::init();
+    light.init();
+    Link::printText("\r\nLED on ");
+    Link::printPin(LED_PIN);
+    Link::printText("\r\n");
+}
+
+void loop() {
+    for (uint8_t i = 0; i < TEST_COUNT; i++) {
+        if (ONLY_TESTS != 0 && !(ONLY_TESTS & (1UL << i))) {
+            continue;
+        }
+        Link::printText("test ");
+        Link::printNumber(i);
+        Link::printText(": ");
+        Link::printText(tests[i].name);
+        Link::printText("\r\n");
+        tests[i].run();
+        effect.steady(0);
+        delay(PAUSE_MS);
+    }
+}

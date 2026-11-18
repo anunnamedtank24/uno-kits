@@ -6,7 +6,7 @@
 
 ```
 module/
-└── M130T.h    M130T<Bus>：1.3 吋 IPS 240×240，沒有 CS（SPI mode 3）
+└── M130T.h    M130T<Bus, ColorFormat>：1.3 吋 IPS 240×240，沒有 CS（SPI mode 3）
 ```
 
 ## 加一個新模組
@@ -22,8 +22,8 @@ module/
 #include "../tool/init.h"
 
 namespace ST7789 {
-    template <class Bus>
-    class XXX : public Window<Bus> {
+    template <class Bus, class ColorFormat>
+    class XXX : public Window<Bus, ColorFormat> {
     public:
         inline XXX();
         inline void init(uint8_t blk = 255);   // Bus init + 重置 + 模組的初始化流程
@@ -31,9 +31,9 @@ namespace ST7789 {
 
     // ================= definitions =================
 
-    template <class Bus>
-    inline XXX<Bus>::XXX()
-        : Window<Bus>(240, 280) {   // 面板大小
+    template <class Bus, class ColorFormat>
+    inline XXX<Bus, ColorFormat>::XXX()
+        : Window<Bus, ColorFormat>(240, 280) {   // 面板大小
     }
 
     template <class Bus>
@@ -43,7 +43,8 @@ namespace ST7789 {
         this->swReset();
         this->slpOut();
         this->setOffset(0, 20);     // 面板不在記憶體左上角時
-        this->colmod(COLMOD_16BIT);
+        this->madctl(Window<Bus, ColorFormat>::MADCTL_ORDER);   // 顏色順序跟著 ColorFormat
+        this->colmod(Window<Bus, ColorFormat>::COLMOD_VALUE);   // 12 / 16 / 18 bit 跟著 ColorFormat
         // ... 廠商給的電壓、gamma 設定
         this->dispOn();
     }
@@ -61,4 +62,4 @@ namespace ST7789 {
 | 檔名 | 用模組的型號，維持原本的大小寫（例如 `M130T.h`） |
 | 數值從哪裡來 | 模組的規格書或廠商範例程式；沒有的話先用 `tool/init.h` 的 `initDefault()` 試試看 |
 | IPS 面板的顏色反相 | 初始化時加 `invOn()` |
-| 驗證 | 跑 `src/week_3/test_1.cpp` 的 `tests[0]`、`tests[1]`，看顏色順序和邊框有沒有貼齊四邊 |
+| 驗證 | 跑 `src/week_3_ST7789_DS18B20_graphics_color_font_image_video/tests/1_screen.cpp` 的 `tests[0]`、`tests[1]`，看顏色順序和邊框有沒有貼齊四邊 |

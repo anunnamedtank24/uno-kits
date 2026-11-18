@@ -2,6 +2,7 @@
 #define VIDEO_DECODER_H
 
 #include <stdint.h>
+#include <stdlib.h>
 
 namespace video {
     // frame format (format 3, see lib/video/output/README.md), made by lib/video/source/convert.py, little endian:
@@ -24,18 +25,46 @@ namespace video {
     constexpr uint8_t MAX_RAM_COLORS = 16;
 
     // who an animation was made for (Animation::target, bit flags), see lib/video/source/config.json
-    constexpr uint8_t TARGET_UNO = 1; // FlashPlayer: the frames are in the struct (flash)
-    constexpr uint8_t TARGET_MAC = 2; // StreamPlayer: the struct has the path, stream.py sends the frames
+    constexpr uint8_t TARGET_FLASH = 1; // FlashPlayer: the frames are in the struct (flash)
+    constexpr uint8_t TARGET_STREAM = 2; // StreamPlayer: the struct has the path, stream.py sends the frames
 
     // compile-time warnings: static_assert(video::warn::Xxx<condition>::ok, "")
     namespace warn {
-        template <bool> struct NotForMac { static constexpr bool ok = true; };
-        template <> struct NotForMac<true> {
-            __attribute__((deprecated("this animation was made with --target uno only: it streams, "
-                                      "but was not checked against the mac ranges (make it with --target uno mac)")))
+        template <bool> struct NotForStream { static constexpr bool ok = true; };
+        template <> struct NotForStream<true> {
+            __attribute__((deprecated("this animation was made with --target flash only: it streams, "
+                                      "but was not checked against the stream ranges (make it with --target flash stream)")))
+            static constexpr bool ok = true;
+        };
+        template <bool> struct PaletteInRam { static constexpr bool ok = true; };
+        template <> struct PaletteInRam<true> {
+            __attribute__((deprecated("a 256-color animation streamed: the whole palette comes with the header (more "
+                                      "waiting before the first frame) and is kept in RAM taken at run time (malloc, up to "
+                                      "256 colors x the color's size; not in the compiler's RAM figure) until close() / the "
+                                      "next open(); error() is ERROR_NO_MEMORY if it does not fit")))
             static constexpr bool ok = true;
         };
     }
+
+    // a palette in RAM taken at run time (malloc) and given back when it goes out of scope (or release()):
+    // a streamed COLORS_256 palette, whose size is only known when it arrives
+    template <class Color>
+    class HeapPalette {
+    public:
+        inline HeapPalette() = default;
+        HeapPalette(const HeapPalette &) = delete;
+        HeapPalette &operator=(const HeapPalette &) = delete;
+        inline ~HeapPalette();
+
+        // count colors (1 ~ 256), the old ones given back first; false (and nothing kept) if the RAM is short
+        // (avr-libc's malloc keeps __malloc_margin, 128 bytes, free for the stack)
+        inline bool take(uint16_t count);
+        inline void release();
+        inline Color *colors() const;
+
+    private:
+        Color *_colors = nullptr;
+    };
 
     // pixels of one row kept when scaled (scaleX or scaleY >= 2)
     constexpr uint8_t MAX_SCALED_WIDTH = 120;
@@ -43,24 +72,30 @@ namespace video {
     // draws frames on a Screen at (x, y), every pixel as scaleX x scaleY
     //
     // Screen: provides (see lib/ST7789/basic/window.h)
-    //   width(), height(), setWindow(x0, y0, x1, y1), writeData16(color), endWrite()
-    //   BusType::readFlash16 (COLORS_256: the palette stays in flash)
-    //
+    //   ColorFormat: the screen's colors (lib/color): Value, fromRGB565(c) (the colors of the file are always
+    //     RGB565: turned once per palette color, and per run for COLORS_565 / a flash COLORS_256 palette)
+    //   width(), height(), setWindow(x0, y0, x1, y1), writePixel(ColorFormat::Value), endWrite()
+    //   BusType::readFlash16 (COLORS_256 from flash: the palette stays in flash)
     // Reader: anything with uint8_t read8() giving the next byte of the frame
     template <class Screen>
     class Decoder {
     public:
+        using ColorFormat = typename Screen::ColorFormat;
+        using Color = typename ColorFormat::Value;
+
         inline explicit Decoder(Screen &screen);
 
         // false (and nothing is drawn later) if it does not fit the screen
         inline bool setArea(int16_t x, int16_t y, uint8_t width, uint8_t height, uint8_t scaleX, uint8_t scaleY);
 
         // COLORS_16: colors set one by one into RAM
-        // COLORS_256: palette in flash (PROGMEM), 256 colors at most
+        // COLORS_256: palette in flash (RGB565, PROGMEM), or already in the screen's colors in RAM
+        //   (setRamPalette, e.g. a HeapPalette: it must live while frames are drawn)
         // COLORS_565: no palette
         inline void setColorMode(uint8_t colorMode);
         inline void setColor(uint8_t index, uint16_t color);
         inline void setFlashPalette(const uint16_t *palette);
+        inline void setRamPalette(const Color *palette);
 
         // false on broken data (a window outside the animation), the rest of the frame is not read
         template <class Reader>
@@ -81,15 +116,16 @@ namespace video {
         uint8_t _scaleY = 1;
         bool _fits = false;
         uint8_t _colorMode = COLORS_16;
-        uint16_t _palette[MAX_RAM_COLORS] = {};
+        Color _palette[MAX_RAM_COLORS] = {};
         const uint16_t *_flashPalette = nullptr;
-        uint16_t _row[MAX_SCALED_WIDTH] = {};
+        const Color *_ramPalette = nullptr;
+        Color _row[MAX_SCALED_WIDTH] = {};
         uint16_t _lastDelay = 0;
         uint8_t _lastType = TYPE_P;
 
         // the run being drawn, may go on into the next row
         uint16_t _runLeft = 0;
-        uint16_t _runColor = 0;
+        Color _runColor = 0;
 
         template <class Reader>
         inline void nextRun(Reader &reader);
@@ -131,15 +167,22 @@ namespace video {
     }
 
     template <class Screen>
+    inline void Decoder<Screen>::setRamPalette(const Color *palette) {
+        _ramPalette = palette;
+        _flashPalette = nullptr;
+    }
+
+    template <class Screen>
     inline void Decoder<Screen>::setColor(uint8_t index, uint16_t color) {
         if (index < MAX_RAM_COLORS) {
-            _palette[index] = color;
+            _palette[index] = ColorFormat::fromRGB565(color);
         }
     }
 
     template <class Screen>
     inline void Decoder<Screen>::setFlashPalette(const uint16_t *palette) {
         _flashPalette = palette;
+        _ramPalette = nullptr;
     }
 
     template <class Screen>
@@ -194,11 +237,12 @@ namespace video {
         } else if (_colorMode == COLORS_256) {
             _runLeft = (uint16_t)reader.read8() + 1;
             uint8_t index = reader.read8();
-            _runColor = _flashPalette ? Bus::readFlash16(_flashPalette + index) : 0;
+            _runColor = _ramPalette ? _ramPalette[index]
+                      : _flashPalette ? ColorFormat::fromRGB565(Bus::readFlash16(_flashPalette + index)) : 0;
         } else {
             _runLeft = (uint16_t)reader.read8() + 1;
-            _runColor = reader.read8();
-            _runColor |= (uint16_t)reader.read8() << 8;
+            uint16_t color = reader.read8();
+            _runColor = ColorFormat::fromRGB565((uint16_t)(color | ((uint16_t)reader.read8() << 8)));
         }
     }
 
@@ -221,7 +265,7 @@ namespace video {
                 continue;
             }
             for (uint16_t i = 0; i < _runLeft; i++) {
-                _screen.writeData16(_runColor);
+                _screen.writePixel(_runColor);
             }
         }
         _runLeft = 0;
@@ -254,7 +298,7 @@ namespace video {
             for (uint8_t repeat = 0; repeat < _scaleY; repeat++) {
                 for (uint8_t col = 0; col < w; col++) {
                     for (uint8_t i = 0; i < _scaleX; i++) {
-                        _screen.writeData16(_row[col]);
+                        _screen.writePixel(_row[col]);
                     }
                 }
             }
@@ -263,6 +307,29 @@ namespace video {
         if (_fits) {
             _screen.endWrite();
         }
+    }
+
+    template <class Color>
+    inline HeapPalette<Color>::~HeapPalette() {
+        release();
+    }
+
+    template <class Color>
+    inline bool HeapPalette<Color>::take(uint16_t count) {
+        release();
+        _colors = (Color *)malloc((size_t)count * sizeof(Color));
+        return _colors != nullptr;
+    }
+
+    template <class Color>
+    inline void HeapPalette<Color>::release() {
+        free(_colors);
+        _colors = nullptr;
+    }
+
+    template <class Color>
+    inline Color *HeapPalette<Color>::colors() const {
+        return _colors;
     }
 }
 

@@ -12,11 +12,18 @@ namespace LED {
     //
     // ACTIVE_HIGH: true if the pin -> resistor -> LED + -> LED - -> GND (lit while HIGH);
     //              false if 5V -> LED + -> LED - -> resistor -> pin (lit while LOW)
+    // true for a PWM output (Uno::UnoPwmPin, NoPwm: IS_PWM_OUTPUT)
+    template <class Pin, class = void> struct IsPwmOutput { static constexpr bool value = false; };
+    template <class Pin> struct IsPwmOutput<Pin, decltype((void)Pin::IS_PWM_OUTPUT)> {
+        static constexpr bool value = Pin::IS_PWM_OUTPUT;
+    };
+
     template <class Pwm, bool ACTIVE_HIGH = true>
     class SingleLED;
 
     // a Pwm that does nothing: for a color of a module that is not wired (e.g. the yellow of a traffic light)
     struct NoPwm {
+        static constexpr bool IS_PWM_OUTPUT = true;
         static inline void init();
         static inline void write(uint8_t duty);
     };
@@ -24,6 +31,9 @@ namespace LED {
     template <class Pwm, bool ACTIVE_HIGH>
     class SingleLED {
     public:
+        static_assert(IsPwmOutput<Pwm>::value,
+                      "LED: the brightness needs a PWM pin (Uno::UnoPwmPin<3, 5, 6, 9, 10 or 11>), or LED::NoPwm for a color not wired");
+
         // off
         inline void init();
 
@@ -34,6 +44,11 @@ namespace LED {
         inline void setDuty(uint8_t duty);
 
         inline uint8_t brightness() const;
+
+        // the time of the Pwm (for tools such as Effect)
+        static inline uint32_t nowMs() {
+            return Pwm::nowMs();
+        }
 
     private:
         uint8_t _brightness = 0;

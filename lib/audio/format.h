@@ -27,13 +27,13 @@ namespace audio {
     //   PCM_U4             (4)   1 / 2        4 bits, low nibble first, 0 ~ 15 -> 0 ~ 255 (x 17)
     //   PCM_ADPCM          (5)   1 / 2        IMA ADPCM, 4 bits, low nibble first, starts at 0 / index 0
     //
-    // a struct (e.g. melody::ode_to_joy_uno_passive_medium) has
+    // a struct (e.g. melody::ode_to_joy_flash_passive_medium) has
     //   target, kind, encoding, count (steps or samples), durationMs, rate (PCM), rhythmHz (RHYTHM),
     //   dataSize, getPath() (for stream.py); and the data if made for the UNO:
     //   getNotes() (const uint16_t *, NOTES / RHYTHM) or getSamples() (const uint8_t *, PCM)
 
-    constexpr uint8_t TARGET_UNO = 1;       // the data is in the struct (flash)
-    constexpr uint8_t TARGET_MAC = 2;       // the data stays on the computer: stream.py sends it
+    constexpr uint8_t TARGET_FLASH = 1;     // the data is in the struct (flash)
+    constexpr uint8_t TARGET_STREAM = 2;    // the data stays on the computer: stream.py sends it
 
     constexpr uint8_t KIND_NOTES = 0;
     constexpr uint8_t KIND_RHYTHM = 1;
@@ -73,9 +73,9 @@ namespace audio {
 
     // compile-time warnings: static_assert(audio::warn::Xxx<condition>::ok, "")
     namespace warn {
-        template <bool> struct NotForMac { static constexpr bool ok = true; };
-        template <> struct NotForMac<true> {
-            __attribute__((deprecated("made with --target uno only: streams fine, but was not checked for the mac")))
+        template <bool> struct NotForStream { static constexpr bool ok = true; };
+        template <> struct NotForStream<true> {
+            __attribute__((deprecated("made with --target flash only: streams fine, but was not checked for the stream")))
             static constexpr bool ok = true;
         };
 

@@ -1,21 +1,21 @@
 # font/source
 
-在電腦上跑的工具。需要 Python 3、`pip install pillow`。都在 `lib/font` 裡執行，加 `-B` 不產生 `__pycache__`。
+在電腦上跑的工具。需要 Python 3、`pip install pillow`。都在 `lib/font` 裡執行。
 
 ## 檔案
 
 | 檔案 | 作用 |
 |---|---|
 | `convert.py` | 字型 → `output/*.h`，並把新產生的那個加進 `output/selected.h` |
-| `check.py` | 檢查 `output/selected.h` |
+| `check.py` | 檢查 `output/` 的每個檔案：目前的格式、原始檔沒變（`convert.py` 每次轉完會自動跑） |
 
 ## 用法
 
 ```bash
 cd lib/font
-python -B source/convert.py assets/menlo.ttf output --height 23
-python -B source/convert.py assets/menlo.ttf output --height 46 --first 48 --last 57
-python -B source/check.py
+python source/convert.py assets/menlo.ttf output --height 23
+python source/convert.py assets/menlo.ttf output --height 46 --first 48 --last 57
+python source/check.py
 ```
 
 ## convert.py
@@ -30,11 +30,12 @@ python -B source/check.py
 
 | 參數 | 預設 | 說明 |
 |---|---|---|
-| `--height` / `--width` / `--size` | — | 三選一：格子高度、最寬字元的寬度，或 FreeType 的字型大小 |
+| `--height` / `--width` / `--size` | `--height 16` | 最多選一個：格子高度、最寬字元的寬度，或 FreeType 的字型大小 |
 | `--first` / `--last` | 32 / 126 | 字元碼範圍 |
 | `--default` | `?` | 範圍外的字元畫成哪個字 |
+| `--name` | `{字型}_{參數名}_{值}_first_{f}_last_{l}_default_{碼}`（見下面的檔名） | 檔名和 struct 名稱 |
 
-- **檔名**：`{字型}_{參數名}_{值}_first_{f}_last_{l}_default_{碼}.h`，struct 同名。
+- **檔名**：`{字型}_{參數名}_{值}_first_{f}_last_{l}_default_{碼}.h`，struct 同名。`assets/` 外面的檔案前面加上資料夾；撞名加 `_2`、`_3`，不蓋掉別的（見 [output/README.md](../output/README.md#名稱和來源)）。
 
 ### 流程
 

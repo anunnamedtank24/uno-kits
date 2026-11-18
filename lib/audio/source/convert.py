@@ -17,16 +17,16 @@ import check
 
 """
 Func: convert an audio file to .h (c header) in one of the exchange formats of lib/audio/format.h,
-      chosen by what plays it (--sound) and how well (--quality), for the board's flash (--target uno)
-      and / or for stream.py (--target mac)
+      chosen by what plays it (--sound) and how well (--quality), for the board's flash (--target flash)
+      and / or for stream.py (--target stream)
 Usage:
     python source/convert.py assets/twinkle_star.wav output
     python source/convert.py assets/sos.webm output --sound active
     python source/convert.py assets/hello.aiff output --sound pcm --quality low
-    python source/convert.py assets/song.mp3 output --target mac --sound pcm --quality high --start 12.5 --duration 30
+    python source/convert.py assets/song.mp3 output --target stream --sound pcm --quality high --start 12.5 --duration 30
 Output (struct melody::{name}, name = {file}_{targets}_{sound}_{quality} or {file}_{targets}_pcm_{rate}_{encoding}, or --name):
-    --target uno / uno mac: output/{name}.h with the data (Player / SamplePlayer play it, the stream players can ask for it)
-    --target mac:           output/{name}.h without data (for the board) + output/mac/{name}.h with it (stream.py reads it)
+    --target flash / flash stream: output/{name}.h with the data (Player / SamplePlayer play it, the stream players can ask for it)
+    --target stream:               output/{name}.h: the info for the board, the data after it in #if 0 (stream.py reads it)
     added to output/selected.h, then selected.h is checked (source/check.py); every setting is written at the top
 Sound (what plays it) and quality:
     --sound passive  notes { pitch, ms } for a passive buzzer (audio::Player / StreamPlayer)
@@ -38,7 +38,7 @@ Sound (what plays it) and quality:
         low 80 / 60 ms, medium 50 / 40 ms (default), high 20 / 20 ms
     --sound pcm      samples (the real wave: voice, any instrument) for audio::SamplePlayer / StreamSamplePlayer
         --quality low     8000 Hz, IMA ADPCM (4 bits): 4 KB a second   (flash: ~6 s)
-        --quality medium  11025 Hz, 8 bits: 11 KB a second             (flash: ~2 s; the mac: no limit)
+        --quality medium  11025 Hz, 8 bits: 11 KB a second             (flash: ~2 s; the stream: no limit)
         --quality high    16000 Hz, 8 bits: 16 KB a second
         --rate HZ (2000 ~ 32000), --encoding u8 / u4 / adpcm, --gain DB override the preset
 Files:
@@ -61,7 +61,7 @@ Time:
 Detection (passive, active):
     --silence DB, --voicing F, --onset DB
 Check:
-    --preview FILE.wav      what the board plays (square waves, or the decoded samples), to listen on the Mac
+    --preview FILE.wav      what the board plays (square waves, or the decoded samples), to listen on the computer
 """
 
 
@@ -90,8 +90,7 @@ PCM_MAX_RATE = 32000
 PCM_RECOMMENDED_MAX_RATE = 22050 # above: the interrupt takes a lot of the CPU
 STREAM_RECOMMENDED_BYTES_PER_S = 12000 # above: the link may not keep up (measured: 16000 is at the edge, see README)
 
-TARGET_BITS = {"uno": 1, "mac": 2} # audio::TARGET_UNO / TARGET_MAC
-MAC_DIR_NAME = "mac" # output/mac/: data for stream.py only
+TARGET_BITS = {"flash": 1, "stream": 2} # audio::TARGET_FLASH / TARGET_STREAM
 KINDS = {"passive": 0, "active": 1, "pcm": 2} # audio::KIND_NOTES / KIND_RHYTHM / KIND_PCM
 KIND_NAMES = {0: "KIND_NOTES", 1: "KIND_RHYTHM", 2: "KIND_PCM"}
 ENCODINGS = {"hz_ms": 0, "compact": 1, "rhythm": 2, "u8": 3, "u4": 4, "adpcm": 5} # format.h
@@ -99,7 +98,7 @@ ENCODING_NAMES = {0: "NOTES_HZ_MS", 1: "NOTES_COMPACT", 2: "RHYTHM_MS", 3: "PCM_
 COMPACT_TICK_MS = 10
 RHYTHM_MAX_MS = 32767
 RHYTHM_GAP_MS = 30 # active: between two notes that touch, so they are heard as two (one pitch only)
-RECOMMENDED_MAX_BYTES = {"passive": 8192, "active": 8192, "pcm": 20000} # --target uno: more = little flash left
+RECOMMENDED_MAX_BYTES = {"passive": 8192, "active": 8192, "pcm": 20000} # --target flash: more = little flash left
 
 # --quality presets, overridden by the single options
 NOTE_PRESETS = {
@@ -134,7 +133,7 @@ ADPCM_INDEX_CHANGES = (-1, -1, -1, -1, 2, 4, 6, 8)
 @dataclass
 class Settings:
     # everything one conversion needs, after the arguments and the preset are resolved
-    targets: list[str] # "uno", "mac" or both
+    targets: list[str] # "flash", "stream" or both
     sound: str # "passive", "active", "pcm"
     quality: str # "low", "medium", "high"
     encoding: str # a key of ENCODINGS
@@ -706,11 +705,11 @@ def get_usage_str(name: str, settings: Settings, with_data: bool) -> str:
     flash_player = "audio::SamplePlayer::play" if settings.sound == "pcm" else "player.play"
     stream_player = "audio::StreamSamplePlayer::open" if settings.sound == "pcm" else "player.open"
     usages = []
-    if "uno" in settings.targets:
+    if "flash" in settings.targets:
         usages.append(f"{flash_player}<melody::{name}>()")
-    if "mac" in settings.targets:
+    if "stream" in settings.targets:
         usages.append(f"{stream_player}<melody::{name}>(), with stream.py running")
-    if settings.targets == ["mac"] and with_data:
+    if settings.targets == ["stream"] and with_data:
         usages = [f"data for stream.py only, never included: {stream_player}<melody::{name}>()"]
     return "\n".join(usages)
 
@@ -721,7 +720,7 @@ def get_c_str(name: str, command: str, audio_path: Path, settings_str: str, info
     c_str += f"#ifndef MELODY_{name.upper()}_H\n"
     c_str += f"#define MELODY_{name.upper()}_H\n\n"
     c_str += "// generated by convert.py, do not edit\n"
-    c_str += f"// {command}\n"
+    c_str += command
     c_str += check.get_format_str()
     c_str += check.get_source_str(audio_path)
     c_str += settings_str + "\n"
@@ -739,9 +738,7 @@ def get_c_str(name: str, command: str, audio_path: Path, settings_str: str, info
 
 
 def get_name(audio_path: Path, settings: Settings) -> str:
-    file_name = "".join(c if c.isalnum() else "_" for c in audio_path.stem.lower())
-    if file_name[0].isdigit():
-        file_name = "_" + file_name
+    file_name = check.get_file_name(audio_path)
     targets = "_".join(settings.targets)
     if settings.sound == "pcm":
         return f"{file_name}_{targets}_pcm_{settings.rate}_{settings.encoding}"
@@ -802,15 +799,15 @@ def get_parser() -> argparse.ArgumentParser:
             "  python source/convert.py assets/twinkle_star.wav output\n"
             "  python source/convert.py assets/sos.webm output --sound active\n"
             "  python source/convert.py assets/hello.aiff output --sound pcm --quality low\n"
-            "  python source/convert.py assets/song.mp3 output --target mac --sound pcm --quality high --preview song.wav\n"
+            "  python source/convert.py assets/song.mp3 output --target stream --sound pcm --quality high --preview song.wav\n"
             "  python source/check.py    (checks output/selected.h)"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument("audio_path", help="audio: " + " ".join(SUFFIXES))
     parser.add_argument("output_dir_path", help="dir for the generated .h (made if missing)")
-    parser.add_argument("--target", choices=("uno", "mac"), nargs="+", default=["uno"],
-                        help="uno: data in flash; mac: data stays here, stream.py sends it; both: data in flash, streamable too (default uno)")
+    parser.add_argument("--target", choices=("flash", "stream"), nargs="+", default=["flash"],
+                        help="flash: data in flash; stream: data stays here, stream.py sends it; both: data in flash, streamable too (default flash)")
     parser.add_argument("--sound", choices=("passive", "active", "pcm"), default="passive",
                         help="passive: notes; active: a rhythm (one pitch); pcm: samples (default passive)")
     parser.add_argument("--quality", choices=("low", "medium", "high"), default="medium", help="a preset, see the top of this file (default medium)")
@@ -853,7 +850,7 @@ def check_args(parser: argparse.ArgumentParser, args: argparse.Namespace) -> lis
         parser.error(f"audio_path not found: {audio_path}")
     if audio_path.suffix.lower() not in SUFFIXES:
         parser.error(f"audio_path must be {' / '.join(SUFFIXES)}, got {audio_path.name}")
-    args.target = [target for target in ("uno", "mac") if target in args.target]
+    args.target = [target for target in ("flash", "stream") if target in args.target]
     low_hz, high_hz = args.range
     if not MIN_HZ <= low_hz < high_hz <= MAX_HZ:
         parser.error(f"--range must be {MIN_HZ} <= LOW < HIGH <= {MAX_HZ}, got {low_hz:g} {high_hz:g}")
@@ -945,8 +942,8 @@ def get_notes_data(audio_path: Path, settings: Settings, warnings: list[str]) ->
     short_count = sum(1 for hz, ms in played if hz > 0 and ms < 40)
     if short_count and settings.sound == "passive":
         warnings.append(f"{short_count} notes are shorter than 40 ms (Player's GAP_MS 20 makes them silent half the time)")
-    if "uno" in settings.targets and count > MAX_PLAYER_STEPS:
-        raise ValueError(f"{count} steps: audio::Player plays at most {MAX_PLAYER_STEPS} (cut it, or --target mac)")
+    if "flash" in settings.targets and count > MAX_PLAYER_STEPS:
+        raise ValueError(f"{count} steps: audio::Player plays at most {MAX_PLAYER_STEPS} (cut it, or --target stream)")
     lines = get_notes_lines(settings, played, moved_count, rhythm_hz)
     return words, count, duration_ms, rhythm_hz, lines, audio_info, played
 
@@ -999,59 +996,54 @@ def convert_audio_to_h(args: argparse.Namespace, command: str, warnings: list[st
         data_bytes = 2*len(data)
         bytes_per_s = 0
 
-    if "uno" in settings.targets:
+    if "flash" in settings.targets:
         if data_bytes > FLASH_BYTES:
             raise ValueError(f"{data_bytes} bytes: more than the UNO's flash ({FLASH_BYTES}); cut it (--duration), "
-                             f"lower --quality, or --target mac")
+                             f"lower --quality, or --target stream")
         if data_bytes > RECOMMENDED_MAX_BYTES[settings.sound]:
             warnings.append(f"{data_bytes} bytes: above {RECOMMENDED_MAX_BYTES[settings.sound]}, little flash left for the program")
-    if "mac" in settings.targets and bytes_per_s > STREAM_RECOMMENDED_BYTES_PER_S:
+    if "stream" in settings.targets and bytes_per_s > STREAM_RECOMMENDED_BYTES_PER_S:
         warnings.append(f"{bytes_per_s:.0f} bytes a second: streaming may run short above {STREAM_RECOMMENDED_BYTES_PER_S} "
                         f"(StreamSamplePlayer counts underruns())")
 
-    name = args.name or get_name(audio_path, settings)
+    name = args.name or check.get_free_name(output_dir_path, get_name(audio_path, settings), audio_path, command)
     output_file_path = output_dir_path/(name + ".h")
     settings_str = get_settings_str(settings, audio_info, lines, data_bytes)
     data_str = get_c_data_getter_str(settings, data)
-    if settings.targets == ["mac"]:
-        # data in output/mac/ (never included), the board gets a small file with the path
-        data_file_path = output_dir_path/MAC_DIR_NAME/(name + ".h")
-        path = get_lib_relative_str(data_file_path)
+    path = get_lib_relative_str(output_file_path)
+    if settings.targets == ["stream"]:
         info_str = get_c_info_str(settings, count, duration_ms, rate, rhythm_hz, data_bytes, path)
-        files = [
-            (data_file_path, get_c_str(name, command, audio_path, settings_str, info_str, get_usage_str(name, settings, True), data_str)),
-            (output_file_path, get_c_str(name, command, audio_path, settings_str, info_str,
-                                         get_usage_str(name, settings, False) + f"\nthe data is in {path}", "")),
-        ]
+        files = [(output_file_path, check.get_stream_file_str(
+            get_c_str(name, command, audio_path, settings_str, info_str, get_usage_str(name, settings, False), ""),
+            get_c_str(name, command, audio_path, settings_str, info_str, get_usage_str(name, settings, True), data_str)))]
     else:
-        path = get_lib_relative_str(output_file_path)
         info_str = get_c_info_str(settings, count, duration_ms, rate, rhythm_hz, data_bytes, path)
         files = [(output_file_path, get_c_str(name, command, audio_path, settings_str, info_str, get_usage_str(name, settings, False), data_str))]
     if path.startswith("/"):
         warnings.append(f"{path} is outside lib/audio: stream.py only opens files inside lib/audio")
 
-    print(f"[Info] {name}:")
+    print(f"[INFO] {name}:")
     print("\n".join(" "*4 + line[5:] for line in settings_str.splitlines()[1:]))
     for warning in warnings:
-        print(f"[Warning] {warning}")
+        print(f"[WARNING] {warning}")
     for file_path, c_str in files:
         file_path.parent.mkdir(parents=True, exist_ok=True)
         if file_path.exists():
-            print(f"[Info] Replaced the old {file_path.name}")
+            print(f"[INFO] Replaced the old {file_path.name}")
         file_path.write_text(c_str)
-        print(f"[Success] Saved as: {file_path}")
+        print(f"[SUCCESS] Saved as: {file_path}")
     if args.preview is not None:
         preview_path = Path(args.preview).expanduser()
         if settings.sound == "pcm":
             write_pcm_preview(preview_path, played, real_rate)
         else:
             write_notes_preview(preview_path, played, gap=settings.sound == "passive")
-        print(f"[Success] Preview: {preview_path}")
+        print(f"[SUCCESS] Preview: {preview_path}")
 
     if check.add_selected(output_dir_path, output_file_path):
-        print(f"[Success] Added to {check.SELECTED_NAME}")
+        print(f"[SUCCESS] Added to {check.SELECTED_NAME}")
     if output_dir_path != (check.LIB_DIR_PATH/"output").resolve():
-        print(f"[Warning] audio.h includes {check.LIB_DIR_PATH.name}/output/{check.SELECTED_NAME}, not this dir")
+        print(f"[WARNING] audio.h includes {check.LIB_DIR_PATH.name}/output/{check.SELECTED_NAME}, not this dir")
     return check.print_check(output_dir_path)
 
 
@@ -1059,7 +1051,7 @@ def main():
     parser = get_parser()
     args = parser.parse_args()
     warnings = check_args(parser, args)
-    command = " ".join([Path(args.audio_path).name] + sys.argv[2:])
+    command = check.get_options_str(check.get_options(sys.argv[1:], [args.audio_path, args.output_dir_path]))
     try:
         is_fine = convert_audio_to_h(args, command, warnings)
     except (ValueError, OSError) as e:

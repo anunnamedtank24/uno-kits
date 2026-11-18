@@ -1,23 +1,21 @@
 # font
 
-字型資料，`namespace font`。每個字型是一個 struct，由 `source/convert.py` 從 .ttf / .otf 產生，給 `graphics::Text` 畫。不依賴任何東西。
+| 需要 | 得到 |
+|---|---|
+| （不需要）；字型檔 .ttf / .otf | `font::*`：每個字型一個 struct（`FONT("檔案")` 或 `source/convert.py` 轉出來），給 `graphics::Text` 的 `setFont<…>()` |
 
-## 檔案
+「需要」是介面（duck typing），括號裡是這個專案現成的實作，換主板只要換它們。開發者看的細節（前提條件、介面需求、每個函式、參數、資源）在 [INTERFACE.md](INTERFACE.md)。
 
-```
-lib/font/
-├── font.h      入口：include output/selected.h
-├── assets/     原始字型（menlo.ttf）
-├── source/     convert.py、check.py，見 source/README.md
-└── output/     產生的字型和 selected.h，見 output/README.md
-```
+不需要任何介面，任何主板都能用。
+
+字型資料，`namespace font`。每個字型是一個 struct，由 `source/convert.py` 從 .ttf / .otf 產生，給 `graphics::Text` 畫。
 
 ## 用法
 
 ```bash
 cd lib/font
-python -B source/convert.py assets/menlo.ttf output --height 23
-python -B source/check.py
+python source/convert.py assets/menlo.ttf output --height 23
+python source/check.py
 ```
 
 ```cpp
@@ -26,15 +24,27 @@ screen.setFont<font::menlo_height_23_first_32_last_126_default_63>();
 screen.drawTexts(10, 10, color, "hello");
 ```
 
-完整的例子：`src/week_3/test_1.cpp`（ST7789）、`src/week_4/test_1.cpp`（OLED）。
+完整的例子：`src/week_3_ST7789_DS18B20_graphics_color_font_image_video/tests/1_screen.cpp`（ST7789）、`src/week_4_SSD1306_switch_buzzer_audio/tests/1_oled.cpp`（OLED）。
 
-## 流程
+## 直接用檔案（推薦）
 
-| 步驟 | 說明 |
+程式裡寫 `FONT("路徑", "選項")`，編譯前自動轉換，不用先跑 `convert.py`，檔案也不用放在 `assets/`：
+
+```cpp
+#include "font.h"
+using Title = FONT("~/Fonts/Inter.ttf", "--height 16");
+screen.setFont<Title>();
+```
+
+| 項目 | 說明 |
 |---|---|
-| `convert.py` | 產生 `output/x.h`，只把它加進 `output/selected.h`（其他的保持原樣），最後跑一次檢查 |
-| `selected.h` | 決定程式裡能用哪些字型；不用的刪掉那行 `#include` 就好 |
-| 編譯 | 只有程式 `setFont<…>` 到的字型會進 Flash（實測多選一個沒用到的 5.4 KB 字型，Flash 不變） |
+| 路徑 | 絕對路徑、`~/…`、相對於寫它的 .cpp；找不到時再試專案資料夾、`lib/font/assets/` |
+| 選項 | 一個字串，就是 `source/convert.py` 的選項：大小（`--height` / `--width` / `--size`）、`--first`、`--last`、`--default`；省略大小時是 `--height 16` |
+| 轉到哪 | `lib/font/output/`，跟手動跑 `convert.py` 的一樣（`tools/assets.py` 每次編譯前找：同一個檔案、同樣的選項已經轉過就直接用，沒有才轉） |
+| 型態 | `FONT(...)` 就是那個 `font::` struct，跟手動轉換的一樣用 |
+| 限制 | 兩個參數都要是字串常數（不能是變數） |
+
+完整的說明：[lib/README.md](../README.md#字型圖片影片聲音直接用檔案)；例子：`src/week_4_SSD1306_switch_buzzer_audio/tests/5_files.cpp`（四種都有）。下面「用法」是手動轉換的方式，一樣能用。
 
 ## 輸入限制
 

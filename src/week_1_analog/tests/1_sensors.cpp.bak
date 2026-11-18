@@ -1,0 +1,137 @@
+#include <Arduino.h>
+#include "Uno_serial.h"
+#include "Uno_pin.h"
+#include "Uno_analog_pin.h"
+#include "analog.h"
+
+// UNO + analog sensors (lib/analog): every one is optional, the missing ones just read noise
+//   pio device monitor        (platformio.ini: monitor_speed = BAUD)
+//
+// every PRINT_MS one line: knob %, light %, joystick x / y / direction / button, temperature, sound level,
+// and the chip itself: the real 5V (Vcc) and the chip's temperature (Uno::UnoChip)
+
+// ---------- settings ----------
+
+// wiring (A0 ~ A5 only for the analog ones):
+// potentiometer: outer legs -> 5V, GND
+constexpr uint8_t KNOB_PIN = A0;            // middle (wiper)
+constexpr uint8_t KNOB_SMOOTHING = 3;       // 0 = raw ~ 8 = very smooth and slow
+// photoresistor KY-018 / light sensor board: + -> 5V, - -> GND
+// (bare LDR: 5V -- LDR -- LIGHT_PIN -- 10 kΩ -- GND, and BRIGHTER_IS_HIGHER = true)
+constexpr uint8_t LIGHT_PIN = A1;           // S (AO)
+constexpr bool BRIGHTER_IS_HIGHER = false;  // this module: brighter = lower
+constexpr uint16_t DARK_ON = 700;           // the night light: on above this reading (0 ~ 1023; darker = higher here)
+constexpr uint16_t DARK_OFF = 600;          // off again under this one (the gap stops flicker)
+// joystick KY-023: +5V -> 5V, GND -> GND
+constexpr uint8_t STICK_X_PIN = A2;         // VRx
+constexpr uint8_t STICK_Y_PIN = A3;         // VRy
+constexpr uint8_t STICK_BUTTON_PIN = 4;     // SW: any pin (the UNO's pull-up is on)
+constexpr bool STICK_INVERT_X = false;      // x the wrong way: true
+constexpr bool STICK_INVERT_Y = true;       // the KY-023 reads y upside down
+// NTC module KY-013: middle -> 5V, - -> GND
+constexpr uint8_t NTC_PIN = A4;             // S
+constexpr bool NTC_ON_GND = true;           // KY-013: the NTC on GND (warmer = lower reading); on VCC: false
+// sound KY-037 / KY-038: + -> 5V, G -> GND
+constexpr uint8_t SOUND_PIN = A5;           // AO
+constexpr uint16_t SOUND_WINDOW_MS = 50;    // the loudness is measured over this long
+constexpr uint16_t CLAP_LEVEL = 200;        // "clap!" when the loudness jumps above this
+constexpr uint32_t BAUD = 1000000;          // USB serial: the same as monitor_speed in platformio.ini
+
+constexpr uint16_t KNOB_STEP = 20;          // "knob turned" when it moved this much (0 ~ 1023)
+constexpr uint16_t PRINT_MS = 300;          // a status line this often
+
+// ---------- parts ----------
+
+using Link = Uno::UnoSerial<BAUD>;
+analog::Potentiometer<Uno::UnoAnalogPin<KNOB_PIN>, KNOB_SMOOTHING> knob;
+analog::Photoresistor<Uno::UnoAnalogPin<LIGHT_PIN>, BRIGHTER_IS_HIGHER> light;
+analog::KY023<Uno::UnoAnalogPin<STICK_X_PIN>, Uno::UnoAnalogPin<STICK_Y_PIN>, Uno::UnoInputPin<STICK_BUTTON_PIN, true>,
+              STICK_INVERT_X, STICK_INVERT_Y> stick;
+analog::KY013<Uno::UnoAnalogPin<NTC_PIN>, NTC_ON_GND> thermometer;
+analog::KY037<Uno::UnoAnalogPin<SOUND_PIN>, SOUND_WINDOW_MS> sound;
+
+const char *const DIRECTIONS[] = {"center", "up", "down", "left", "right"};
+uint32_t nextPrintMs = 0;
+
+// ---------- main ----------
+
+void setup() {
+    Link::init();
+    knob.init();
+    light.init();
+    stick.init();               // let the stick go now: this is its centre
+    thermometer.init();
+    sound.init();
+    // a night light: "on" when it gets dark; readings (0 ~ 1023), not %; see the raw values with light.value()
+    light.setThreshold(DARK_ON, DARK_OFF);
+    Link::printText("\r\nanalog sensors: knob ");
+    Link::printPin(KNOB_PIN);
+    Link::printText(", light ");
+    Link::printPin(LIGHT_PIN);
+    Link::printText(", joystick ");
+    Link::printPin(STICK_X_PIN);
+    Link::printText("");
+    Link::printText(" ");
+    Link::printPin(STICK_Y_PIN);
+    Link::printText(" ");
+    Link::printPin(STICK_BUTTON_PIN);
+    Link::printText(", NTC ");
+    Link::printPin(NTC_PIN);
+    Link::printText(", sound ");
+    Link::printPin(SOUND_PIN);
+    Link::printText("\r\n");
+    Link::printText("Vcc ");
+    Link::printNumber(Uno::UnoChip::readVccMillivolts());
+    Link::printText(" mV, chip ");
+    Link::printDecimal(Uno::UnoChip::readTemperature(), 1);
+    Link::printText(" C\r\n");
+}
+
+void loop() {
+    knob.update();
+    light.update();
+    stick.update();
+    sound.update();             // the more often, the better it catches the peaks
+
+    analog::Direction direction;
+    if (stick.wasMoved(direction)) {
+        Link::printText("joystick -> ");
+        Link::printText(DIRECTIONS[direction]);
+        Link::printText("\r\n");
+    }
+    if (stick.wasPressed()) {
+        Link::printText("joystick button\r\n");
+    }
+    if (sound.heard(CLAP_LEVEL)) {
+        Link::printText("clap!\r\n");
+    }
+    if (light.wasTurnedOn()) {
+        Link::printText("dark: night light on\r\n");
+    }
+    if (light.wasTurnedOff()) {
+        Link::printText("light again: night light off\r\n");
+    }
+    if (knob.hasChanged(KNOB_STEP)) {
+        Link::printText("knob turned: ");
+        Link::printNumber(knob.percent());
+        Link::printText(" %\r\n");
+    }
+
+    if ((int32_t)(millis() - nextPrintMs) < 0) {
+        return;
+    }
+    nextPrintMs = millis() + PRINT_MS;
+    Link::printText("knob ");
+    Link::printNumber(knob.percent());
+    Link::printText("%  light ");
+    Link::printNumber(light.brightness());
+    Link::printText("%  stick ");
+    Link::printNumber(stick.x());
+    Link::printText(",");
+    Link::printNumber(stick.y());
+    Link::printText("  ");
+    Link::printDecimal(thermometer.readTemperature(), 1);
+    Link::printText(" C  sound ");
+    Link::printNumber(sound.peak());
+    Link::printText("\r\n");
+}

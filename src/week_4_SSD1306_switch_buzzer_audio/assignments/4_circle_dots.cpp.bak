@@ -1,0 +1,447 @@
+#include <Arduino.h>
+#include <math.h>
+#include "Uno_I2C.h"
+#include "SSD1306.h"
+#include "graphics.h"
+#include "color.h"
+
+// UNO + 128x64 I2C OLED: a big circle among dots that are born and die by themselves
+//
+// dots: every dot p_i looks at its K nearest dots p_j (j = 1 ~ K)
+//   w_i     = sum 1 / (1 + d(p_i, p_j))
+//   rho_i   = 1 / (1 + RHO_0 / w_i)                        how crowded, 0 ~ 1
+//   P_die_i = min(1, P_DIE_0 + C_DIE * rho_i^2)            crowded dots die
+//   P_rep_i = C_REP * (1 - rho_i)                          lonely dots have children
+//   P_sex_i = 1 / (1 + P_SEX_0 / rho_i)                    crowded dots have them with a partner
+//   with chance P_rep_i a child:
+//     with chance P_sex_i: p_i + DELTA_SEX * (unit vector to a random one of the K nearest)
+//     otherwise:           p_i + DELTA_ASEX * (unit vector in a random direction)
+//   with chance P_die_i p_i dies
+// and every dot ages: it is still alive at age t with chance S(t) = e^(-(t / TAU)^BETA) (Weibull);
+//   its lifetime is drawn at birth, L = TAU * (-ln U)^(1 / BETA) with U uniform in (0, 1], which gives
+//   exactly that S(t) with no table; past LIFE_MAX it dies for sure (S(LIFE_MAX) is ~2 %)
+// a dot is checked at a time, a random one, UPDATES_PER_FRAME times a frame (no sweep order)
+// at most one dot per pixel: a child on a taken pixel, off the screen or past MAX_DOTS is not born
+//
+// circle: its heading always wanders a little, and it heads for the dot it ate last (turning at
+// most STEER rad / s) until it gets there; it bounces off the edges; a dot it touches disappears and its area
+// grows by AREA_PER_DOT (area proportional to the dots eaten); at R_MAX it shrinks back to R_START and
+// throws out fewer dots than it ate (half, at most BURST_MAX), which become dots where they stop
+
+// ---------- settings ----------
+
+// wiring: OLED VCC -> 5V, GND -> GND
+constexpr uint8_t SCL_PIN = 13;             // SCL: any pin (I2C made by the program)
+constexpr uint8_t SDA_PIN = 11;             // SDA: any pin
+constexpr bool I2C_INTERNAL_PULLUP = true;  // the UNO's ~35 kΩ pull-ups as well (the modules have their own)
+constexpr uint16_t I2C_KHZ = 400;           // 1 ~ 400 (really ~160): lower it if the picture breaks up
+constexpr bool FLIP = false;                // true: the OLED turned 180° (pins at the bottom)
+
+// dots
+constexpr uint8_t K = 4;                  // nearest dots looked at
+constexpr float RHO_0 = 0.65f;            // w at which rho = 0.5: higher = more dots
+constexpr float P_DIE_0 = 0.01f;           // dying even alone: 0, aging does it now
+constexpr float C_DIE = 0.1f;
+constexpr float C_REP = 0.5f;             // must be > P_DIE_0, or the dots die out
+constexpr float P_SEX_0 = 0.5f;           // rho at which half the children have a partner
+constexpr float DELTA_SEX = 10.0f;         // px toward the partner
+constexpr float DELTA_ASEX = 8.0f;        // px in any direction: must be > the spacing of a crowd (~4 px)
+constexpr float TAU = 10.0f;              // s: alive at TAU with chance e^-1 = 37 %
+constexpr float BETA = 2.0f;              // > 1: old dots die more (1: any age the same, 0.5 ~ 3 is fine)
+constexpr uint16_t LIFE_TICK_MS = 100;    // the lifetime is counted in these
+constexpr uint8_t LIFE_MAX = 200;         // ticks (20 s, at most 255): older dies for sure
+constexpr uint8_t MAX_DOTS = 150;         // 3 bytes each
+constexpr uint8_t MIN_DOTS = 4;           // fewer: a random dot appears, so they never die out
+constexpr uint8_t UPDATES_PER_FRAME = 12;
+
+// circle
+constexpr float R_START = 5.0f;
+constexpr float R_MAX = 24.0f;
+constexpr float AREA_PER_DOT = 8.0f;      // px^2 per dot eaten: R_START -> R_MAX takes ~216 dots (< 255)
+constexpr float CIRCLE_SPEED = 16.0f;     // px / s
+constexpr float TURN = 0.6f;              // rad / s: how fast the heading wanders
+constexpr float STEER = 6.0f;             // rad / s toward the last dot eaten: at 3 it can circle a dot
+                                          // beside it forever (turning circle wider than the dot is far)
+constexpr float ARRIVE = 1.0f;            // px: this close to the last dot eaten (or one step) it is there
+constexpr float GROW_EASE = 0.08f;        // the shown radius moves this part of the way per frame: growing
+constexpr float SHRINK_EASE = 0.5f;       // shrinking (at a burst): R_MAX -> R_START in ~5 frames
+
+// burst
+constexpr uint8_t BURST_MAX = 24;
+constexpr float BURST_SPEED_MIN = 40.0f;  // px / s
+constexpr float BURST_SPEED_MAX = 90.0f;
+constexpr float BURST_DRAG = 3.0f;        // 1 / s: the speed falls by e every 1 / BURST_DRAG s
+constexpr uint16_t BURST_MS = 900;        // then they land and become dots
+constexpr uint8_t BW_THRESHOLD = 128;       // a picture's color lights a dot from this brightness on (0 ~ 255)
+
+// ---------- parts ----------
+
+using Bus = Uno::UnoI2C<SCL_PIN, SDA_PIN, I2C_INTERNAL_PULLUP, I2C_KHZ>;
+using ScreenColor = color::BW<BW_THRESHOLD>;       // the OLED: dots on / off
+using Screen = graphics::Canvas<SSD1306::OLED128x64<Bus, ScreenColor>>;
+Screen screen;
+
+constexpr uint16_t ON = 1;
+constexpr int16_t WIDTH = 128;
+constexpr int16_t HEIGHT = 64;
+
+// ---------- dots ----------
+
+uint8_t dotX[MAX_DOTS];
+uint8_t dotY[MAX_DOTS];
+uint8_t dotLife[MAX_DOTS];                // ticks left
+uint8_t dotCount = 0;
+uint32_t lifeMs = 0;                      // the last tick counted
+
+// ---------- circle ----------
+
+float circleX = WIDTH / 2;
+float circleY = HEIGHT / 2;
+float heading = 0.0f;
+bool hasTarget = false;                   // the last dot eaten, until the circle gets there
+float targetX = 0.0f;
+float targetY = 0.0f;
+float area = (float)M_PI * R_START * R_START;
+float shownRadius = R_START;
+uint8_t eaten = 0;
+
+// ---------- burst ----------
+
+// a flying dot needs no position: it is known from the burst (where, when) and its direction / speed
+// (3 bytes a dot instead of 16 for float position + velocity: the OLED frame takes half the RAM)
+int8_t flyCos[BURST_MAX];                 // direction x 127
+int8_t flySin[BURST_MAX];
+uint8_t flySpeed[BURST_MAX];              // px / s
+uint8_t flyCount = 0;
+float burstX = 0.0f;
+float burstY = 0.0f;
+uint32_t burstMs = 0;
+
+uint32_t lastMs = 0;
+
+// ---------- random ----------
+
+// true with chance p (0 ~ 1)
+bool chance(float p) {
+    return random(10000) < (long)(p * 10000.0f);
+}
+
+float randomFloat(float low, float high) {
+    return low + (high - low) * (float)random(10001) / 10000.0f;
+}
+
+// ---------- dots ----------
+
+bool isTaken(int16_t x, int16_t y) {
+    for (uint8_t i = 0; i < dotCount; i++) {
+        if (dotX[i] == x && dotY[i] == y) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// a lifetime in ticks: alive at age t with chance e^(-(t / TAU)^BETA), at least 1, at most LIFE_MAX
+uint8_t drawLife() {
+    float u = (float)(random(10000) + 1) / 10000.0f;     // (0, 1]: ln 0 is not
+    float seconds = TAU * powf(-logf(u), 1.0f / BETA);
+    float ticks = seconds * 1000.0f / LIFE_TICK_MS;
+    return (uint8_t)constrain(lroundf(ticks), 1L, (long)LIFE_MAX);
+}
+
+// false if off the screen, taken or full
+bool addDot(int16_t x, int16_t y) {
+    if (x < 0 || x >= WIDTH || y < 0 || y >= HEIGHT || dotCount >= MAX_DOTS || isTaken(x, y)) {
+        return false;
+    }
+    dotX[dotCount] = (uint8_t)x;
+    dotY[dotCount] = (uint8_t)y;
+    dotLife[dotCount] = drawLife();
+    dotCount++;
+    return true;
+}
+
+// the last one takes its place: the order does not matter
+void removeDot(uint8_t i) {
+    dotCount--;
+    dotX[i] = dotX[dotCount];
+    dotY[i] = dotY[dotCount];
+    dotLife[i] = dotLife[dotCount];
+}
+
+// every dot loses the ticks gone since the last call; out of life: dies
+void ageDots(uint32_t now) {
+    uint32_t ticks = (now - lifeMs) / LIFE_TICK_MS;
+    if (ticks == 0) {
+        return;
+    }
+    lifeMs += ticks * LIFE_TICK_MS;
+    for (uint8_t i = 0; i < dotCount;) {
+        if (dotLife[i] <= ticks) {
+            removeDot(i);
+        } else {
+            dotLife[i] -= (uint8_t)ticks;
+            i++;
+        }
+    }
+}
+
+// the K nearest dots of dot i: indexes and squared distances, nearest first; returns how many (<= K)
+uint8_t findNearest(uint8_t i, uint8_t *nearest, uint16_t *squares) {
+    uint8_t found = 0;
+    for (uint8_t j = 0; j < dotCount; j++) {
+        if (j == i) {
+            continue;
+        }
+        int16_t dx = (int16_t)dotX[j] - dotX[i];
+        int16_t dy = (int16_t)dotY[j] - dotY[i];
+        uint16_t square = (uint16_t)(dx * dx + dy * dy);
+        if (found == K && square >= squares[K - 1]) {
+            continue;
+        }
+        // insert in order, dropping the farthest when full
+        uint8_t k = found < K ? found++ : K - 1;
+        while (k > 0 && squares[k - 1] > square) {
+            squares[k] = squares[k - 1];
+            nearest[k] = nearest[k - 1];
+            k--;
+        }
+        squares[k] = square;
+        nearest[k] = j;
+    }
+    return found;
+}
+
+// one step of the rules for one random dot
+void updateDot() {
+    if (dotCount == 0) {
+        return;
+    }
+    uint8_t i = (uint8_t)random(dotCount);
+    uint8_t nearest[K];
+    uint16_t squares[K];
+    uint8_t found = findNearest(i, nearest, squares);
+
+    float w = 0.0f;
+    for (uint8_t k = 0; k < found; k++) {
+        w += 1.0f / (1.0f + sqrtf((float)squares[k]));
+    }
+    // written as w / (w + RHO_0) and rho / (rho + P_SEX_0): the same, but fine at w = 0 (no neighbor)
+    float rho = w / (w + RHO_0);
+    float pDie = min(1.0f, P_DIE_0 + C_DIE * rho * rho);
+    float pRep = C_REP * (1.0f - rho);
+    float pSex = rho / (rho + P_SEX_0);
+
+    if (chance(pRep)) {
+        float x = dotX[i];
+        float y = dotY[i];
+        if (found > 0 && chance(pSex)) {
+            uint8_t k = (uint8_t)random(found);
+            float d = sqrtf((float)squares[k]);
+            x += DELTA_SEX * ((float)dotX[nearest[k]] - x) / d;
+            y += DELTA_SEX * ((float)dotY[nearest[k]] - y) / d;
+        } else {
+            float angle = randomFloat(0.0f, 2.0f * (float)M_PI);
+            x += DELTA_ASEX * cosf(angle);
+            y += DELTA_ASEX * sinf(angle);
+        }
+        // the child goes to the end: index i still is the parent
+        addDot((int16_t)lroundf(x), (int16_t)lroundf(y));
+    }
+    if (chance(pDie)) {
+        removeDot(i);
+    }
+}
+
+void updateDots(uint32_t now) {
+    ageDots(now);
+    while (dotCount < MIN_DOTS) {
+        addDot((int16_t)random(WIDTH), (int16_t)random(HEIGHT));
+    }
+    for (uint8_t n = 0; n < UPDATES_PER_FRAME; n++) {
+        updateDot();
+    }
+}
+
+// ---------- circle ----------
+
+float targetRadius() {
+    return sqrtf(area / (float)M_PI);
+}
+
+// angle in -pi ~ pi
+float wrapAngle(float angle) {
+    while (angle > (float)M_PI) {
+        angle -= 2.0f * (float)M_PI;
+    }
+    while (angle < -(float)M_PI) {
+        angle += 2.0f * (float)M_PI;
+    }
+    return angle;
+}
+
+// a little wander always, then toward the last dot eaten (as far as the circle can go: it stays on the screen)
+void steer(float dt) {
+    heading += randomFloat(-TURN, TURN) * dt * 4.0f;
+    if (!hasTarget) {
+        return;
+    }
+    float r = shownRadius;
+    float x = constrain(targetX, r, WIDTH - 1 - r);
+    float y = constrain(targetY, r, HEIGHT - 1 - r);
+    float dx = x - circleX;
+    float dy = y - circleY;
+    float near = max(ARRIVE, CIRCLE_SPEED * dt);
+    if (dx * dx + dy * dy <= near * near) {
+        hasTarget = false;
+        return;
+    }
+    float turn = wrapAngle(atan2f(dy, dx) - heading);
+    float most = STEER * dt;
+    heading += constrain(turn, -most, most);
+}
+
+void moveCircle(float dt) {
+    steer(dt);
+    heading = wrapAngle(heading);
+    circleX += CIRCLE_SPEED * cosf(heading) * dt;
+    circleY += CIRCLE_SPEED * sinf(heading) * dt;
+    // bounce: the whole circle stays on the screen
+    float r = shownRadius;
+    if (circleX < r) {
+        circleX = r;
+        heading = (float)M_PI - heading;
+    } else if (circleX > WIDTH - 1 - r) {
+        circleX = WIDTH - 1 - r;
+        heading = (float)M_PI - heading;
+    }
+    if (circleY < r) {
+        circleY = r;
+        heading = -heading;
+    } else if (circleY > HEIGHT - 1 - r) {
+        circleY = HEIGHT - 1 - r;
+        heading = -heading;
+    }
+    float change = targetRadius() - shownRadius;
+    shownRadius += change * (change > 0.0f ? GROW_EASE : SHRINK_EASE);
+}
+
+// every dot under the circle (its outline included) is eaten
+void eatDots() {
+    float reach = shownRadius + 1.0f;
+    float reachSquare = reach * reach;
+    for (uint8_t i = 0; i < dotCount;) {
+        float dx = dotX[i] - circleX;
+        float dy = dotY[i] - circleY;
+        if (dx * dx + dy * dy <= reachSquare) {
+            hasTarget = true;
+            targetX = dotX[i];
+            targetY = dotY[i];
+            removeDot(i);
+            area += AREA_PER_DOT;
+            if (eaten < 255) {
+                eaten++;
+            }
+        } else {
+            i++;
+        }
+    }
+}
+
+// at R_MAX: back to R_START, half of the eaten dots fly out in all directions
+void burst(uint32_t now) {
+    if (targetRadius() < R_MAX) {
+        return;
+    }
+    flyCount = min((uint8_t)(eaten / 2), BURST_MAX);
+    for (uint8_t n = 0; n < flyCount; n++) {
+        float angle = 2.0f * (float)M_PI * (n + randomFloat(0.0f, 0.8f)) / flyCount;
+        flyCos[n] = (int8_t)lroundf(127.0f * cosf(angle));
+        flySin[n] = (int8_t)lroundf(127.0f * sinf(angle));
+        flySpeed[n] = (uint8_t)lroundf(randomFloat(BURST_SPEED_MIN, BURST_SPEED_MAX));
+    }
+    burstX = circleX;
+    burstY = circleY;
+    burstMs = now;
+    area = (float)M_PI * R_START * R_START;
+    eaten = 0;
+}
+
+// where flying dot n is: speed falling as e^(-BURST_DRAG t), so the way gone is
+// R_MAX + speed / BURST_DRAG * (1 - e^(-BURST_DRAG t)) from the burst
+void flyPosition(uint8_t n, float travel, int16_t &x, int16_t &y) {
+    float distance = R_MAX + flySpeed[n] * travel;
+    x = (int16_t)lroundf(burstX + distance * flyCos[n] / 127.0f);
+    y = (int16_t)lroundf(burstY + distance * flySin[n] / 127.0f);
+}
+
+// the shared part of the way: (1 - e^(-BURST_DRAG t)) / BURST_DRAG
+float flyTravel(uint32_t now) {
+    float t = (now - burstMs) / 1000.0f;
+    return (1.0f - expf(-BURST_DRAG * t)) / BURST_DRAG;
+}
+
+// after BURST_MS the flying dots land as dots (off the screen or on a taken pixel: gone)
+void landFlying(uint32_t now) {
+    if (flyCount == 0 || now - burstMs < BURST_MS) {
+        return;
+    }
+    float travel = flyTravel(now);
+    for (uint8_t n = 0; n < flyCount; n++) {
+        int16_t x;
+        int16_t y;
+        flyPosition(n, travel, x, y);
+        addDot(x, y);
+    }
+    flyCount = 0;
+}
+
+// ---------- drawing ----------
+
+// the whole picture every frame: the changes are all over the screen anyway
+void draw() {
+    screen.clear();
+    for (uint8_t i = 0; i < dotCount; i++) {
+        screen.drawPoint(dotX[i], dotY[i], ON);
+    }
+    float travel = flyTravel(millis());
+    for (uint8_t n = 0; n < flyCount; n++) {
+        int16_t x;
+        int16_t y;
+        flyPosition(n, travel, x, y);
+        screen.drawPoint(x, y, ON);
+    }
+    screen.drawHollowCircleRadius((int16_t)lroundf(circleX), (int16_t)lroundf(circleY),
+                                  (int16_t)lroundf(shownRadius), ON, 2);
+    screen.display();
+}
+
+// ---------- main ----------
+
+void setup() {
+    randomSeed(analogRead(A0));
+    if (!screen.init(FLIP)) {
+        // no answer at 0x3C: check the wiring (see src/week_4_SSD1306_switch_buzzer_audio/README.md)
+        while (true) {
+        }
+    }
+    heading = randomFloat(0.0f, 2.0f * (float)M_PI);
+    for (uint8_t n = 0; n < 30; n++) {
+        addDot((int16_t)random(WIDTH), (int16_t)random(HEIGHT));
+    }
+    lastMs = millis();
+    lifeMs = lastMs;
+}
+
+void loop() {
+    uint32_t now = millis();
+    float dt = (now - lastMs) / 1000.0f;
+    lastMs = now;
+
+    updateDots(now);
+    moveCircle(dt);
+    eatDots();
+    burst(now);
+    landFlying(now);
+    draw();
+}

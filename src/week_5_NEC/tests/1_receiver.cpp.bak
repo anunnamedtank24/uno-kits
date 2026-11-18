@@ -1,0 +1,168 @@
+#include <Arduino.h>
+#include "Uno_serial.h"
+#include "Uno_interrupt_pin.h"
+#include "NEC.h"
+
+// UNO + infrared receiver (HX1838 / VS1838B / KY-022, 3 pins): every code a remote sends goes to the USB serial
+//   pio device monitor        (platformio.ini: monitor_speed = BAUD)
+//
+// a press, then held:   "address 0x00  command 0x45  press     numbers top: 1      arrows top: *"
+//                       "address 0x00  command 0x45  repeat 1  numbers top: 1      arrows top: *"
+// the layout whose names match the keys pressed is the one of your remote: use it in the assignments
+// (the Remote line in the settings of src/week_5_NEC/assignment_*.cpp)
+//
+// nothing printed? the test also checks IR_PIN itself (D2 here):
+//   at the start:      "D2 idle: HIGH (ok)"  or  "D2 idle: LOW" (receiver not powered / pins swapped / OUT not on D2)
+//   keys pressed, still nothing at all       -> D2 never changes: wiring, or the remote sends no light
+//   "D2 changed 340 times, no NEC code"      -> light arrives (every CHECK_MS of presses), but the remote is not NEC
+
+// ---------- settings ----------
+
+// wiring: infrared receiver + -> 5V, - -> GND
+constexpr uint8_t IR_PIN = 2;               // S (OUT): any pin (pin-change interrupt)
+// the UNO's pull-up: IR_PIN stays HIGH when nothing drives it, so a missing / unpowered receiver gives
+// silence, not noise (the receiver has a pull-up of its own: this changes nothing when it works)
+constexpr bool IR_INTERNAL_PULLUP = true;
+constexpr uint8_t IR_QUEUE = 4;             // codes kept while the program is busy
+constexpr uint32_t BAUD = 1000000;          // USB serial: the same as monitor_speed in platformio.ini
+
+constexpr uint16_t CHECK_MS = 2000;         // "changed n times, no NEC code" at most this often
+
+// raw pulses: every change of IR_PIN is also recorded (length of the level that just ended), and a burst
+// is printed once IR_PIN has been quiet for 50 ms, e.g. "pulses 68: L9010 H4470 L580 H530 L580 H1650 ..."
+// (L = LOW = light on, H = HIGH = light off, µs); a good NEC press starts with L ~9000 H ~4500
+constexpr uint8_t TRACE_MAX = 80;
+constexpr uint16_t TRACE_QUIET_MS = 50;
+
+// ---------- parts ----------
+
+using IrPin = Uno::UnoInterruptPin<IR_PIN, IR_INTERNAL_PULLUP>;
+using Receiver = NEC::HX1838<IrPin, IR_QUEUE>;
+using Link = Uno::UnoSerial<BAUD>;
+
+volatile uint16_t traceUs[TRACE_MAX];
+volatile uint8_t traceCount = 0;
+volatile bool traceFirstLow = false;
+volatile uint32_t traceLastUs = 0;
+volatile uint32_t traceLastMs = 0;
+
+uint16_t lastBadCount = 0;
+uint16_t lastChangeCount = 0;
+bool decodedSinceCheck = false;
+uint32_t nextCheckMs = 0;
+
+// ---------- text over the serial link ----------
+
+// the name, padded to 7 characters
+void printKey(NEC::Key key) {
+    const char *name = NEC::keyName(key);
+    Link::printText(name);
+    for (uint8_t n = (uint8_t)strlen(name); n < 7; n++) {
+        Link::printText(" ");
+    }
+}
+
+// ---------- raw pulses ----------
+
+// runs in the interrupt: records the level that just ended, then lets the receiver decode
+void traceChange() {
+    uint32_t now = micros();
+    uint32_t us = now - traceLastUs;
+    traceLastUs = now;
+    traceLastMs = millis();
+    bool endedLow = IrPin::read();          // HIGH now: a LOW just ended
+    if (us > 60000) {
+        // quiet before: a new burst starts with this edge, the long level is not stored
+        traceCount = 0;
+        traceFirstLow = !endedLow;
+    } else if (traceCount < TRACE_MAX) {
+        if (traceCount == 0) {
+            traceFirstLow = endedLow;
+        }
+        traceUs[traceCount] = (uint16_t)(us > 65535 ? 65535 : us);
+        traceCount++;
+    }
+    Receiver::onChange();
+}
+
+void printTrace() {
+    uint8_t saved = IrPin::stopInterrupts();
+    uint8_t count = traceCount;
+    bool quiet = count > 0 && millis() - traceLastMs > TRACE_QUIET_MS;
+    IrPin::restoreInterrupts(saved);
+    if (!quiet) {
+        return;
+    }
+    Link::printText("pulses ");
+    Link::printNumber(count);
+    Link::printText(":");
+    bool low = traceFirstLow;
+    for (uint8_t i = 0; i < count; i++) {
+        Link::printText(low ? " L" : " H");
+        Link::printNumber(traceUs[i]);
+        low = !low;
+    }
+    Link::printText("\r\n");
+    traceCount = 0;
+}
+
+// ---------- main ----------
+
+void setup() {
+    Link::init();
+    Receiver::init();
+    traceLastUs = micros();
+    IrPin::init(&traceChange);              // record the pulses too (the receiver still decodes)
+    Link::printText("\r\ninfrared receiver on ");
+    Link::printPin(IR_PIN);
+    Link::printText(": press keys on the remote\r\n");
+    Link::printPin(IR_PIN);
+    Link::printText(IrPin::read() ? " idle: HIGH (ok)\r\n"
+                                  : " idle: LOW (should be HIGH: receiver not powered, pins swapped, or OUT on another pin)\r\n");
+    nextCheckMs = millis() + CHECK_MS;
+}
+
+void loop() {
+    NEC::Code code;
+    while (Receiver::read(code)) {
+        decodedSinceCheck = true;
+        Link::printText("address ");
+        Link::printHex(code.address, code.address > 0xFF ? 4 : 2);
+        Link::printText("  command ");
+        Link::printHex(code.command, 2);
+        if (code.repeats == 0) {
+            Link::printText("  press     ");
+        } else {
+            Link::printText("  repeat ");
+            Link::printNumber(code.repeats);
+            Link::printText(code.repeats < 10 ? " " : "");
+        }
+        Link::printText("  numbers top: ");
+        printKey(NEC::Remote17KeyNumbersTop::toKey(code));
+        Link::printText("arrows top: ");
+        printKey(NEC::Remote17KeyArrowsTop::toKey(code));
+        Link::printText("\r\n");
+    }
+    printTrace();
+    uint16_t bad = Receiver::badCount();
+    if (bad != lastBadCount) {
+        lastBadCount = bad;
+        Link::printText("[WARNING] a frame failed its check: noise, or a remote that is not NEC\r\n");
+    }
+
+    // every CHECK_MS: IR_PIN changed but nothing decoded -> say how much it changed
+    if ((int32_t)(millis() - nextCheckMs) >= 0) {
+        nextCheckMs += CHECK_MS;
+        uint16_t changes = Receiver::changeCount();
+        uint16_t changed = changes - lastChangeCount;
+        lastChangeCount = changes;
+        if (changed > 0 && !decodedSinceCheck) {
+            Link::printPin(IR_PIN);
+            Link::printText(" changed ");
+            Link::printNumber(changed);
+            Link::printText(" times, no NEC code (not an NEC remote, or noise); now ");
+            Link::printText(IrPin::read() ? "HIGH\r\n" : "LOW\r\n");
+        }
+        decodedSinceCheck = false;
+    }
+}

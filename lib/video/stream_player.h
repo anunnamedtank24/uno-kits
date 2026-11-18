@@ -4,44 +4,44 @@
 #include "decoder.h"
 
 namespace video {
-    // plays an animation that stream.py sends over a Link (e.g. Uno::UnoSerial)
-    // the board knows the path (Animation::getPath(), made by convert.py --target mac),
+    // plays an animation that lib/stream/source/stream.py sends
+    // the board knows the path (Animation::getPath(), made by convert.py --target stream),
     // stream.py on the computer needs no arguments: it loads whatever the board opens
     // the computer keeps the time; play / pause / stop / seek / speed / loop are sent to it
     //
-    // Screen: as for Decoder, plus BusType::nowMs / readFlash8 / readFlash16
-    // Link: a struct providing (see lib/Uno/Uno_serial.h)
-    //   init(), available(), read8(uint8_t &byte, uint16_t timeoutMs), write8(uint8_t), clearInput()
-    // CHUNK: bytes received at a time (RAM), 16 ~ 255
+    // Screen: as for Decoder, plus BusType::nowMs / readFlash16
+    // Stream: the link to stream.py (lib/stream: stream::Puller<Uno::UnoSerial<BAUD>, CHUNK>, CHUNK 16 ~ 255),
+    //   a struct providing CHUNK_SIZE, OK, ERROR_NOT_FOUND ~ ERROR_BROKEN, begin(), write8/16/32(),
+    //   writePath(flash path), available(), waitAnswer(timeoutMs), and a class Answer: begin(), read8(),
+    //   read16(), read32(), failed()
     //
-    // protocol (full description: lib/video/source/README.md)
+    // protocol (after Stream's own, see lib/stream/puller.h; full description: lib/stream/README.md)
     //   board -> computer, commands:
     //     'O' open: chunk, flags (bit 0 play, bit 1 loop), speed (uint16_t %), start (uint32_t ms), path length, path
     //     'N' next frame (answered when one is due)   'P' play   'S' pause
     //     'J' seek: uint32_t ms   'V' speed: uint16_t %   'L' loop: 0 / 1   'R' next chunk
-    //   computer -> board, never more than 1 byte unasked (the UART keeps only 2):
-    //     'D' an answer is ready: the board sends 'R' when it can, then gets [length][bytes] chunks
     //   answers (first byte): 'G' header (to 'O'), 'F' frame (to 'N'), 'K' no frame yet (to 'N', every second,
     //     or when the status changes, e.g. ended; the board sends 'N' again), 'A' status (to P S J V L), 'E' error
     //     status (in G F K A): flags (bit 0 playing, bit 1 ended), position (uint32_t ms), frame (uint16_t)
     //   no answer in time, or a wrong byte: the board opens again, from where it was
-    template <class Screen, class Link, uint8_t CHUNK = 64>
+    template <class Screen, class Stream>
     class StreamPlayer {
-        static_assert(CHUNK >= 16, "video::StreamPlayer: CHUNK must be 16 ~ 255");
+        static_assert(Stream::CHUNK_SIZE >= 16, "video::StreamPlayer: the Stream's CHUNK must be 16 ~ 255");
 
     public:
         static constexpr uint16_t OPEN_TIMEOUT_MS = 3000;
         static constexpr uint16_t FRAME_TIMEOUT_MS = 3000;
         static constexpr uint16_t ANSWER_TIMEOUT_MS = 1000;
-        static constexpr uint16_t CHUNK_TIMEOUT_MS = 200;
 
-        // error(): what went wrong last
-        static constexpr uint8_t ERROR_NONE = 0;
-        static constexpr uint8_t ERROR_NOT_FOUND = 1; // stream.py: no such file (or outside lib/video)
-        static constexpr uint8_t ERROR_UNREADABLE = 2; // stream.py: not a file made by convert.py
-        static constexpr uint8_t ERROR_NOT_STREAMABLE = 3; // stream.py: palette 256
-        static constexpr uint8_t ERROR_TOO_BIG = 4; // not on the screen at (x, y), or scaled rows wider than MAX_SCALED_WIDTH: read, not drawn
-        static constexpr uint8_t ERROR_NO_ANSWER = 5; // stream.py not running, or the link broke
+        // error(): what went wrong last (Stream's codes, plus ERROR_TOO_BIG)
+        static constexpr uint8_t OK = Stream::OK;
+        static constexpr uint8_t ERROR_NOT_FOUND = Stream::ERROR_NOT_FOUND; // stream.py: no such file (or outside lib/video)
+        static constexpr uint8_t ERROR_UNREADABLE = Stream::ERROR_UNREADABLE; // stream.py: not a file made by convert.py
+        static constexpr uint8_t ERROR_NOT_STREAMABLE = Stream::ERROR_NOT_STREAMABLE; // stream.py: this file cannot be streamed
+        static constexpr uint8_t ERROR_NO_ANSWER = Stream::ERROR_NO_ANSWER; // stream.py not running, or the link broke
+        static constexpr uint8_t ERROR_BROKEN = Stream::ERROR_BROKEN; // an answer made no sense
+        static constexpr uint8_t ERROR_NO_MEMORY = Stream::ERROR_NO_MEMORY; // a 256-color palette did not fit in RAM
+        static constexpr uint8_t ERROR_TOO_BIG = 7; // not on the screen at (x, y), or scaled rows wider than MAX_SCALED_WIDTH: read, not drawn
 
         inline explicit StreamPlayer(Screen &screen);
 
@@ -49,7 +49,7 @@ namespace video {
         template <class Animation>
         inline void open(int16_t x, int16_t y, bool play = true, bool loop = true, uint16_t speedPercent = 100);
 
-        // stops asking for frames (stream.py keeps waiting for the next open)
+        // stops asking for frames (stream.py keeps waiting for the next open); a 256-color palette is given back
         inline void close();
 
         // call as often as possible: waits for nothing, but once a frame starts arriving it is drawn
@@ -75,9 +75,6 @@ namespace video {
         inline uint32_t drawnCount() const; // frames drawn since open()
         inline uint8_t error() const;
 
-        // Reader for Decoder: next byte of the current answer, 0 after an error
-        inline uint8_t read8();
-
     private:
         using Bus = typename Screen::BusType;
 
@@ -90,7 +87,11 @@ namespace video {
         static constexpr uint8_t OPEN_PLAY = 1;
         static constexpr uint8_t OPEN_LOOP = 2;
 
+        using Color = typename Decoder<Screen>::Color;
+
         Decoder<Screen> _decoder;
+        // COLORS_256: the palette, taken when the header comes, given back by close() / the next header / ~StreamPlayer
+        HeapPalette<Color> _heapPalette;
         uint8_t _state = STATE_CLOSED;
         uint32_t _sentMs = 0;
 
@@ -108,40 +109,33 @@ namespace video {
         uint32_t _durationMs = 0;
         uint16_t _frameCount = 0;
         uint32_t _drawnCount = 0;
-        uint8_t _error = ERROR_NONE;
+        uint8_t _error = OK;
 
-        // the current answer
-        uint8_t _buffer[CHUNK];
-        uint8_t _length = 0;
-        uint8_t _position = 0;
-        bool _readError = false;
+        // the current answer (RAM: the Stream's CHUNK)
+        typename Stream::Answer _answer;
 
         inline void sendOpen();
         inline void sendNext();
         inline void lose();
         inline bool sendCommand(uint8_t command, uint32_t value, uint8_t valueBytes);
 
-        inline void beginAnswer();
-        inline bool receiveChunk();
-        inline uint32_t read32();
         inline void readStatus();
-        inline void readHeader();
+        inline bool readHeader();
         inline void readError();
         inline bool drawFrameAnswer();
     };
 
     // ================= definitions =================
 
-    template <class Screen, class Link, uint8_t CHUNK>
-    inline StreamPlayer<Screen, Link, CHUNK>::StreamPlayer(Screen &screen) : _decoder(screen) {
+    template <class Screen, class Stream>
+    inline StreamPlayer<Screen, Stream>::StreamPlayer(Screen &screen) : _decoder(screen) {
     }
 
-    template <class Screen, class Link, uint8_t CHUNK>
+    template <class Screen, class Stream>
     template <class Animation>
-    inline void StreamPlayer<Screen, Link, CHUNK>::open(int16_t x, int16_t y, bool play, bool loop, uint16_t speedPercent) {
-        static_assert(Animation::colorMode != COLORS_256,
-                      "video::StreamPlayer: palette 256 cannot be streamed (512 B RAM), make it with --palette 16 or 565");
-        static_assert(warn::NotForMac<!(Animation::target & TARGET_MAC)>::ok, "");
+    inline void StreamPlayer<Screen, Stream>::open(int16_t x, int16_t y, bool play, bool loop, uint16_t speedPercent) {
+        static_assert(warn::PaletteInRam<Animation::colorMode == COLORS_256>::ok, "");
+        static_assert(warn::NotForStream<!(Animation::target & TARGET_STREAM)>::ok, "");
         _path = Animation::getPath();
         _x = x;
         _y = y;
@@ -149,27 +143,27 @@ namespace video {
         _speed = speedPercent;
         _positionMs = 0;
         _drawnCount = 0;
-        _error = ERROR_NONE;
-        Link::init();
+        _error = OK;
         sendOpen();
     }
 
-    template <class Screen, class Link, uint8_t CHUNK>
-    inline void StreamPlayer<Screen, Link, CHUNK>::close() {
+    template <class Screen, class Stream>
+    inline void StreamPlayer<Screen, Stream>::close() {
         _state = STATE_CLOSED;
+        _heapPalette.release();
     }
 
-    template <class Screen, class Link, uint8_t CHUNK>
-    inline bool StreamPlayer<Screen, Link, CHUNK>::update() {
+    template <class Screen, class Stream>
+    inline bool StreamPlayer<Screen, Stream>::update() {
         if (_state == STATE_CLOSED) {
             return false;
         }
         uint32_t now = Bus::nowMs();
         uint32_t timeoutMs = _state == STATE_OPENING ? OPEN_TIMEOUT_MS : FRAME_TIMEOUT_MS;
-        if (!Link::available()) {
+        if (!Stream::available()) {
             if (now - _sentMs >= timeoutMs) {
                 // keep an error stream.py told (e.g. not found), it is more useful than "no answer"
-                if (_error == ERROR_NONE || _error == ERROR_TOO_BIG) {
+                if (_error == OK || _error == ERROR_TOO_BIG) {
                     _error = ERROR_NO_ANSWER;
                 }
                 lose();
@@ -177,21 +171,23 @@ namespace video {
             return false;
         }
 
-        uint8_t notice = 0;
-        Link::read8(notice, 0);
-        if (notice != 'D') {
+        if (!Stream::waitAnswer(0)) {
             return false;
         }
 
-        beginAnswer();
-        uint8_t type = read8();
+        _answer.begin();
+        uint8_t type = _answer.read8();
         if (_state == STATE_OPENING) {
+            bool fine = false;
             if (type == 'G') {
-                readHeader();
+                fine = readHeader();
             } else if (type == 'E') {
                 readError();
             }
-            if (_readError) {
+            if (!_answer.failed() && type == 'G' && !fine && _error == ERROR_NO_MEMORY) {
+                // no RAM for the palette: open again after a whole timeout (RAM may be free then)
+                _sentMs = Bus::nowMs();
+            } else if (_answer.failed() || (type == 'G' && !fine)) {
                 lose();
             } else if (type == 'G') {
                 _state = STATE_CONNECTED;
@@ -205,7 +201,7 @@ namespace video {
         if (type == 'K') {
             // still there, no frame due (paused, ended, or a long frame)
             readStatus();
-            if (_readError) {
+            if (_answer.failed()) {
                 lose();
             } else {
                 sendNext();
@@ -216,37 +212,37 @@ namespace video {
         return false;
     }
 
-    template <class Screen, class Link, uint8_t CHUNK>
-    inline bool StreamPlayer<Screen, Link, CHUNK>::play() {
+    template <class Screen, class Stream>
+    inline bool StreamPlayer<Screen, Stream>::play() {
         _openFlags |= OPEN_PLAY;
         return sendCommand('P', 0, 0);
     }
 
-    template <class Screen, class Link, uint8_t CHUNK>
-    inline bool StreamPlayer<Screen, Link, CHUNK>::pause() {
+    template <class Screen, class Stream>
+    inline bool StreamPlayer<Screen, Stream>::pause() {
         _openFlags &= ~OPEN_PLAY;
         return sendCommand('S', 0, 0);
     }
 
-    template <class Screen, class Link, uint8_t CHUNK>
-    inline bool StreamPlayer<Screen, Link, CHUNK>::stop() {
+    template <class Screen, class Stream>
+    inline bool StreamPlayer<Screen, Stream>::stop() {
         return pause() && seek(0);
     }
 
-    template <class Screen, class Link, uint8_t CHUNK>
-    inline bool StreamPlayer<Screen, Link, CHUNK>::seek(uint32_t positionMs) {
+    template <class Screen, class Stream>
+    inline bool StreamPlayer<Screen, Stream>::seek(uint32_t positionMs) {
         _positionMs = positionMs;
         return sendCommand('J', positionMs, 4);
     }
 
-    template <class Screen, class Link, uint8_t CHUNK>
-    inline bool StreamPlayer<Screen, Link, CHUNK>::setSpeed(uint16_t percent) {
+    template <class Screen, class Stream>
+    inline bool StreamPlayer<Screen, Stream>::setSpeed(uint16_t percent) {
         _speed = percent;
         return sendCommand('V', percent, 2);
     }
 
-    template <class Screen, class Link, uint8_t CHUNK>
-    inline bool StreamPlayer<Screen, Link, CHUNK>::setLoop(bool loop) {
+    template <class Screen, class Stream>
+    inline bool StreamPlayer<Screen, Stream>::setLoop(bool loop) {
         if (loop) {
             _openFlags |= OPEN_LOOP;
         } else {
@@ -255,124 +251,99 @@ namespace video {
         return sendCommand('L', loop ? 1 : 0, 1);
     }
 
-    template <class Screen, class Link, uint8_t CHUNK>
-    inline bool StreamPlayer<Screen, Link, CHUNK>::isConnected() const {
+    template <class Screen, class Stream>
+    inline bool StreamPlayer<Screen, Stream>::isConnected() const {
         return _state == STATE_CONNECTED;
     }
 
-    template <class Screen, class Link, uint8_t CHUNK>
-    inline bool StreamPlayer<Screen, Link, CHUNK>::isPlaying() const {
+    template <class Screen, class Stream>
+    inline bool StreamPlayer<Screen, Stream>::isPlaying() const {
         return (_flags & FLAG_PLAYING) != 0;
     }
 
-    template <class Screen, class Link, uint8_t CHUNK>
-    inline bool StreamPlayer<Screen, Link, CHUNK>::isEnded() const {
+    template <class Screen, class Stream>
+    inline bool StreamPlayer<Screen, Stream>::isEnded() const {
         return (_flags & FLAG_ENDED) != 0;
     }
 
-    template <class Screen, class Link, uint8_t CHUNK>
-    inline uint32_t StreamPlayer<Screen, Link, CHUNK>::positionMs() const {
+    template <class Screen, class Stream>
+    inline uint32_t StreamPlayer<Screen, Stream>::positionMs() const {
         return _positionMs;
     }
 
-    template <class Screen, class Link, uint8_t CHUNK>
-    inline uint16_t StreamPlayer<Screen, Link, CHUNK>::frame() const {
+    template <class Screen, class Stream>
+    inline uint16_t StreamPlayer<Screen, Stream>::frame() const {
         return _frame;
     }
 
-    template <class Screen, class Link, uint8_t CHUNK>
-    inline uint32_t StreamPlayer<Screen, Link, CHUNK>::durationMs() const {
+    template <class Screen, class Stream>
+    inline uint32_t StreamPlayer<Screen, Stream>::durationMs() const {
         return _durationMs;
     }
 
-    template <class Screen, class Link, uint8_t CHUNK>
-    inline uint16_t StreamPlayer<Screen, Link, CHUNK>::frameCount() const {
+    template <class Screen, class Stream>
+    inline uint16_t StreamPlayer<Screen, Stream>::frameCount() const {
         return _frameCount;
     }
 
-    template <class Screen, class Link, uint8_t CHUNK>
-    inline uint32_t StreamPlayer<Screen, Link, CHUNK>::drawnCount() const {
+    template <class Screen, class Stream>
+    inline uint32_t StreamPlayer<Screen, Stream>::drawnCount() const {
         return _drawnCount;
     }
 
-    template <class Screen, class Link, uint8_t CHUNK>
-    inline uint8_t StreamPlayer<Screen, Link, CHUNK>::error() const {
+    template <class Screen, class Stream>
+    inline uint8_t StreamPlayer<Screen, Stream>::error() const {
         return _error;
     }
 
-    template <class Screen, class Link, uint8_t CHUNK>
-    inline uint8_t StreamPlayer<Screen, Link, CHUNK>::read8() {
-        if (_readError) {
-            return 0;
-        }
-        if (_position == _length && !receiveChunk()) {
-            _readError = true;
-            return 0;
-        }
-        uint8_t byte = _buffer[_position];
-        _position++;
-        return byte;
-    }
-
-    template <class Screen, class Link, uint8_t CHUNK>
-    inline void StreamPlayer<Screen, Link, CHUNK>::sendOpen() {
+    template <class Screen, class Stream>
+    inline void StreamPlayer<Screen, Stream>::sendOpen() {
         // anything left from a broken answer is dropped
-        Link::clearInput();
-        Link::write8('O');
-        Link::write8(CHUNK);
-        Link::write8(_openFlags);
-        Link::write8((uint8_t)_speed);
-        Link::write8((uint8_t)(_speed >> 8));
-        for (uint8_t i = 0; i < 4; i++) {
-            Link::write8((uint8_t)(_positionMs >> (8 * i)));
-        }
-        uint8_t length = 0;
-        while (length < 255 && Bus::readFlash8((const uint8_t *)_path + length) != 0) {
-            length++;
-        }
-        Link::write8(length);
-        for (uint8_t i = 0; i < length; i++) {
-            Link::write8(Bus::readFlash8((const uint8_t *)_path + i));
-        }
+        Stream::begin();
+        Stream::write8('O');
+        Stream::write8(Stream::CHUNK_SIZE);
+        Stream::write8(_openFlags);
+        Stream::write16(_speed);
+        Stream::write32(_positionMs);
+        Stream::writePath(_path);
         _state = STATE_OPENING;
         _sentMs = Bus::nowMs();
     }
 
-    template <class Screen, class Link, uint8_t CHUNK>
-    inline void StreamPlayer<Screen, Link, CHUNK>::sendNext() {
-        Link::write8('N');
+    template <class Screen, class Stream>
+    inline void StreamPlayer<Screen, Stream>::sendNext() {
+        Stream::write8('N');
         _sentMs = Bus::nowMs();
     }
 
     // open again from where it was
-    template <class Screen, class Link, uint8_t CHUNK>
-    inline void StreamPlayer<Screen, Link, CHUNK>::lose() {
+    template <class Screen, class Stream>
+    inline void StreamPlayer<Screen, Stream>::lose() {
         if (_state != STATE_CLOSED) {
             sendOpen();
         }
     }
 
     // a command answered with 'A'; frames that were already on their way are drawn meanwhile
-    template <class Screen, class Link, uint8_t CHUNK>
-    inline bool StreamPlayer<Screen, Link, CHUNK>::sendCommand(uint8_t command, uint32_t value, uint8_t valueBytes) {
+    template <class Screen, class Stream>
+    inline bool StreamPlayer<Screen, Stream>::sendCommand(uint8_t command, uint32_t value, uint8_t valueBytes) {
         if (_state != STATE_CONNECTED) {
             return false;
         }
-        Link::write8(command);
+        Stream::write8(command);
         for (uint8_t i = 0; i < valueBytes; i++) {
-            Link::write8((uint8_t)(value >> (8 * i)));
+            Stream::write8((uint8_t)(value >> (8 * i)));
         }
         uint32_t startMs = Bus::nowMs();
         while (Bus::nowMs() - startMs < ANSWER_TIMEOUT_MS) {
-            uint8_t notice = 0;
-            if (!Link::read8(notice, 10) || notice != 'D') {
+            if (!Stream::waitAnswer(10)) {
                 continue;
             }
-            beginAnswer();
-            uint8_t type = read8();
+            _answer.begin();
+            uint8_t type = _answer.read8();
             if (type == 'A' || type == 'K') {
                 readStatus();
-                if (_readError) {
+                if (_answer.failed()) {
                     break;
                 }
                 if (type == 'A') {
@@ -396,94 +367,69 @@ namespace video {
         return false;
     }
 
-    template <class Screen, class Link, uint8_t CHUNK>
-    inline void StreamPlayer<Screen, Link, CHUNK>::beginAnswer() {
-        // 'D' was read: the first chunk comes after 'R'
-        _length = 0;
-        _position = 0;
-        _readError = false;
+    template <class Screen, class Stream>
+    inline void StreamPlayer<Screen, Stream>::readStatus() {
+        _flags = _answer.read8();
+        _positionMs = _answer.read32();
+        _frame = _answer.read16();
     }
 
-    // nothing is drawn while a chunk arrives: the UART keeps only 2 bytes
-    template <class Screen, class Link, uint8_t CHUNK>
-    inline bool StreamPlayer<Screen, Link, CHUNK>::receiveChunk() {
-        Link::write8('R');
-        uint8_t length = 0;
-        if (!Link::read8(length, CHUNK_TIMEOUT_MS) || length == 0 || length > CHUNK) {
+    template <class Screen, class Stream>
+    inline bool StreamPlayer<Screen, Stream>::readHeader() {
+        readStatus();
+        uint8_t width = _answer.read8();
+        uint8_t height = _answer.read8();
+        uint8_t scaleX = _answer.read8();
+        uint8_t scaleY = _answer.read8();
+        uint8_t colorMode = _answer.read8();
+        uint8_t countByte = _answer.read8();
+        _frameCount = _answer.read16();
+        _durationMs = _answer.read32();
+        uint16_t colorCount = colorMode == COLORS_256 && countByte == 0 ? 256 : countByte;
+        bool isColorModeFine = colorMode == COLORS_565 || colorMode == COLORS_256
+                            || (colorMode == COLORS_16 && colorCount <= MAX_RAM_COLORS);
+        if (_answer.failed() || width == 0 || height == 0 || scaleX == 0 || scaleY == 0 || !isColorModeFine) {
+            _error = ERROR_BROKEN;
             return false;
         }
-        for (uint8_t i = 0; i < length; i++) {
-            if (!Link::read8(_buffer[i], CHUNK_TIMEOUT_MS)) {
-                return false;
-            }
-        }
-        _length = length;
-        _position = 0;
-        return true;
-    }
-
-    template <class Screen, class Link, uint8_t CHUNK>
-    inline uint32_t StreamPlayer<Screen, Link, CHUNK>::read32() {
-        uint32_t value = 0;
-        for (uint8_t i = 0; i < 4; i++) {
-            value |= (uint32_t)read8() << (8 * i);
-        }
-        return value;
-    }
-
-    template <class Screen, class Link, uint8_t CHUNK>
-    inline void StreamPlayer<Screen, Link, CHUNK>::readStatus() {
-        _flags = read8();
-        _positionMs = read32();
-        _frame = read8();
-        _frame |= (uint16_t)read8() << 8;
-    }
-
-    template <class Screen, class Link, uint8_t CHUNK>
-    inline void StreamPlayer<Screen, Link, CHUNK>::readHeader() {
-        readStatus();
-        uint8_t width = read8();
-        uint8_t height = read8();
-        uint8_t scaleX = read8();
-        uint8_t scaleY = read8();
-        uint8_t colorMode = read8();
-        uint8_t colorCount = read8();
-        _frameCount = read8();
-        _frameCount |= (uint16_t)read8() << 8;
-        _durationMs = read32();
-        bool isColorModeFine = colorMode == COLORS_565 || (colorMode == COLORS_16 && colorCount <= MAX_RAM_COLORS);
-        if (_readError || width == 0 || height == 0 || scaleX == 0 || scaleY == 0 || !isColorModeFine) {
-            _readError = true;
-            return;
-        }
         _decoder.setColorMode(colorMode);
+        // the palette of the last open is of no use any more
+        _heapPalette.release();
         if (colorMode == COLORS_16) {
             for (uint8_t i = 0; i < colorCount; i++) {
-                uint16_t color = read8();
-                color |= (uint16_t)read8() << 8;
-                _decoder.setColor(i, color);
+                _decoder.setColor(i, _answer.read16());
             }
+        } else if (colorMode == COLORS_256) {
+            if (!_heapPalette.take(colorCount)) {
+                _error = ERROR_NO_MEMORY;
+                return false;
+            }
+            for (uint16_t i = 0; i < colorCount; i++) {
+                _heapPalette.colors()[i] = Decoder<Screen>::ColorFormat::fromRGB565(_answer.read16());
+            }
+            _decoder.setRamPalette(_heapPalette.colors());
         }
         // too big: still connected, frames are read but not drawn
-        _error = _decoder.setArea(_x, _y, width, height, scaleX, scaleY) ? ERROR_NONE : ERROR_TOO_BIG;
+        _error = _decoder.setArea(_x, _y, width, height, scaleX, scaleY) ? OK : ERROR_TOO_BIG;
+        return !_answer.failed();
     }
 
-    template <class Screen, class Link, uint8_t CHUNK>
-    inline void StreamPlayer<Screen, Link, CHUNK>::readError() {
-        _error = read8();
-        uint8_t length = read8();
+    template <class Screen, class Stream>
+    inline void StreamPlayer<Screen, Stream>::readError() {
+        _error = _answer.read8();
+        uint8_t length = _answer.read8();
         for (uint8_t i = 0; i < length; i++) {
-            (void)read8();
+            (void)_answer.read8();
         }
         // stream.py answered: wait a whole timeout before trying again (the file may appear later)
         _sentMs = Bus::nowMs();
     }
 
-    template <class Screen, class Link, uint8_t CHUNK>
-    inline bool StreamPlayer<Screen, Link, CHUNK>::drawFrameAnswer() {
+    template <class Screen, class Stream>
+    inline bool StreamPlayer<Screen, Stream>::drawFrameAnswer() {
         readStatus();
-        bool ok = !_readError && _decoder.drawFrame(*this);
-        if (!ok || _readError) {
+        bool ok = !_answer.failed() && _decoder.drawFrame(_answer);
+        if (!ok || _answer.failed()) {
             lose();
             return false;
         }

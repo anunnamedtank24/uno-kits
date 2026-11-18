@@ -20,17 +20,19 @@ namespace Uno {
     // the code itself adds ~56 cycles per bit (calls into the Uno.h pin helpers), so 400 gives
     // about 160 kHz on a 16 MHz UNO (measured: 1024 bytes of a 128x64 frame in 64 ms)
     template <uint8_t SCL, uint8_t SDA, bool INTERNAL_PULLUP = true, uint16_t KHZ = 400>
-    struct UnoI2C {
-        static_assert(exists(SCL), "UnoI2C: SCL must be 0 ~ 19");
-        static_assert(exists(SDA), "UnoI2C: SDA must be 0 ~ 19");
-        static_assert(SCL != SDA, "UnoI2C: SCL and SDA must be different pins");
-        static_assert(KHZ >= 1 && KHZ <= 400, "UnoI2C: KHZ must be 1 ~ 400 (fast mode)");
+    struct UnoI2C : UnoBoard {
+        static_assert(exists(SCL), "Uno::UnoI2C: SCL must be 0 ~ 19");
+        static_assert(exists(SDA), "Uno::UnoI2C: SDA must be 0 ~ 19");
+        static_assert(SCL != SDA, "Uno::UnoI2C: SCL and SDA must be different pins");
+        static_assert(KHZ >= 1 && KHZ <= 400, "Uno::UnoI2C: KHZ must be 1 ~ 400 (fast mode)");
         static_assert(warn::SerialPin<(SCL <= 1 || SDA <= 1)>::ok, "");
 
         // flash strings of this board, for graphics::Text (F("..."))
         using FlashString = __FlashStringHelper;
 
         // ---------- Bus functions ----------
+
+        // nowMs, nowUs, delayMs, delayUs, readFlash8 / 16, stopInterrupts, restoreInterrupts: from UnoBoard
 
         // releases both lines; frees a device stuck in the middle of a byte
         // (it holds SDA LOW: up to 9 clocks, then a STOP)
@@ -47,10 +49,6 @@ namespace Uno {
 
         static inline void stop();
 
-        static inline void delayMs(uint16_t ms);
-        static inline uint32_t nowMs();
-        static inline uint8_t readFlash8(const uint8_t *address);
-        static inline uint16_t readFlash16(const uint16_t *address);
 
     private:
         // half clock periods in CPU cycles: LOW >= 1.3 µs, HIGH >= 0.6 µs (fast mode minimum);
@@ -140,26 +138,6 @@ namespace Uno {
         release(false);
         // bus free time before the next START
         waitLow();
-    }
-
-    template <uint8_t SCL, uint8_t SDA, bool INTERNAL_PULLUP, uint16_t KHZ>
-    inline void UnoI2C<SCL, SDA, INTERNAL_PULLUP, KHZ>::delayMs(uint16_t ms) {
-        Uno::delayMs(ms);
-    }
-
-    template <uint8_t SCL, uint8_t SDA, bool INTERNAL_PULLUP, uint16_t KHZ>
-    inline uint32_t UnoI2C<SCL, SDA, INTERNAL_PULLUP, KHZ>::nowMs() {
-        return Uno::nowMs();
-    }
-
-    template <uint8_t SCL, uint8_t SDA, bool INTERNAL_PULLUP, uint16_t KHZ>
-    inline uint8_t UnoI2C<SCL, SDA, INTERNAL_PULLUP, KHZ>::readFlash8(const uint8_t *address) {
-        return Uno::readFlash8(address);
-    }
-
-    template <uint8_t SCL, uint8_t SDA, bool INTERNAL_PULLUP, uint16_t KHZ>
-    inline uint16_t UnoI2C<SCL, SDA, INTERNAL_PULLUP, KHZ>::readFlash16(const uint16_t *address) {
-        return Uno::readFlash16(address);
     }
 
     template <uint8_t SCL, uint8_t SDA, bool INTERNAL_PULLUP, uint16_t KHZ>

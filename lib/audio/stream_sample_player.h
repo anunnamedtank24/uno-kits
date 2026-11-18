@@ -3,35 +3,46 @@
 
 #include <stdint.h>
 #include "format.h"
-#include "stream_link.h"
 
 namespace audio {
-    // plays a PCM sound (--sound pcm) sent by the computer (lib/audio/source/stream.py): any length,
+    // plays a PCM sound (--sound pcm) sent by the computer (lib/stream/source/stream.py): any length,
     // no flash; open it, then call update() often: it refills the buffer whenever CHUNK bytes are free
     //
     // SampleOut: as for SamplePlayer (lib/Uno/Uno_pcm_out.h)
-    // Link: see stream_link.h (Uno::UnoSerial)
+    // Stream: the link to stream.py (lib/stream: stream::Puller<Uno::UnoSerial<BAUD>, CHUNK>), a struct providing
+    //   CHUNK_SIZE, OK, ERROR_NOT_FOUND ~ ERROR_BROKEN, begin(), write8(), writePath(), waitAnswer(),
+    //   pullLength(), receive(); CHUNK: bytes asked for at a time, at most BUFFER / 2; bigger = fewer round
+    //   trips: every piece waits ~4 ms for the UNO's USB chip (measured: 64 bytes a piece = 13 KB/s, too slow
+    //   for 16 kHz; 255 is best)
     // BUFFER: bytes of samples kept on the board (RAM), a power of 2, 16 ~ 1024; it must last while the
     //         program does something else and while a piece comes: 512 bytes = 32 ms of 16 kHz PCM_U8
-    // CHUNK: bytes asked for at a time, at most BUFFER / 2; bigger = fewer round trips: every piece waits
-    //        ~4 ms for the UNO's USB chip (measured: 64 bytes a piece = 13 KB/s, too slow for 16 kHz)
+    //
+    // protocol: as audio::StreamPlayer ('A' ..., answer 'H' ... or 'E' ...)
     //
     // the buffer running empty (update() too late, or the link too slow): the sample is held
     // (a click), underruns() counts it
     //
     // everything is static (the interrupt has no object to call): one StreamSamplePlayer per SampleOut type
-    template <class SampleOut, class Link, uint16_t BUFFER = 512, uint8_t CHUNK = 255>
+    template <class SampleOut, class Stream, uint16_t BUFFER = 512>
     class StreamSamplePlayer {
     public:
         static_assert(BUFFER >= 16 && BUFFER <= 1024 && (BUFFER & (BUFFER - 1)) == 0,
                       "audio::StreamSamplePlayer: BUFFER must be a power of 2, 16 ~ 1024");
-        static_assert(CHUNK >= 1 && CHUNK <= BUFFER / 2, "audio::StreamSamplePlayer: CHUNK must be 1 ~ BUFFER / 2");
+        static_assert(Stream::CHUNK_SIZE <= BUFFER / 2, "audio::StreamSamplePlayer: the Stream's CHUNK must be 1 ~ BUFFER / 2");
+
+        // results of open() and error(): Stream's
+        static constexpr uint8_t OK = Stream::OK;
+        static constexpr uint8_t ERROR_NOT_FOUND = Stream::ERROR_NOT_FOUND;
+        static constexpr uint8_t ERROR_UNREADABLE = Stream::ERROR_UNREADABLE;
+        static constexpr uint8_t ERROR_WRONG_KIND = Stream::ERROR_NOT_STREAMABLE;   // notes or a rhythm
+        static constexpr uint8_t ERROR_NO_ANSWER = Stream::ERROR_NO_ANSWER;
+        static constexpr uint8_t ERROR_BROKEN = Stream::ERROR_BROKEN;
 
         // silent
         static inline void init();
 
-        // asks stream.py for a sound (any --target; --target mac is made for it), waits for the answer
-        // (at most 3 s), fills the buffer and starts; returns STREAM_OK or an error (stream_link.h)
+        // asks stream.py for a sound (any --target; --target stream is made for it), waits for the answer
+        // (at most 3 s), fills the buffer and starts; returns OK or an error
         template <class Clip>
         static inline uint8_t open(bool repeat = false);
 
@@ -54,14 +65,14 @@ namespace audio {
         // times the buffer was empty when a sample was due
         static inline uint32_t underruns();
 
-        // the last error (STREAM_OK if none): a broken stream stops the sound
+        // the last error (OK if none): a broken stream stops the sound
         static inline uint8_t error();
 
         // the rate of the sound playing (from its header), 0 if none
         static inline uint16_t rate();
 
     private:
-        using Stream = StreamLink<Link>;
+        static constexpr uint8_t CHUNK = Stream::CHUNK_SIZE;
         static constexpr uint16_t MASK = BUFFER - 1;
 
         static inline uint8_t _buffer[BUFFER];
@@ -75,7 +86,7 @@ namespace audio {
         static inline bool _running = false;
         static inline uint8_t _encoding = PCM_U8;
         static inline uint16_t _rate = 0;
-        static inline uint8_t _error = STREAM_OK;
+        static inline uint8_t _error = OK;
         static inline const char *_path = nullptr;
         static inline bool _repeat = false;
         static inline uint8_t _byte = 0;
@@ -95,42 +106,50 @@ namespace audio {
 
     // ================= definitions =================
 
-    template <class SampleOut, class Link, uint16_t BUFFER, uint8_t CHUNK>
-    inline void StreamSamplePlayer<SampleOut, Link, BUFFER, CHUNK>::setVolume(uint8_t volume) {
+    template <class SampleOut, class Stream, uint16_t BUFFER>
+    inline void StreamSamplePlayer<SampleOut, Stream, BUFFER>::setVolume(uint8_t volume) {
         _volume = volume;
     }
 
-    template <class SampleOut, class Link, uint16_t BUFFER, uint8_t CHUNK>
-    inline uint8_t StreamSamplePlayer<SampleOut, Link, BUFFER, CHUNK>::volume() {
+    template <class SampleOut, class Stream, uint16_t BUFFER>
+    inline uint8_t StreamSamplePlayer<SampleOut, Stream, BUFFER>::volume() {
         return _volume;
     }
 
-    template <class SampleOut, class Link, uint16_t BUFFER, uint8_t CHUNK>
-    inline void StreamSamplePlayer<SampleOut, Link, BUFFER, CHUNK>::init() {
+    template <class SampleOut, class Stream, uint16_t BUFFER>
+    inline void StreamSamplePlayer<SampleOut, Stream, BUFFER>::init() {
         SampleOut::init();
         _running = false;
         _ended = true;
     }
 
-    template <class SampleOut, class Link, uint16_t BUFFER, uint8_t CHUNK>
+    template <class SampleOut, class Stream, uint16_t BUFFER>
     template <class Clip>
-    inline uint8_t StreamSamplePlayer<SampleOut, Link, BUFFER, CHUNK>::open(bool repeat) {
+    inline uint8_t StreamSamplePlayer<SampleOut, Stream, BUFFER>::open(bool repeat) {
         static_assert(Clip::kind == KIND_PCM,
                       "audio::StreamSamplePlayer: not a PCM sound (--sound pcm): use audio::StreamPlayer");
-        static_assert(warn::NotForMac<!(Clip::target & TARGET_MAC)>::ok, "");
+        static_assert(warn::NotForStream<!(Clip::target & TARGET_STREAM)>::ok, "");
         _path = Clip::getPath();
         _repeat = repeat;
         return request();
     }
 
-    template <class SampleOut, class Link, uint16_t BUFFER, uint8_t CHUNK>
-    inline uint8_t StreamSamplePlayer<SampleOut, Link, BUFFER, CHUNK>::request() {
+    template <class SampleOut, class Stream, uint16_t BUFFER>
+    inline uint8_t StreamSamplePlayer<SampleOut, Stream, BUFFER>::request() {
         stop();
-        _error = STREAM_OK;
+        _error = OK;
         _head = 0;
         _tail = 0;
         _bytesLeft = 0xFFFFFFFFUL;      // until the header says
-        if (_path == nullptr || !Stream::template request<&SampleOut::readFlash8>(_path, CHUNK)) {
+        if (_path == nullptr) {
+            _error = ERROR_NO_ANSWER;
+            return _error;
+        }
+        Stream::begin();
+        Stream::write8('A');
+        Stream::write8(CHUNK);
+        Stream::writePath(_path);
+        if (!Stream::waitAnswer()) {
             _error = ERROR_NO_ANSWER;
             return _error;
         }
@@ -180,16 +199,16 @@ namespace audio {
             }
         }
         if (count == 0) {
-            return STREAM_OK;
+            return OK;
         }
         _ended = false;
         _running = true;
         SampleOut::start(_rate, &next);
-        return STREAM_OK;
+        return OK;
     }
 
-    template <class SampleOut, class Link, uint16_t BUFFER, uint8_t CHUNK>
-    inline void StreamSamplePlayer<SampleOut, Link, BUFFER, CHUNK>::update() {
+    template <class SampleOut, class Stream, uint16_t BUFFER>
+    inline void StreamSamplePlayer<SampleOut, Stream, BUFFER>::update() {
         if (!_running) {
             return;
         }
@@ -210,46 +229,46 @@ namespace audio {
         }
     }
 
-    template <class SampleOut, class Link, uint16_t BUFFER, uint8_t CHUNK>
-    inline void StreamSamplePlayer<SampleOut, Link, BUFFER, CHUNK>::stop() {
+    template <class SampleOut, class Stream, uint16_t BUFFER>
+    inline void StreamSamplePlayer<SampleOut, Stream, BUFFER>::stop() {
         SampleOut::stop();
         _running = false;
         _ended = true;
     }
 
-    template <class SampleOut, class Link, uint16_t BUFFER, uint8_t CHUNK>
-    inline bool StreamSamplePlayer<SampleOut, Link, BUFFER, CHUNK>::isPlaying() {
+    template <class SampleOut, class Stream, uint16_t BUFFER>
+    inline bool StreamSamplePlayer<SampleOut, Stream, BUFFER>::isPlaying() {
         return _running && !_ended;
     }
 
-    template <class SampleOut, class Link, uint16_t BUFFER, uint8_t CHUNK>
-    inline uint32_t StreamSamplePlayer<SampleOut, Link, BUFFER, CHUNK>::position() {
+    template <class SampleOut, class Stream, uint16_t BUFFER>
+    inline uint32_t StreamSamplePlayer<SampleOut, Stream, BUFFER>::position() {
         uint8_t saved = SampleOut::stopInterrupts();
         uint32_t position = _position;
         SampleOut::restoreInterrupts(saved);
         return position;
     }
 
-    template <class SampleOut, class Link, uint16_t BUFFER, uint8_t CHUNK>
-    inline uint32_t StreamSamplePlayer<SampleOut, Link, BUFFER, CHUNK>::underruns() {
+    template <class SampleOut, class Stream, uint16_t BUFFER>
+    inline uint32_t StreamSamplePlayer<SampleOut, Stream, BUFFER>::underruns() {
         uint8_t saved = SampleOut::stopInterrupts();
         uint32_t underruns = _underruns;
         SampleOut::restoreInterrupts(saved);
         return underruns;
     }
 
-    template <class SampleOut, class Link, uint16_t BUFFER, uint8_t CHUNK>
-    inline uint8_t StreamSamplePlayer<SampleOut, Link, BUFFER, CHUNK>::error() {
+    template <class SampleOut, class Stream, uint16_t BUFFER>
+    inline uint8_t StreamSamplePlayer<SampleOut, Stream, BUFFER>::error() {
         return _error;
     }
 
-    template <class SampleOut, class Link, uint16_t BUFFER, uint8_t CHUNK>
-    inline uint16_t StreamSamplePlayer<SampleOut, Link, BUFFER, CHUNK>::rate() {
+    template <class SampleOut, class Stream, uint16_t BUFFER>
+    inline uint16_t StreamSamplePlayer<SampleOut, Stream, BUFFER>::rate() {
         return _running ? _rate : 0;
     }
 
-    template <class SampleOut, class Link, uint16_t BUFFER, uint8_t CHUNK>
-    inline uint16_t StreamSamplePlayer<SampleOut, Link, BUFFER, CHUNK>::used() {
+    template <class SampleOut, class Stream, uint16_t BUFFER>
+    inline uint16_t StreamSamplePlayer<SampleOut, Stream, BUFFER>::used() {
         uint8_t saved = SampleOut::stopInterrupts();
         uint16_t used = (uint16_t)(_head - _tail);
         SampleOut::restoreInterrupts(saved);
@@ -257,10 +276,10 @@ namespace audio {
     }
 
     // one piece into the buffer (the caller made sure CHUNK bytes are free)
-    template <class SampleOut, class Link, uint16_t BUFFER, uint8_t CHUNK>
-    inline bool StreamSamplePlayer<SampleOut, Link, BUFFER, CHUNK>::pull() {
+    template <class SampleOut, class Stream, uint16_t BUFFER>
+    inline bool StreamSamplePlayer<SampleOut, Stream, BUFFER>::pull() {
         uint8_t length = 0;
-        if (!Stream::pullLength(CHUNK, length)) {
+        if (!Stream::pullLength(length)) {
             return false;
         }
         uint16_t head = _head;
@@ -280,8 +299,8 @@ namespace audio {
     }
 
     // header bytes come first in the answer: pulled into the buffer, then taken out (the output is not running)
-    template <class SampleOut, class Link, uint16_t BUFFER, uint8_t CHUNK>
-    inline bool StreamSamplePlayer<SampleOut, Link, BUFFER, CHUNK>::popHeader(uint8_t *header, uint8_t count) {
+    template <class SampleOut, class Stream, uint16_t BUFFER>
+    inline bool StreamSamplePlayer<SampleOut, Stream, BUFFER>::popHeader(uint8_t *header, uint8_t count) {
         for (uint8_t i = 0; i < count; i++) {
             if (_head == _tail && !pull()) {
                 return false;
@@ -292,8 +311,8 @@ namespace audio {
         return true;
     }
 
-    template <class SampleOut, class Link, uint16_t BUFFER, uint8_t CHUNK>
-    inline uint8_t StreamSamplePlayer<SampleOut, Link, BUFFER, CHUNK>::next() {
+    template <class SampleOut, class Stream, uint16_t BUFFER>
+    inline uint8_t StreamSamplePlayer<SampleOut, Stream, BUFFER>::next() {
         if (_ended) {
             return PCM_SILENCE;
         }

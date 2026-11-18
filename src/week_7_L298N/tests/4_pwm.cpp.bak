@@ -1,0 +1,140 @@
+#include <Arduino.h>
+#include "Uno_serial.h"
+#include "Uno_pin.h"
+#include "L298N.h"
+
+// UNO + L298N board + one DC motor (channel A): what PWM does, told on the USB serial
+//   pio device monitor        (platformio.ini: monitor_speed = BAUD)
+//
+// PWM: ENA goes on and off ~976 times a second; the duty (0 ~ 255) is the part of the time it is on
+//   duty 64 = on 25 %: the motor gets 1/4 of the (supply - drop) on average, so it turns slower
+//   you hear the 976 Hz as a whine from the motor: normal (a frequency above ~ 20 kHz would be silent,
+//   but the UNO's PWM pins run at ~ 490 / 976 Hz)
+//
+// 1 duty up 0 -> 255, step SWEEP_STEP: where does it START to turn?     (static friction)
+// 2 duty down 255 -> 0: where does it STOP?                         (lower than 1: it keeps turning)
+//   -> MIN_DUTY for DCMotor::setMinDuty: about the start of 1
+// 3 a low duty from standstill, without and with a kick (255 for KICK_MS, then the low duty):
+//   without it may only hum, with the kick it starts and keeps turning
+// 4 braking by PWM: from full speed, brake(64), brake(128), brake(255): softer to harder stops
+
+// ---------- settings ----------
+
+// wiring: L298N with the ENA jumper removed; OUT1, OUT2 -> the motor
+//   +12V -> supply +   GND -> supply - AND the UNO's GND
+constexpr uint8_t ENA_PIN = 5;              // ENA: a PWM pin (3, 5, 6, 9, 10, 11): the speed
+constexpr uint8_t IN1_PIN = A0;             // IN1: any pin
+constexpr uint8_t IN2_PIN = A1;             // IN2
+constexpr uint8_t IN3_PIN = A2;             // IN3, IN4, ENB: channel B, not used here
+constexpr uint8_t IN4_PIN = A3;
+constexpr uint8_t ENB_PIN = 6;
+constexpr uint32_t BAUD = 1000000;          // USB serial: the same as monitor_speed in platformio.ini
+
+constexpr uint8_t SWEEP_STEP = 5;           // parts 1, 2
+constexpr uint16_t SWEEP_MS = 400;          // each duty of the sweep this long
+constexpr uint8_t LOW_DUTY = 70;            // part 3: a duty just below where it starts (from part 1)
+constexpr uint16_t KICK_MS = 100;           // part 3: 255 this long first
+constexpr uint16_t LOW_MS = 3000;           // part 3: then the low duty this long
+constexpr uint8_t BRAKE_STRENGTHS[] = {0, 64, 128, 255};   // part 4: 0 = coast
+constexpr uint16_t FULL_MS = 2000;          // part 4: full speed this long before each stop
+constexpr uint16_t STOP_MS = 2500;          // part 4: then watch it stop this long
+constexpr uint16_t PART_PAUSE_MS = 2000;    // between the parts
+
+// ---------- parts ----------
+
+using Board = L298N::L298NBoard<Uno::UnoPwmPin<ENA_PIN>,
+                                Uno::UnoOutputPin<IN1_PIN>, Uno::UnoOutputPin<IN2_PIN>,
+                                Uno::UnoOutputPin<IN3_PIN>, Uno::UnoOutputPin<IN4_PIN>,
+                                Uno::UnoPwmPin<ENB_PIN>>;
+// the ENA jumper on instead (ENA not connected), full speed only:
+//   L298N::L298NBoard<L298N::EnableJumper, ..., L298N::EnableJumper>
+using Link = Uno::UnoSerial<BAUD>;
+
+L298N::DCMotor<Board::A> motor;
+
+// ---------- test ----------
+
+// duty at once (no ramp, no dead zone), and its %
+void setDuty(int16_t duty) {
+    motor.setSpeedNow(duty);
+    Link::printText("  duty ");
+    Link::printNumber((uint32_t)(duty < 0 ? -duty : duty));
+    Link::printText(" (");
+    Link::printNumber((uint32_t)(duty < 0 ? -duty : duty) * 100 / 255);
+    Link::printText(" %)\r\n");
+}
+
+void pause(uint16_t ms) {
+    delay(ms);
+}
+
+void sweep(bool up) {
+    Link::printText(up ? "1 duty up: note where it starts to turn\r\n" : "2 duty down: note where it stops\r\n");
+    for (int16_t i = 0; i <= 255; i += SWEEP_STEP) {
+        setDuty(up ? i : 255 - i);
+        pause(SWEEP_MS);
+    }
+    motor.coast();
+    pause(PART_PAUSE_MS);
+}
+
+void kickTest() {
+    Link::printText("3 from standstill at a low duty, without a kick:\r\n");
+    setDuty(LOW_DUTY);
+    pause(LOW_MS);
+    motor.coast();
+    pause(PART_PAUSE_MS);
+    Link::printText("3 the same with a kick (255 for KICK_MS first):\r\n");
+    setDuty(255);
+    pause(KICK_MS);
+    setDuty(LOW_DUTY);
+    pause(LOW_MS);
+    motor.coast();
+    pause(PART_PAUSE_MS);
+}
+
+void brakeTest() {
+    for (uint8_t strength : BRAKE_STRENGTHS) {
+        Link::printText("4 full speed, then ");
+        if (strength == 0) {
+            Link::printText("coast (no brake)\r\n");
+        } else {
+            Link::printText("brake(");
+            Link::printNumber(strength);
+            Link::printText(")\r\n");
+        }
+        setDuty(255);
+        pause(FULL_MS);
+        if (strength == 0) {
+            motor.coast();
+        } else {
+            motor.brake(strength);
+        }
+        pause(STOP_MS);
+    }
+    motor.coast();
+    pause(PART_PAUSE_MS);
+}
+
+// ---------- main ----------
+
+void setup() {
+    Link::init();
+    motor.init();
+    motor.setRampMs(0);
+    Link::printText("\r\nL298N PWM: ENA ");
+    Link::printPin(ENA_PIN);
+    Link::printText(", IN1 ");
+    Link::printPin(IN1_PIN);
+    Link::printText(", IN2 ");
+    Link::printPin(IN2_PIN);
+    Link::printText(" -> OUT1, OUT2\r\n");
+}
+
+void loop() {
+    sweep(true);
+    sweep(false);
+    kickTest();
+    brakeTest();
+    Link::printText("again\r\n\r\n");
+}

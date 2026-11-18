@@ -1,34 +1,44 @@
 # buzzer
 
-兩隻腳（+、-）的蜂鳴器，`namespace buzzer`。有源和無源兩種（差別見[有源和無源](#有源和無源)），都只負責「發聲」：各自提供一個 Sound，讓 [audio](../audio/README.md) 的 `audio::Player` 播嗶聲和旋律。只依賴一個 Pin 或 Tone（例如 `Uno::UnoOutputPin`、`Uno::UnoTone`），換主板只要換這兩個。
+| 需要 | 得到 |
+|---|---|
+| 有源：一個 `Pin`：`init()`、`write(high)`…（`Uno::UnoOutputPin<PIN>`） | `buzzer::ActiveBuzzer2Pins`、`ActiveBuzzer3Pins`：開、關（音高固定） |
+| 無源：一個 `Tone`：`init()`、`start(hz)`、`stop()`…（`Uno::UnoTone<PIN>`） | `buzzer::PassiveBuzzer2Pins`、`PassiveBuzzer3Pins`：任意頻率、音量 |
 
-## 檔案
+「需要」是介面（duck typing），括號裡是這個專案現成的實作，換主板只要換它們。開發者看的細節（前提條件、介面需求、每個函式、參數、資源）在 [INTERFACE.md](INTERFACE.md)。
 
+兩隻腳（+、-）的蜂鳴器，`namespace buzzer`。有源和無源兩種（差別見[有源和無源](#有源和無源)），都只負責「發聲」：每個模組都是 [audio](../audio/README.md) 的 `audio::Player` 要的 Sound，由它播嗶聲和旋律。
+
+## 用法
+
+```cpp
+#include "Uno_pin.h"
+#include "Uno_tone.h"
+#include "buzzer.h"
+#include "audio.h"
+
+constexpr uint8_t BEEPER_PIN = 8;                                         // 有源的 +
+constexpr uint8_t SPEAKER_PIN = 9;                                        // 無源的 +
+using Beeper = buzzer::ActiveBuzzer2Pins<Uno::UnoOutputPin<BEEPER_PIN>>;  // 有源、兩隻腳
+using Speaker = buzzer::PassiveBuzzer2Pins<Uno::UnoTone<SPEAKER_PIN>>;    // 無源、兩隻腳
+// 三隻腳模組：buzzer::ActiveBuzzer3Pins<Uno::UnoOutputPin<BEEPER_PIN>>、buzzer::PassiveBuzzer3Pins<Uno::UnoTone<SPEAKER_PIN, true>>
+audio::Player<Beeper> beeper;
+audio::Player<Speaker> speaker;
+
+void setup() {
+    beeper.init();
+    speaker.init();
+    beeper.beeps(Beeper::HZ, 3, 100, 100);                   // 嗶三聲（有源不管 hz，只要 > 0）
+    speaker.play<melody::ode_to_joy_flash_passive_medium>();             // lib/audio/output 的旋律
+}
+
+void loop() {
+    beeper.update();                                         // 每次 loop 都要呼叫，不會等
+    speaker.update();
+}
 ```
-lib/buzzer/
-├── buzzer.h                     入口：全部（程式只 include 它）
-├── active_buzzer.h              ActiveBuzzer<Pin, ACTIVE_HIGH>：有源，只能開關（模組共用的核心）
-├── passive_buzzer.h             PassiveBuzzer<Tone>：無源，任何音高（模組共用的核心）
-└── module/                      實際買到的零件
-    ├── active_buzzer_2_pins.h   ActiveBuzzer2Pins<Pin>：有源，兩隻腳（+、-）
-    ├── active_buzzer_3_pins.h   ActiveBuzzer3Pins<Pin, LOW_TRIGGER>：有源模組，VCC、I/O、GND
-    ├── passive_buzzer_2_pins.h  PassiveBuzzer2Pins<Tone>：無源，兩隻腳（+、-）
-    └── passive_buzzer_3_pins.h  PassiveBuzzer3Pins<Tone>：無源模組，VCC、I/O、GND
-```
 
-## 兩隻腳和三隻腳
-
-| 零件 | 長相 | 誰推蜂鳴器 | 用 |
-|---|---|---|---|
-| 兩隻腳的蜂鳴器 | 黑色圓柱，+、- 兩隻腳 | 腳位直接推 | `ActiveBuzzer2Pins`、`PassiveBuzzer2Pins` |
-| 三隻腳、中間沒接（KY-012 有源、KY-006 無源） | 小板子，標 S、-（中間那隻沒接東西） | 腳位直接推：S 就是 + | 同上（當成兩隻腳） |
-| 三隻腳模組：**VCC、I/O、GND** | 小板子，背面有一顆電晶體（S8550 / 9012） | 電晶體推，電流從 VCC 來 | `ActiveBuzzer3Pins`、`PassiveBuzzer3Pins` |
-
-- **三隻腳模組比較大聲**：蜂鳴器的電流從 VCC 來，腳位只開關電晶體，不用擔心腳位的電流上限，也不用串電阻。
-- **三隻腳模組是 LOW 才響**（PNP 電晶體，常寫「低電平觸發」）：
-  - 有源：`ActiveBuzzer3Pins` 預設 `LOW_TRIGGER = true`。少數用 NPN 的模組是 HIGH 才響，改成 `false`。
-  - 無源：安靜時腳位要停在 **HIGH**，不然電晶體一直開著、線圈一直通電。所以要用 `Uno::UnoTone<PIN, true>`（安靜時 HIGH）；用錯的話會編譯錯誤。
-- **分不出來時**：板子上有 VCC 和 I/O 兩個字、背面有三隻腳的小黑元件（電晶體）的，就是三隻腳模組。
+完整的例子：`src/week_4_SSD1306_switch_buzzer_audio/tests/3_active_buzzer.cpp`（有源）、`src/week_4_SSD1306_switch_buzzer_audio/tests/4_passive_buzzer.cpp`（無源，會從腳位量實際頻率）。
 
 ## 接線
 
@@ -62,65 +72,19 @@ UNO 腳位 ── 1 kΩ ── 電晶體 B
 - 電晶體導通 = 響，所以 `ActiveBuzzer` 的 `ACTIVE_HIGH` 還是 `true`。
 - 二極體吸收線圈斷電時的反向電壓，保護電晶體。
 
-## 用法
+## 兩隻腳和三隻腳
 
-```cpp
-#include "Uno_pin.h"
-#include "Uno_tone.h"
-#include "buzzer.h"
-#include "audio.h"
+| 零件 | 長相 | 誰推蜂鳴器 | 用 |
+|---|---|---|---|
+| 兩隻腳的蜂鳴器 | 黑色圓柱，+、- 兩隻腳 | 腳位直接推 | `ActiveBuzzer2Pins`、`PassiveBuzzer2Pins` |
+| 三隻腳、中間沒接（KY-012 有源、KY-006 無源） | 小板子，標 S、-（中間那隻沒接東西） | 腳位直接推：S 就是 + | 同上（當成兩隻腳） |
+| 三隻腳模組：**VCC、I/O、GND** | 小板子，背面有一顆電晶體（S8550 / 9012） | 電晶體推，電流從 VCC 來 | `ActiveBuzzer3Pins`、`PassiveBuzzer3Pins` |
 
-using Beeper = buzzer::ActiveBuzzer2Pins<Uno::UnoOutputPin<8>>;   // 有源、兩隻腳，+ 接 D8
-using Speaker = buzzer::PassiveBuzzer2Pins<Uno::UnoTone<9>>;      // 無源、兩隻腳，+ 接 D9
-// 三隻腳模組：buzzer::ActiveBuzzer3Pins<Uno::UnoOutputPin<8>>、buzzer::PassiveBuzzer3Pins<Uno::UnoTone<9, true>>
-audio::Player<Beeper> beeper;
-audio::Player<Speaker> speaker;
-
-void setup() {
-    beeper.init();
-    speaker.init();
-    beeper.beeps(Beeper::HZ, 3, 100, 100);                   // 嗶三聲（有源不管 hz，只要 > 0）
-    speaker.play<melody::ode_to_joy_uno_passive_medium>();             // lib/audio/output 的旋律
-}
-
-void loop() {
-    beeper.update();                                         // 每次 loop 都要呼叫，不會等
-    speaker.update();
-}
-```
-
-完整的例子：`src/week_4/test_3.cpp`（有源）、`src/week_4/test_4.cpp`（無源，會從腳位量實際頻率）。
-
-## 介面需求
-
-| 參數 | 需要的 static 函式 | 現成的實作 |
-|---|---|---|
-| `Pin`（有源） | `init()`、`write(high)`、`nowMs()`、`readFlash8(address)`、`readFlash16(address)` | `Uno::UnoOutputPin` |
-| `Tone`（無源） | `init()`、`start(hz)`（播放中呼叫就換頻率）、`stop()`（腳位回到安靜的電位）、`realHz()`、`nowMs()`、`readFlash8(address)`、`readFlash16(address)`；常數 `IDLE_LEVEL_HIGH`（安靜時是不是 HIGH，模組用它檢查） | `Uno::UnoTone<PIN, IDLE_HIGH>` |
-
-每個模組本身都是 `audio::Player`、`StreamPlayer` 要的 Sound（`HAS_PITCH`、`init`、`start`、`stop`、`nowMs`、`readFlash8/16`）：有源的 `HAS_PITCH` 是 false，給它音符會編譯警告（只聽得到節奏）。播取樣（PCM）不經過這裡，用 `Uno::UnoPcmOut`，見 [audio](../audio/README.md#接線)。
-
-## 函式
-
-| 函式 | 說明 |
-|---|---|
-| `init()` | 設定腳位，安靜 |
-| `start(hz)` | 有源：開（hz 只要 > 0）；無源：送 hz 的方波，或在播放中換頻率 |
-| `stop()` | 安靜：有源關掉；無源的腳位回到 Tone 安靜的電位（兩隻腳 LOW、三隻腳模組 HIGH） |
-| `nowMs()`、`readFlash16()` | 轉給 Pin / Tone（給 `audio::Player`） |
-| `ActiveBuzzer::HZ` | 2300：有源的音高不知道，用常見的值（給 `beep(HZ, ms)`、`currentHz()`） |
-| `PassiveBuzzer::realHz()` | 回傳實際播出的頻率（計時器只能整數 tick），安靜時是 0 |
-
-平常不直接呼叫這些，而是透過 `audio::Player` 的 `tone`、`beep`、`beeps`、`play`、`slide`（見 [audio](../audio/README.md#函式)）。
-
-## 參數
-
-| 參數 | 預設 | 說明 |
-|---|---|---|
-| `Pin`（有源） | — | `Uno::UnoOutputPin<PIN>` |
-| `LOW_TRIGGER`（`ActiveBuzzer3Pins`） | `true` | 三隻腳模組 I/O 是 LOW 時響（PNP，大部分）；HIGH 才響的（NPN）改成 `false` |
-| `ACTIVE_HIGH`（核心 `ActiveBuzzer`） | `true` | 自己接線、不照模組時用：+ 接 5V、- 接腳位時是 `false` |
-| `Tone`（無源） | — | 兩隻腳：`Uno::UnoTone<PIN>`；三隻腳模組：`Uno::UnoTone<PIN, true>`。D9 / D10 不佔 CPU，其他腳用中斷 |
+- **三隻腳模組比較大聲**：蜂鳴器的電流從 VCC 來，腳位只開關電晶體，不用擔心腳位的電流上限，也不用串電阻。
+- **三隻腳模組是 LOW 才響**（PNP 電晶體，常寫「低電平觸發」）：
+  - 有源：`ActiveBuzzer3Pins` 預設 `LOW_TRIGGER = true`。少數用 NPN 的模組是 HIGH 才響，改成 `false`。
+  - 無源：安靜時腳位要停在 **HIGH**，不然電晶體一直開著、線圈一直通電。所以要用 `Uno::UnoTone<PIN, true>`（安靜時 HIGH）；用錯的話會編譯錯誤。
+- **分不出來時**：板子上有 VCC 和 I/O 兩個字、背面有三隻腳的小黑元件（電晶體）的，就是三隻腳模組。
 
 ## 音量
 
@@ -143,7 +107,7 @@ void loop() {
 | 16 | 2.0% | -24 dB |
 | 1 | 0.13% | -48 dB |
 
-- **實測**（`src/week_4/test_4.cpp` 的 test 7，2 kHz）：D9 上量到的工作週期跟設定的一樣（差 0.1% 以內），頻率不變。
+- **實測**（`src/week_4_SSD1306_switch_buzzer_audio/tests/4_passive_buzzer.cpp` 的 test 7，2 kHz）：D9 上量到的工作週期跟設定的一樣（差 0.1% 以內），頻率不變。
 - **耳朵聽到的**：-6 dB 大約是「小一點」，-10 dB 大約是「一半大聲」。蜂鳴器也會有一點泛音，所以很小聲時音色會變尖。
 - **最小的一步**：工作週期是整數個 tick。20 kHz 時一個週期只有 800 tick，最小聲的幾格會變粗；D9 / D10 以外的腳最短約 2 µs（中斷本身）。
 
@@ -179,16 +143,6 @@ void loop() {
 | 有源的 hz | 任何 > 0 都一樣 | — |
 | 音量 | 無源 0 ～ 255、有源只能靜音（見[音量](#音量)） | 255 以上不可能（已經是 50%） |
 | 同時發幾個音 | 一個 Sound 一個音 | — |
-
-## 資源
-
-| 項目 | 有源 | 無源 |
-|---|---|---|
-| RAM | 0（模組只有 static 函式；`audio::Player` 約 28 bytes） | 同左 |
-| 腳位 | 一隻 | 一隻 |
-| 計時器 | 不用 | **Timer1**（整個） |
-| 中斷 | 不用 | D9 / D10：不用；其他腳：Timer1 比較中斷，每次翻轉約 2 µs（20 kHz 約佔 8% CPU） |
-| 同時用幾個 | 幾個都可以（各自一隻腳、一個 `Player`） | **一個**（只有一個 Timer1） |
 
 ## 注意事項
 

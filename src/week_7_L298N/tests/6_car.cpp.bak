@@ -1,0 +1,150 @@
+#include <Arduino.h>
+#include "Uno_serial.h"
+#include "Uno_pin.h"
+#include "L298N.h"
+
+// UNO + L298N board + 2 DC motors as a two-wheeled car (L298N::TwoWheelCar): moves with times, told on the USB serial
+//   pio device monitor        (platformio.ini: monitor_speed = BAUD)
+//
+// SPIN_90_MS and ARC_360_MS depend on the car, the floor and the battery: measure them on the floor
+// (spin and see how long a quarter turn takes) and set them, then the square and the figure 8 close up
+// with an IN on GND (GROUND below) that wheel only goes forward: the moves backward and the spins brake instead
+
+// ---------- settings ----------
+
+// wiring: L298N with both EN jumpers ON (ENA, ENB not connected): the speed is PWM on IN
+//   OUT1, OUT2 -> one motor   OUT3, OUT4 -> the other (which is which: IN12_SIDE)
+//   +12V -> battery + (the motors' voltage)   GND -> battery - AND the UNO's GND   +5V: nothing
+// an IN: a PWM pin (3, 5, 6, 9, 10, 11), or GROUND when it is wired to GND (then that wheel goes one way only)
+constexpr uint8_t GROUND = 255;
+constexpr uint8_t IN1_PIN = 5;              // IN1
+constexpr uint8_t IN2_PIN = GROUND;         // IN2
+constexpr uint8_t IN3_PIN = 6;              // IN3
+constexpr uint8_t IN4_PIN = GROUND;         // IN4
+// what the wiring does (first with the wheels in the air: forward must turn both forward)
+//   a wheel going backward when it should go forward: change its FORWARD to BACKWARD (or swap its two wires)
+//   the left and right swapped: RIGHT -> LEFT
+constexpr L298N::Side IN12_SIDE = L298N::RIGHT;         // the wheel on IN1 / IN2 (OUT1, OUT2)
+constexpr L298N::Turn IN12_POSITIVE = L298N::FORWARD;   // how it turns when IN1 - IN2 > 0 (IN1 HIGH, IN2 LOW)
+constexpr L298N::Turn IN34_POSITIVE = L298N::FORWARD;   // how the other turns when IN3 - IN4 > 0
+constexpr uint32_t BAUD = 1000000;          // USB serial: the same as monitor_speed in platformio.ini
+
+constexpr uint8_t SPEED = 128;              // 0 ~ 255
+constexpr uint16_t SPIN_90_MS = 450;        // a quarter turn in place at SPEED (measure it)
+constexpr uint16_t ARC_360_MS = 3000;       // a full circle of arc(SPEED, ARC_DIFFERENCE) (measure it)
+constexpr int16_t ARC_DIFFERENCE = 120;     // the speed difference of the arcs
+constexpr uint16_t PAUSE_MS = 800;          // braked between the moves
+constexpr uint16_t RAMP_MS = 200;           // 0 -> 255 takes this long; 0 = at once
+constexpr uint8_t MIN_DUTY = 0;             // the motors' dead zone (tests/4_pwm)
+constexpr uint8_t LEFT_TRIM = 100;          // the car drifts on "forward": lower the faster side (%)
+constexpr uint8_t RIGHT_TRIM = 100;
+constexpr uint16_t START_MS = 2000;         // after the reset, before the first move
+
+// ---------- parts ----------
+
+// an IN pin's type: a PWM pin, or L298N::Ground
+template <uint8_t PIN> struct InPin { using Type = Uno::UnoPwmPin<PIN>; };
+template <> struct InPin<GROUND> { using Type = L298N::Ground; };
+
+using Board = L298N::L298NBoardJumpers<InPin<IN1_PIN>::Type, InPin<IN2_PIN>::Type,
+                                       InPin<IN3_PIN>::Type, InPin<IN4_PIN>::Type>;
+using Car = L298N::TwoWheelCar<Board, IN12_SIDE, IN12_POSITIVE, IN34_POSITIVE>;
+using Link = Uno::UnoSerial<BAUD>;
+
+Car car;
+
+// "D5", or "GND" for an IN on GND
+void printIn(uint8_t pin) {
+    if (pin == GROUND) {
+        Link::printText("GND");
+    } else {
+        Link::printPin(pin);
+    }
+}
+
+// which IN pins drive which wheel
+void printWiring() {
+    Link::printText(IN12_SIDE == L298N::RIGHT ? "right = IN1 " : "left = IN1 ");
+    printIn(IN1_PIN);
+    Link::printText(", IN2 ");
+    printIn(IN2_PIN);
+    Link::printText(IN12_SIDE == L298N::RIGHT ? " (OUT1, OUT2); left = IN3 " : " (OUT1, OUT2); right = IN3 ");
+    printIn(IN3_PIN);
+    Link::printText(", IN4 ");
+    printIn(IN4_PIN);
+    Link::printText(" (OUT3, OUT4)\r\n");
+}
+
+// ---------- test ----------
+
+// the move just queued: tell it, wait for it, then brake PAUSE_MS
+void done(const char *text) {
+    Link::printText(text);
+    Link::printText("\r\n");
+    car.wait();
+    car.brake(PAUSE_MS);
+    car.wait();
+}
+
+// ---------- main ----------
+
+void setup() {
+    Link::init();
+    car.init();
+    car.setRampMs(RAMP_MS);
+    car.setMinDuty(MIN_DUTY);
+    car.setTrim(LEFT_TRIM, RIGHT_TRIM);
+    Link::printText("\r\ncar: ");
+    printWiring();
+    delay(START_MS);
+}
+
+void loop() {
+    car.forward(SPEED);
+    car.wait();                  // 等它做完（裡面會一直呼叫 update）
+}
+/*
+    done("1 forward 1.5 s");
+    car.backward(SPEED, 1500);
+    done("2 backward 1.5 s");
+
+    car.spin(SPEED, SPIN_90_MS);
+    done("3 spin right 90 degrees (in place, wheels opposite)");
+    car.spin(-SPEED, SPIN_90_MS);
+    done("4 spin left 90 degrees");
+
+    car.pivotRight(SPEED, 2 * SPIN_90_MS);
+    done("5 pivot right: the right wheel stays, the left drives");
+    car.pivotLeft(SPEED, 2 * SPIN_90_MS);
+    done("6 pivot left: the left wheel stays, the right drives");
+
+    car.arc(SPEED, ARC_DIFFERENCE, ARC_360_MS / 2);
+    done("7 arc right: left faster than right (half a circle)");
+    car.arc(SPEED, -ARC_DIFFERENCE, ARC_360_MS / 2);
+    done("8 arc left: right faster than left (half a circle)");
+
+    // all queued at once: they run one after another without waiting in between
+    for (uint8_t side = 0; side < 4; side++) {
+        car.forward(SPEED, 1000);
+        car.spin(SPEED, SPIN_90_MS);
+    }
+    done("9 a square: 4 x (forward 1 s, spin right 90), queued at once");
+
+    car.arc(SPEED, ARC_DIFFERENCE, ARC_360_MS);
+    car.arc(SPEED, -ARC_DIFFERENCE, ARC_360_MS);
+    done("10 a figure 8: a full circle right, then left");
+
+    for (uint8_t i = 0; i < 3; i++) {
+        car.wheels(SPEED, SPEED / 3, 600);
+        car.wheels(SPEED / 3, SPEED, 600);
+    }
+    done("11 zigzag: the wheels' speeds swapped every 0.6 s");
+
+    car.forward(SPEED, 1000);
+    car.coast(1500);
+    done("12 forward, then coast (with the EN jumpers on it brakes)");
+
+    Link::printText("again in 3 s\r\n\r\n");
+    delay(3000);
+}
+*/

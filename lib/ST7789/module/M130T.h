@@ -11,8 +11,11 @@ namespace ST7789 {
     //
     // init values are the common vendor values for 1.3" 240x240 ST7789 modules;
     // replace them with the values from the M130T documentation if they differ
-    template <class Bus>
-    class M130T : public Window<Bus> {
+    //
+    // ColorFormat: the pixels' format, see Window (color::RGB565 is the fastest; RGB888 / RGB666 = 18 bit,
+    // RGB444 = 12 bit); init() sets COLMOD and the color order for it
+    template <class Bus, class ColorFormat>
+    class M130T : public Window<Bus, ColorFormat> {
     public:
         inline M130T();
 
@@ -22,21 +25,21 @@ namespace ST7789 {
 
     // ================= definitions =================
 
-    template <class Bus>
-    inline M130T<Bus>::M130T()
-        : Window<Bus>(240, 240) {
+    template <class Bus, class ColorFormat>
+    inline M130T<Bus, ColorFormat>::M130T()
+        : Window<Bus, ColorFormat>(240, 240) {
     }
 
-    template <class Bus>
-    inline void M130T<Bus>::init(uint8_t blk) {
+    template <class Bus, class ColorFormat>
+    inline void M130T<Bus, ColorFormat>::init(uint8_t blk) {
         Bus::init(blk);
 
         this->hwReset();
         this->swReset();
         this->slpOut();
 
-        this->madctl(0x00);
-        this->colmod(COLMOD_16BIT);
+        this->madctl(Window<Bus, ColorFormat>::MADCTL_ORDER);
+        this->colmod(Window<Bus, ColorFormat>::COLMOD_VALUE);
 
         this->porCtrl(0x0C, 0x0C, 0x00, 0x33, 0x33);
         this->gCtrl(0x35);

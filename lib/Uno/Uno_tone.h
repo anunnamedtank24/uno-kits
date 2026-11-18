@@ -29,8 +29,8 @@ namespace Uno {
     //            and GND: no DC through it), true = HIGH (a 3-pin module with a PNP transistor, on while LOW);
     //            "on" is then LOW
     template <uint8_t PIN, bool IDLE_HIGH = false>
-    struct UnoTone {
-        static_assert(exists(PIN), "UnoTone: PIN must be 0 ~ 19");
+    struct UnoTone : UnoBoard {
+        static_assert(exists(PIN), "Uno::UnoTone: PIN must be 0 ~ 19");
         static_assert(warn::SerialPin<(PIN == 0 || PIN == 1)>::ok, "");
 
         static constexpr uint16_t MIN_HZ = 16;
@@ -40,6 +40,8 @@ namespace Uno {
         static constexpr bool IDLE_LEVEL_HIGH = IDLE_HIGH;
 
         // ---------- Tone functions ----------
+
+        // nowMs, nowUs, delayMs, delayUs, readFlash8 / 16, stopInterrupts, restoreInterrupts: from UnoBoard
 
         // pin at its idle level, timer stopped, volume 255
         static inline void init();
@@ -61,9 +63,6 @@ namespace Uno {
         // the duty really used, in 1 / 65536 of a period (32768 = 50 %), 0 if stopped
         static inline uint16_t realDuty();
 
-        static inline uint32_t nowMs();
-        static inline uint8_t readFlash8(const uint8_t *address);
-        static inline uint16_t readFlash16(const uint16_t *address);
 
     private:
         static constexpr bool HARDWARE = (PIN == 9 || PIN == 10);
@@ -241,20 +240,6 @@ namespace Uno {
         }
     }
 
-    template <uint8_t PIN, bool IDLE_HIGH>
-    inline uint32_t UnoTone<PIN, IDLE_HIGH>::nowMs() {
-        return Uno::nowMs();
-    }
-
-    template <uint8_t PIN, bool IDLE_HIGH>
-    inline uint8_t UnoTone<PIN, IDLE_HIGH>::readFlash8(const uint8_t *address) {
-        return Uno::readFlash8(address);
-    }
-
-    template <uint8_t PIN, bool IDLE_HIGH>
-    inline uint16_t UnoTone<PIN, IDLE_HIGH>::readFlash16(const uint16_t *address) {
-        return Uno::readFlash16(address);
-    }
 }
 
 // Timer1 at TOP: the period starts, the pin of UnoTone "on" (only for pins other than D9 / D10)

@@ -1,0 +1,266 @@
+#include <Arduino.h>
+#include <math.h>
+#include "Uno_ST7789.h"
+#include "ST7789.h"
+#include "graphics.h"
+#include "color.h"
+
+// UNO + M130T: two rays. Each starts at a random point near the center and grows with slope
+// m (the first) or n (the second), always the same slope; which of its two ways it goes
+// (e.g. up-right or down-left for m > 0) is picked by chance at every start.
+// A ray that reaches the edge of the screen stays, waits, and starts again at a new point;
+// the lines are never erased, so two families of lines pile up into a weave.
+// No text, no input: it plays by itself.
+//
+// the two rays' parameters (speed, wait at the edge) are two points in a parameter space that
+// keep a fixed relation: their centroid stays at (SPEED_MID, WAIT_MID) and their distance stays
+// 2 PARAM_RADIUS; only the angle of the pair moves, so one is always the other mirrored through
+// the centroid: when one is fast the other is slow, when one waits long the other waits short.
+// the angle turns in a clear direction and shakes:
+//   angle = turned + SHAKE_ANGLE sin(2 pi SHAKE_HZ t), turned grows by spin per second
+//   spin = sign(L) SPIN_MAX (1 - e^(-|L| / SPIN_SCALE)): the angular momentum L takes a random
+//   walk, squeezed by a concave curve: steep near 0 (a turn starts or flips over fast), flat far
+//   out (the turn stays near SPIN_MAX), so it mostly keeps one direction for a while
+// slopes as in math: y up (the screen's y goes down, so dy is turned over), m > 0 = up to the right
+// the whole ray (start to edge) is known when it starts and its pixels are taken from that one
+// line; each frame only the new pixels are drawn. The speed changes while it grows, so the
+// length is added up frame by frame (speed x time), not taken from the start time
+
+// ---------- settings ----------
+
+// wiring: M130T VCC -> 3.3V, GND -> GND, SCL -> D13, SDA -> D11 (hardware SPI: fixed)
+constexpr uint8_t DC_PIN = 8;               // DC
+constexpr uint8_t RES_PIN = 10;             // RES; Uno::NONE: not connected (software reset)
+constexpr uint8_t CS_PIN = Uno::NONE;       // CS: the M130T has none
+constexpr uint8_t BLK_PIN = 9;              // BLK (backlight); Uno::NONE: tied to VCC
+
+constexpr float M = 2.0f;               // slope of the first ray
+constexpr float N = 1.0f;              // slope of the second ray
+constexpr int16_t START_RANGE = 125;     // start points: center +- this, px
+constexpr int16_t DOT_RADIUS = 2;       // the start point
+
+// parameter space: speed (px of length per second) and wait at the edge (ms),
+// each axis measured from its middle in spans: -1 ~ +1 = MID - SPAN ~ MID + SPAN
+constexpr float SPEED_MID = 60.0f;
+constexpr float SPEED_SPAN = 45.0f;
+constexpr float WAIT_MID = 1500.0f;
+constexpr float WAIT_SPAN = 1300.0f;
+// the two points: centroid +- PARAM_RADIUS (cos angle, sin angle), so 2 PARAM_RADIUS apart
+constexpr float PARAM_RADIUS = 0.8f;    // 0 = both the same ~ 1 = as far apart as the spans allow
+// turning: angular momentum walk -> concave curve -> spin (radians per second)
+constexpr uint16_t WALK_MS = 100;       // the angular momentum takes a random step this often
+constexpr float WALK_STEP = 0.4f;       // -this ~ +this
+constexpr float WALK_LIMIT = 10.0f;     // bounced back at +-this
+constexpr float SPIN_SCALE = 2.0f;      // the curve: |L| = SPIN_SCALE gives 63 % of SPIN_MAX
+constexpr float SPIN_MAX = 1.5f;        // radians per second
+// shaking on top of the turn
+constexpr float SHAKE_ANGLE = 0.35f;    // radians
+constexpr float SHAKE_HZ = 1.2f;
+static_assert(PARAM_RADIUS >= 0.0f && PARAM_RADIUS <= 1.0f, "PARAM_RADIUS must be 0 ~ 1");
+static_assert(SPEED_MID - SPEED_SPAN > 0.0f, "the slowest speed must be above 0");
+static_assert(WAIT_MID - WAIT_SPAN >= 0.0f, "the shortest wait must be 0 or more");
+
+// one color family per ray: a new start picks one of them
+const uint16_t WARM_COLORS[] = {
+    color::RGB565::color(255, 120, 80),
+    color::RGB565::color(255, 180, 60),
+    color::RGB565::color(255, 90, 140),
+    color::RGB565::color(240, 220, 120),
+};
+const uint16_t COOL_COLORS[] = {
+    color::RGB565::color(80, 180, 255),
+    color::RGB565::color(90, 230, 200),
+    color::RGB565::color(150, 130, 255),
+    color::RGB565::color(180, 220, 255),
+};
+constexpr uint8_t COLOR_COUNT = 4;
+
+// ---------- parts ----------
+
+using Bus = Uno::UnoST7789<DC_PIN, RES_PIN, CS_PIN, BLK_PIN>;
+using ScreenColor = color::RGB565;                 // M130T: 16 bit (RGB888 / RGB666: 18 bit, RGB444: 12 bit)
+using Screen = graphics::Canvas<ST7789::M130T<Bus, ScreenColor>>;
+using RGB565 = color::RGB565;
+
+Screen screen;
+
+constexpr int16_t SIZE = 240;
+constexpr int16_t CENTER = SIZE / 2;
+// a start off the screen would give a ray of negative length: kept to the screen (0 ~ SIZE - 1)
+constexpr int16_t START_LIMIT = START_RANGE < CENTER ? START_RANGE : CENTER - 1;
+
+// ---------- rays ----------
+
+struct Ray {
+    float slope;        // M or N, never changes; only which way the ray goes is by chance
+    int8_t side;        // +1 / -1: which of the two points in parameter space
+    const uint16_t *colors;
+    int16_t x0;         // start point
+    int16_t y0;
+    int16_t x1;         // end point, at the edge
+    int16_t y1;
+    int16_t steps;      // pixels after the start: the longer of |x1 - x0| and |y1 - y0|
+    int16_t drawn;      // pixels 0 ~ drawn are on the screen
+    float length;       // grown so far, px
+    float fullLength;   // start to edge, px
+    uint32_t lastMs;    // when length was last added to
+    bool atEdge;        // fully drawn, waiting until restartMs
+    uint32_t restartMs;
+    uint16_t color;
+};
+
+Ray rays[2] = {
+    { M, 1, WARM_COLORS },
+    { N, -1, COOL_COLORS },
+};
+
+// ---------- parameter space ----------
+
+float angle = 0.0f;     // of the pair in parameter space
+
+// a ray's point: centroid + side * PARAM_RADIUS (cos angle, sin angle), in spans
+float speedOf(const Ray &ray) {
+    return SPEED_MID + ray.side * SPEED_SPAN * PARAM_RADIUS * cosf(angle);
+}
+
+float waitOf(const Ray &ray) {
+    return WAIT_MID + ray.side * WAIT_SPAN * PARAM_RADIUS * sinf(angle);
+}
+
+float momentum = 0.0f;  // angular momentum L
+float turned = 0.0f;    // the turn so far, radians
+uint32_t nextWalkMs = 0;
+uint32_t lastAngleMs = 0;
+
+void updateAngle(uint32_t now) {
+    if ((int32_t)(now - nextWalkMs) >= 0) {
+        nextWalkMs = now + WALK_MS;
+        momentum += WALK_STEP * (random(-1000, 1001) / 1000.0f);
+        // bounce back from the ends
+        if (momentum > WALK_LIMIT) {
+            momentum = 2 * WALK_LIMIT - momentum;
+        }
+        if (momentum < -WALK_LIMIT) {
+            momentum = -2 * WALK_LIMIT - momentum;
+        }
+    }
+    float spin = SPIN_MAX * (1.0f - expf(-fabsf(momentum) / SPIN_SCALE));
+    turned += (momentum < 0 ? -spin : spin) * (now - lastAngleMs) / 1000.0f;
+    // kept in one turn, so float stays precise however long it runs
+    turned = fmodf(turned, 2.0f * (float)M_PI);
+    lastAngleMs = now;
+    angle = turned + SHAKE_ANGLE * sinf(2.0f * (float)M_PI * SHAKE_HZ * now / 1000.0f);
+}
+
+// length from (x0, y0) along (dx, dy) until x or y leaves 0 ~ SIZE - 1
+float lengthToEdge(float x0, float y0, float dx, float dy) {
+    float length = 1e9f;
+    if (dx > 0) {
+        length = min(length, (SIZE - 1 - x0) / dx);
+    } else if (dx < 0) {
+        length = min(length, -x0 / dx);
+    }
+    if (dy > 0) {
+        length = min(length, (SIZE - 1 - y0) / dy);
+    } else if (dy < 0) {
+        length = min(length, -y0 / dy);
+    }
+    return length;
+}
+
+// a / b rounded half away from zero, b > 0
+int32_t divRound(int32_t a, int32_t b) {
+    return a >= 0 ? (a + b / 2) / b : -((-a + b / 2) / b);
+}
+
+// pixel k of the ray (0 = start, steps = end): one step along the longer axis, the other rounded
+int16_t rayX(const Ray &ray, int16_t k) {
+    return ray.x0 + (int16_t)divRound((int32_t)k * (ray.x1 - ray.x0), ray.steps);
+}
+
+int16_t rayY(const Ray &ray, int16_t k) {
+    return ray.y0 + (int16_t)divRound((int32_t)k * (ray.y1 - ray.y0), ray.steps);
+}
+
+// pixels from ~ to of the ray, in one color
+void drawPixels(const Ray &ray, int16_t from, int16_t to, uint16_t color) {
+    for (int16_t k = from; k <= to; k++) {
+        screen.drawPoint(rayX(ray, k), rayY(ray, k), color);
+    }
+}
+
+// the start dot and every pixel drawn so far
+void drawRay(const Ray &ray, uint16_t color) {
+    screen.drawFilledCircleRadius(ray.x0, ray.y0, DOT_RADIUS, color);
+    drawPixels(ray, 0, ray.drawn, color);
+}
+
+void startRay(Ray &ray, uint32_t now) {
+    float x0 = (float)(CENTER + random(-START_LIMIT, START_LIMIT + 1));
+    float y0 = (float)(CENTER + random(-START_LIMIT, START_LIMIT + 1));
+    // direction (1, slope) as in math, one of its two ways by chance; y turned over for the screen
+    float norm = sqrtf(1.0f + ray.slope * ray.slope);
+    float way = random(2) ? 1.0f : -1.0f;
+    float dx = way / norm;
+    float dy = -way * ray.slope / norm;
+
+    ray.fullLength = lengthToEdge(x0, y0, dx, dy);
+    ray.x0 = (int16_t)x0;
+    ray.y0 = (int16_t)y0;
+    ray.x1 = (int16_t)lroundf(x0 + dx * ray.fullLength);
+    ray.y1 = (int16_t)lroundf(y0 + dy * ray.fullLength);
+    ray.steps = max(abs(ray.x1 - ray.x0), abs(ray.y1 - ray.y0));
+    ray.drawn = 0;
+    ray.length = 0.0f;
+    ray.lastMs = now;
+    ray.atEdge = false;
+    ray.color = ray.colors[random(COLOR_COUNT)];
+    drawRay(ray, ray.color);
+}
+
+void updateRay(Ray &ray, uint32_t now) {
+    if (ray.atEdge) {
+        if ((int32_t)(now - ray.restartMs) >= 0) {
+            // the old ray stays
+            startRay(ray, now);
+        }
+        return;
+    }
+    ray.length += speedOf(ray) * (now - ray.lastMs) / 1000.0f;
+    ray.lastMs = now;
+    if (ray.length >= ray.fullLength) {
+        drawPixels(ray, ray.drawn + 1, ray.steps, ray.color);
+        ray.drawn = ray.steps;
+        ray.atEdge = true;
+        ray.restartMs = now + (uint32_t)waitOf(ray);
+        return;
+    }
+    int16_t k = (int16_t)(ray.length / ray.fullLength * ray.steps);
+    if (k > ray.drawn) {
+        drawPixels(ray, ray.drawn + 1, k, ray.color);
+        ray.drawn = k;
+    }
+}
+
+// ---------- main ----------
+
+void setup() {
+    screen.init();
+    screen.drawFilledScreen(RGB565::BLACK);
+    randomSeed(analogRead(A0));
+    turned = random(0, 6283) / 1000.0f;
+    // already turning one way at the start
+    momentum = random(2) ? WALK_LIMIT / 2 : -WALK_LIMIT / 2;
+    uint32_t now = millis();
+    lastAngleMs = now;
+    updateAngle(now);
+    startRay(rays[0], now);
+    startRay(rays[1], now);
+}
+
+void loop() {
+    uint32_t now = millis();
+    updateAngle(now);
+    updateRay(rays[0], now);
+    updateRay(rays[1], now);
+}

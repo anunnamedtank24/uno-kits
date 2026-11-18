@@ -8,10 +8,13 @@
 //   LED_2_pins.h            LED2Pins<Pwm>                                          one bare LED
 //   RGB_LED_4_pins.h        RGBLED4Pins<RedPwm, GreenPwm, BluePwm, COMMON_ANODE>   RGB LED (KY-016 ...)
 //   traffic_light_4_pins.h  TrafficLight4Pins<RedPwm, YellowPwm, GreenPwm>         R, Y, G, GND module
+// tool/  what is often built on it
+//   effect.h                Effect<Led>: blink, breathe, fade, heartbeat (no waiting)
 #include "brightness.h"
 #include "single_LED.h"
 #include "module/LED_2_pins.h"
 #include "module/RGB_LED_4_pins.h"
 #include "module/traffic_light_4_pins.h"
+#include "tool/effect.h"
 
 #endif

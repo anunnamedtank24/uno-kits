@@ -14,7 +14,7 @@
     "maxScale": 8,
     "maxStoredSize": 240,
     "targets": {
-        "uno": {
+        "flash": {
             "note": "pixels in flash (output/*.h), drawn by image::FlashImage",
             "palettes": [2, 16, 256, 565],
             "recommendedPalettes": [2, 16, 256],
@@ -22,9 +22,9 @@
             "byteCycles": 6,
             "recommendedMaxBytes": 16000
         },
-        "mac": {
-            "note": "pixels stay on the computer (output/mac/*.h), stream.py sends them to image::StreamImage; the board only has the size and the path (output/*.h); 256 colors would need 512 B RAM on the board",
-            "palettes": [2, 16, 565],
+        "stream": {
+            "note": "pixels stay on the computer (in output/*.h, after #if 0), stream.py sends them to image::StreamImage; the board only has the size and the path (output/*.h); palette 256 works (the board keeps it in RAM taken at run time, 2 bytes a color), but warns",
+            "palettes": [2, 16, 256, 565],
             "recommendedPalettes": [2, 16, 565],
             "defaultPalette": 565,
             "baud": 1000000,

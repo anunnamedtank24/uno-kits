@@ -5,6 +5,7 @@
 #include <util/delay.h>
 
 // Arduino UNO (ATmega328P), register level: the helpers every interface below is built on
+// every interface inherits Uno::UnoBoard (time, delays, flash, interrupts on / off; see the end of this file)
 // interfaces (include the ones you use, each includes this file):
 //   Uno_ST7789.h  Uno::UnoST7789<DC, RES, ...>  Bus for ST7789 screens
 //   Uno_serial.h  Uno::UnoSerial<BAUD>          Link over USB serial (D0 / D1), e.g. for video::StreamPlayer
@@ -367,6 +368,52 @@ namespace Uno {
     inline uint32_t nowMs() {
         return millis();
     }
+
+    // µs since power on (Arduino micros, 4 µs steps), wraps after ~71 minutes; fine inside interrupts
+    inline uint32_t nowUs() {
+        return micros();
+    }
+
+    // ---------- the base of every interface ----------
+
+    // what every interface of this folder provides (pins, buses, timers all inherit it), so a library that
+    // gets any of them can always ask for the time, wait, read flash and turn interrupts off for a moment:
+    //   Uno::UnoPin<2>::nowMs(), Uno::UnoI2C<13, 11>::readFlash8(p), Uno::UnoTone<9>::stopInterrupts() ...
+    struct UnoBoard {
+        // ms / µs since power on (millis / micros)
+        static inline uint32_t nowMs() {
+            return Uno::nowMs();
+        }
+        static inline uint32_t nowUs() {
+            return Uno::nowUs();
+        }
+
+        // busy-wait (works with interrupts off, unlike Arduino delay)
+        static inline void delayMs(uint16_t ms) {
+            Uno::delayMs(ms);
+        }
+        static inline void delayUs(uint16_t us) {
+            delayMicroseconds(us);
+        }
+
+        // data in flash (PROGMEM): the converted fonts, pictures, videos, sounds
+        static inline uint8_t readFlash8(const uint8_t *address) {
+            return Uno::readFlash8(address);
+        }
+        static inline uint16_t readFlash16(const uint16_t *address) {
+            return Uno::readFlash16(address);
+        }
+
+        // no interrupts until restoreInterrupts(saved): to read or change what an interrupt uses, all at once
+        static inline uint8_t stopInterrupts() {
+            uint8_t saved = SREG;
+            cli();
+            return saved;
+        }
+        static inline void restoreInterrupts(uint8_t saved) {
+            SREG = saved;
+        }
+    };
 }
 
 #endif

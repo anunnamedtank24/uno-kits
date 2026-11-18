@@ -1,0 +1,117 @@
+#include <Arduino.h>
+#include "Uno_serial.h"
+#include "Uno_pin.h"
+#include "L298N.h"
+
+// UNO + L298N board + one DC motor (channel A): every way of driving it, one after another, told on the USB serial
+//   OUT1, OUT2 -> the motor        OUT3, OUT4: nothing (two motors: tests/2_two_motors)
+//   pio device monitor        (platformio.ini: monitor_speed = BAUD)
+//
+// the steps (each printed as it starts): ramp up, coast vs brake, reverse through the ramp,
+// the speed ladder (where does the motor start to turn: setMinDuty), then the same again from the start
+// (IN3, IN4, ENB may be connected as for tests/2_two_motors: channel B just stays off)
+//
+// the motor turns the wrong way? swap its two wires, or REVERSED = true
+
+// ---------- settings ----------
+
+// wiring: L298N with both EN jumpers removed
+//   +12V -> battery + (6 ~ 12 V)   GND -> battery - AND the UNO's GND   +5V: nothing (5V-EN jumper on)
+constexpr uint8_t ENA_PIN = 5;              // ENA: a PWM pin (3, 5, 6, 9, 10, 11): the speed of channel A
+constexpr uint8_t IN1_PIN = A0;             // IN1: any pin
+constexpr uint8_t IN2_PIN = A1;             // IN2
+constexpr uint8_t IN3_PIN = A2;             // IN3
+constexpr uint8_t IN4_PIN = A3;             // IN4
+constexpr uint8_t ENB_PIN = 6;              // ENB: a PWM pin: the speed of channel B
+constexpr uint32_t BAUD = 1000000;          // USB serial: the same as monitor_speed in platformio.ini
+
+constexpr uint16_t RAMP_MS = 1000;          // 0 -> 255 in 1 s (slow, to see it)
+constexpr uint8_t MIN_DUTY = 0;             // the dead zone: set it from the speed ladder (step 6) or tests/4_pwm
+constexpr bool REVERSED = false;
+
+// the steps, in order, then again from the first
+enum Action : uint8_t { SPEED, BRAKE, COAST };
+
+struct Step {
+    Action action;
+    int16_t value;                          // the speed, or the brake duty
+    uint16_t ms;                            // then wait this long
+    const char *text;
+};
+
+const Step STEPS[] = {
+    {SPEED, 255, 3000, "1 forward 255: ramps up in 1 s"},
+    {COAST, 0, 3000, "2 coast: rolls out slowly"},
+    {SPEED, 255, 2500, "3 forward 255 again"},
+    {BRAKE, 255, 2000, "4 brake: stops at once (compare with 2)"},
+    {SPEED, -160, 2500, "5 backward 160"},
+    {SPEED, 160, 3000, "5 forward 160: through 0 by the ramp, no jolt"},
+    {SPEED, 40, 1500, "6 speed ladder: 40 (turning? if not: the dead zone, see tests/4_pwm)"},
+    {SPEED, 80, 1500, "6 speed ladder: 80"},
+    {SPEED, 120, 1500, "6 speed ladder: 120"},
+    {SPEED, 160, 1500, "6 speed ladder: 160"},
+    {SPEED, 200, 1500, "6 speed ladder: 200"},
+    {SPEED, 255, 1500, "6 speed ladder: 255"},
+    {BRAKE, 255, 1000, "  brake"},
+    {COAST, 0, 3000, "  coast (released); again in 3 s"},
+};
+constexpr uint8_t STEP_COUNT = sizeof(STEPS) / sizeof(STEPS[0]);
+
+// ---------- parts ----------
+
+using Board = L298N::L298NBoard<Uno::UnoPwmPin<ENA_PIN>,
+                                Uno::UnoOutputPin<IN1_PIN>, Uno::UnoOutputPin<IN2_PIN>,
+                                Uno::UnoOutputPin<IN3_PIN>, Uno::UnoOutputPin<IN4_PIN>,
+                                Uno::UnoPwmPin<ENB_PIN>>;
+// both EN jumpers on instead (ENA, ENB not connected), full speed only:
+//   L298N::L298NBoard<L298N::EnableJumper, ..., L298N::EnableJumper>
+using Link = Uno::UnoSerial<BAUD>;
+
+L298N::DCMotor<Board::A> motor;
+
+// ---------- the steps ----------
+
+uint8_t stepIndex = 0;
+uint32_t stepStartMs = 0;
+
+// ---------- test ----------
+
+void startStep() {
+    const Step &step = STEPS[stepIndex];
+    if (step.action == SPEED) {
+        motor.setSpeed(step.value);
+    } else if (step.action == BRAKE) {
+        motor.brake((uint8_t)step.value);
+    } else {
+        motor.coast();
+    }
+    Link::printText(step.text);
+    Link::printText("\r\n");
+    stepStartMs = millis();
+}
+
+// ---------- main ----------
+
+void setup() {
+    Link::init();
+    motor.init();
+    motor.setRampMs(RAMP_MS);
+    motor.setMinDuty(MIN_DUTY);
+    motor.setReversed(REVERSED);
+    Link::printText("\r\nL298N one motor: ENA ");
+    Link::printPin(ENA_PIN);
+    Link::printText(", IN1 ");
+    Link::printPin(IN1_PIN);
+    Link::printText(", IN2 ");
+    Link::printPin(IN2_PIN);
+    Link::printText(" -> OUT1, OUT2\r\n");
+    startStep();
+}
+
+void loop() {
+    motor.update();
+    if (millis() - stepStartMs >= STEPS[stepIndex].ms) {
+        stepIndex = (uint8_t)((stepIndex + 1) % STEP_COUNT);
+        startStep();
+    }
+}

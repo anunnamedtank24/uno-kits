@@ -8,9 +8,10 @@ namespace graphics {
     // shapes on top of any screen, no color definitions
     //
     // Screen: a class providing (see lib/ST7789/basic/window.h)
+    //   ColorFormat: the type of its colors (lib/color: color::RGB565, color::BW<> ...), ColorFormat::Value
     //   uint16_t width() const
     //   uint16_t height() const
-    //   void fillWindow(int16_t x, int16_t y, int16_t w, int16_t h, uint16_t color)  clipped to the screen:
+    //   void fillWindow(int16_t x, int16_t y, int16_t w, int16_t h, ColorFormat::Value color)  clipped to the screen:
     //   every shape draws through it, so shapes are clipped without checks of their own
     //
     // naming: the suffix tells the kind of parameters
@@ -26,45 +27,49 @@ namespace graphics {
     public:
         using Screen::Screen;
 
+        // the screen's color: Screen::ColorFormat::Value (uint16_t for RGB565, uint8_t for BW ...)
+        using ColorFormat = typename Screen::ColorFormat;
+        using Color = typename ColorFormat::Value;
+
         // ---------- point ----------
 
-        inline void drawPoint(int16_t x, int16_t y, uint16_t color);
+        inline void drawPoint(int16_t x, int16_t y, Color color);
 
         // ---------- horizontal line ----------
 
-        inline void drawHLineSize(int16_t x, int16_t y, int16_t w, uint16_t color);
-        inline void drawHLinePoints(int16_t x0, int16_t x1, int16_t y, uint16_t color);
-        inline void drawHLineCenter(int16_t cx, int16_t y, int16_t w, uint16_t color);
+        inline void drawHLineSize(int16_t x, int16_t y, int16_t w, Color color);
+        inline void drawHLinePoints(int16_t x0, int16_t x1, int16_t y, Color color);
+        inline void drawHLineCenter(int16_t cx, int16_t y, int16_t w, Color color);
 
         // ---------- vertical line ----------
 
-        inline void drawVLineSize(int16_t x, int16_t y, int16_t h, uint16_t color);
-        inline void drawVLinePoints(int16_t x, int16_t y0, int16_t y1, uint16_t color);
-        inline void drawVLineCenter(int16_t x, int16_t cy, int16_t h, uint16_t color);
+        inline void drawVLineSize(int16_t x, int16_t y, int16_t h, Color color);
+        inline void drawVLinePoints(int16_t x, int16_t y0, int16_t y1, Color color);
+        inline void drawVLineCenter(int16_t x, int16_t cy, int16_t h, Color color);
 
         // ---------- line (any direction) ----------
 
         // Bresenham
-        inline void drawLinePoints(int16_t x0, int16_t y0, int16_t x1, int16_t y1, uint16_t color);
+        inline void drawLinePoints(int16_t x0, int16_t y0, int16_t x1, int16_t y1, Color color);
 
-        inline void drawLineDelta(int16_t x, int16_t y, int16_t dx, int16_t dy, uint16_t color);
+        inline void drawLineDelta(int16_t x, int16_t y, int16_t dx, int16_t dy, Color color);
 
         // uses floating point sin / cos
-        inline void drawLineAngle(int16_t x, int16_t y, int16_t length, int16_t degrees, uint16_t color);
+        inline void drawLineAngle(int16_t x, int16_t y, int16_t length, int16_t degrees, Color color);
 
         // ---------- rectangle ----------
         // Hollow: (x, y, w, h) is the outer edge, the border grows inward;
         //         a border of half the size or more fills the rectangle
 
-        inline void drawHollowRectSize(int16_t x, int16_t y, int16_t w, int16_t h, uint16_t color, int16_t border = 1);
-        inline void drawHollowRectPoints(int16_t x0, int16_t y0, int16_t x1, int16_t y1, uint16_t color, int16_t border = 1);
-        inline void drawHollowRectCenter(int16_t cx, int16_t cy, int16_t w, int16_t h, uint16_t color, int16_t border = 1);
-        inline void drawFilledRectSize(int16_t x, int16_t y, int16_t w, int16_t h, uint16_t color);
-        inline void drawFilledRectPoints(int16_t x0, int16_t y0, int16_t x1, int16_t y1, uint16_t color);
-        inline void drawFilledRectCenter(int16_t cx, int16_t cy, int16_t w, int16_t h, uint16_t color);
+        inline void drawHollowRectSize(int16_t x, int16_t y, int16_t w, int16_t h, Color color, int16_t border = 1);
+        inline void drawHollowRectPoints(int16_t x0, int16_t y0, int16_t x1, int16_t y1, Color color, int16_t border = 1);
+        inline void drawHollowRectCenter(int16_t cx, int16_t cy, int16_t w, int16_t h, Color color, int16_t border = 1);
+        inline void drawFilledRectSize(int16_t x, int16_t y, int16_t w, int16_t h, Color color);
+        inline void drawFilledRectPoints(int16_t x0, int16_t y0, int16_t x1, int16_t y1, Color color);
+        inline void drawFilledRectCenter(int16_t cx, int16_t cy, int16_t w, int16_t h, Color color);
 
         // whole screen
-        inline void drawFilledScreen(uint16_t color);
+        inline void drawFilledScreen(Color color);
 
         // ---------- triangle ----------
         // Size / Center: isosceles, apex at top middle, base at the bottom
@@ -75,13 +80,13 @@ namespace graphics {
         //         so the corners are the outer edge and the border grows inward
 
         inline void drawHollowTrianglePoints(int16_t x0, int16_t y0, int16_t x1, int16_t y1,
-                                             int16_t x2, int16_t y2, uint16_t color, int16_t border = 1);
-        inline void drawHollowTriangleSize(int16_t x, int16_t y, int16_t w, int16_t h, uint16_t color, int16_t border = 1);
-        inline void drawHollowTriangleCenter(int16_t cx, int16_t cy, int16_t w, int16_t h, uint16_t color, int16_t border = 1);
+                                             int16_t x2, int16_t y2, Color color, int16_t border = 1);
+        inline void drawHollowTriangleSize(int16_t x, int16_t y, int16_t w, int16_t h, Color color, int16_t border = 1);
+        inline void drawHollowTriangleCenter(int16_t cx, int16_t cy, int16_t w, int16_t h, Color color, int16_t border = 1);
         inline void drawFilledTrianglePoints(int16_t x0, int16_t y0, int16_t x1, int16_t y1,
-                                             int16_t x2, int16_t y2, uint16_t color);
-        inline void drawFilledTriangleSize(int16_t x, int16_t y, int16_t w, int16_t h, uint16_t color);
-        inline void drawFilledTriangleCenter(int16_t cx, int16_t cy, int16_t w, int16_t h, uint16_t color);
+                                             int16_t x2, int16_t y2, Color color);
+        inline void drawFilledTriangleSize(int16_t x, int16_t y, int16_t w, int16_t h, Color color);
+        inline void drawFilledTriangleCenter(int16_t cx, int16_t cy, int16_t w, int16_t h, Color color);
 
         // ---------- circle ----------
         // Points: center + one point on the circle
@@ -91,10 +96,10 @@ namespace graphics {
         // Hollow: the circle of radius r minus the circle of radius r - border,
         //         so r is the outer edge and the border grows inward, without holes for any border
 
-        inline void drawHollowCircleRadius(int16_t cx, int16_t cy, int16_t r, uint16_t color, int16_t border = 1);
-        inline void drawHollowCirclePoints(int16_t cx, int16_t cy, int16_t px, int16_t py, uint16_t color, int16_t border = 1);
-        inline void drawFilledCircleRadius(int16_t cx, int16_t cy, int16_t r, uint16_t color);
-        inline void drawFilledCirclePoints(int16_t cx, int16_t cy, int16_t px, int16_t py, uint16_t color);
+        inline void drawHollowCircleRadius(int16_t cx, int16_t cy, int16_t r, Color color, int16_t border = 1);
+        inline void drawHollowCirclePoints(int16_t cx, int16_t cy, int16_t px, int16_t py, Color color, int16_t border = 1);
+        inline void drawFilledCircleRadius(int16_t cx, int16_t cy, int16_t r, Color color);
+        inline void drawFilledCirclePoints(int16_t cx, int16_t cy, int16_t px, int16_t py, Color color);
 
     private:
         static inline void swap(int16_t &a, int16_t &b);
@@ -108,11 +113,11 @@ namespace graphics {
 
         // border <= 0: filled
         inline void drawTriangle(int16_t x0, int16_t y0, int16_t x1, int16_t y1,
-                                 int16_t x2, int16_t y2, uint16_t color, int16_t border);
+                                 int16_t x2, int16_t y2, Color color, int16_t border);
 
         // pixels whose center is closer than outer + 0.5, minus the ones closer than inner + 0.5
         // inner < 0: filled
-        inline void drawRing(int16_t cx, int16_t cy, int16_t outer, int16_t inner, uint16_t color);
+        inline void drawRing(int16_t cx, int16_t cy, int16_t outer, int16_t inner, Color color);
     };
 
     // ================= definitions =================
@@ -120,19 +125,19 @@ namespace graphics {
     // ---------- point ----------
 
     template <class Screen>
-    inline void Shapes<Screen>::drawPoint(int16_t x, int16_t y, uint16_t color) {
+    inline void Shapes<Screen>::drawPoint(int16_t x, int16_t y, Color color) {
         this->fillWindow(x, y, 1, 1, color);
     }
 
     // ---------- horizontal line ----------
 
     template <class Screen>
-    inline void Shapes<Screen>::drawHLineSize(int16_t x, int16_t y, int16_t w, uint16_t color) {
+    inline void Shapes<Screen>::drawHLineSize(int16_t x, int16_t y, int16_t w, Color color) {
         this->fillWindow(x, y, w, 1, color);
     }
 
     template <class Screen>
-    inline void Shapes<Screen>::drawHLinePoints(int16_t x0, int16_t x1, int16_t y, uint16_t color) {
+    inline void Shapes<Screen>::drawHLinePoints(int16_t x0, int16_t x1, int16_t y, Color color) {
         if (x0 > x1) {
             swap(x0, x1);
         }
@@ -140,19 +145,19 @@ namespace graphics {
     }
 
     template <class Screen>
-    inline void Shapes<Screen>::drawHLineCenter(int16_t cx, int16_t y, int16_t w, uint16_t color) {
+    inline void Shapes<Screen>::drawHLineCenter(int16_t cx, int16_t y, int16_t w, Color color) {
         drawHLineSize(cx - w / 2, y, w, color);
     }
 
     // ---------- vertical line ----------
 
     template <class Screen>
-    inline void Shapes<Screen>::drawVLineSize(int16_t x, int16_t y, int16_t h, uint16_t color) {
+    inline void Shapes<Screen>::drawVLineSize(int16_t x, int16_t y, int16_t h, Color color) {
         this->fillWindow(x, y, 1, h, color);
     }
 
     template <class Screen>
-    inline void Shapes<Screen>::drawVLinePoints(int16_t x, int16_t y0, int16_t y1, uint16_t color) {
+    inline void Shapes<Screen>::drawVLinePoints(int16_t x, int16_t y0, int16_t y1, Color color) {
         if (y0 > y1) {
             swap(y0, y1);
         }
@@ -160,14 +165,14 @@ namespace graphics {
     }
 
     template <class Screen>
-    inline void Shapes<Screen>::drawVLineCenter(int16_t x, int16_t cy, int16_t h, uint16_t color) {
+    inline void Shapes<Screen>::drawVLineCenter(int16_t x, int16_t cy, int16_t h, Color color) {
         drawVLineSize(x, cy - h / 2, h, color);
     }
 
     // ---------- line (any direction) ----------
 
     template <class Screen>
-    inline void Shapes<Screen>::drawLinePoints(int16_t x0, int16_t y0, int16_t x1, int16_t y1, uint16_t color) {
+    inline void Shapes<Screen>::drawLinePoints(int16_t x0, int16_t y0, int16_t x1, int16_t y1, Color color) {
         if (y0 == y1) {
             drawHLinePoints(x0, x1, y0, color);
             return;
@@ -207,12 +212,12 @@ namespace graphics {
     }
 
     template <class Screen>
-    inline void Shapes<Screen>::drawLineDelta(int16_t x, int16_t y, int16_t dx, int16_t dy, uint16_t color) {
+    inline void Shapes<Screen>::drawLineDelta(int16_t x, int16_t y, int16_t dx, int16_t dy, Color color) {
         drawLinePoints(x, y, x + dx, y + dy, color);
     }
 
     template <class Screen>
-    inline void Shapes<Screen>::drawLineAngle(int16_t x, int16_t y, int16_t length, int16_t degrees, uint16_t color) {
+    inline void Shapes<Screen>::drawLineAngle(int16_t x, int16_t y, int16_t length, int16_t degrees, Color color) {
         float rad = degrees * (float)M_PI / 180.0f;
         int16_t dx = (int16_t)lroundf(length * cosf(rad));
         int16_t dy = (int16_t)-lroundf(length * sinf(rad)); // screen y grows down
@@ -222,7 +227,7 @@ namespace graphics {
     // ---------- rectangle ----------
 
     template <class Screen>
-    inline void Shapes<Screen>::drawHollowRectSize(int16_t x, int16_t y, int16_t w, int16_t h, uint16_t color, int16_t border) {
+    inline void Shapes<Screen>::drawHollowRectSize(int16_t x, int16_t y, int16_t w, int16_t h, Color color, int16_t border) {
         if (w <= 0 || h <= 0 || border <= 0) {
             return;
         }
@@ -237,34 +242,34 @@ namespace graphics {
     }
 
     template <class Screen>
-    inline void Shapes<Screen>::drawHollowRectPoints(int16_t x0, int16_t y0, int16_t x1, int16_t y1, uint16_t color, int16_t border) {
+    inline void Shapes<Screen>::drawHollowRectPoints(int16_t x0, int16_t y0, int16_t x1, int16_t y1, Color color, int16_t border) {
         sortPoints(x0, y0, x1, y1);
         drawHollowRectSize(x0, y0, x1 - x0 + 1, y1 - y0 + 1, color, border);
     }
 
     template <class Screen>
-    inline void Shapes<Screen>::drawHollowRectCenter(int16_t cx, int16_t cy, int16_t w, int16_t h, uint16_t color, int16_t border) {
+    inline void Shapes<Screen>::drawHollowRectCenter(int16_t cx, int16_t cy, int16_t w, int16_t h, Color color, int16_t border) {
         drawHollowRectSize(cx - w / 2, cy - h / 2, w, h, color, border);
     }
 
     template <class Screen>
-    inline void Shapes<Screen>::drawFilledRectSize(int16_t x, int16_t y, int16_t w, int16_t h, uint16_t color) {
+    inline void Shapes<Screen>::drawFilledRectSize(int16_t x, int16_t y, int16_t w, int16_t h, Color color) {
         this->fillWindow(x, y, w, h, color);
     }
 
     template <class Screen>
-    inline void Shapes<Screen>::drawFilledRectPoints(int16_t x0, int16_t y0, int16_t x1, int16_t y1, uint16_t color) {
+    inline void Shapes<Screen>::drawFilledRectPoints(int16_t x0, int16_t y0, int16_t x1, int16_t y1, Color color) {
         sortPoints(x0, y0, x1, y1);
         drawFilledRectSize(x0, y0, x1 - x0 + 1, y1 - y0 + 1, color);
     }
 
     template <class Screen>
-    inline void Shapes<Screen>::drawFilledRectCenter(int16_t cx, int16_t cy, int16_t w, int16_t h, uint16_t color) {
+    inline void Shapes<Screen>::drawFilledRectCenter(int16_t cx, int16_t cy, int16_t w, int16_t h, Color color) {
         drawFilledRectSize(cx - w / 2, cy - h / 2, w, h, color);
     }
 
     template <class Screen>
-    inline void Shapes<Screen>::drawFilledScreen(uint16_t color) {
+    inline void Shapes<Screen>::drawFilledScreen(Color color) {
         this->fillWindow(0, 0, this->width(), this->height(), color);
     }
 
@@ -272,7 +277,7 @@ namespace graphics {
 
     template <class Screen>
     inline void Shapes<Screen>::drawHollowTrianglePoints(int16_t x0, int16_t y0, int16_t x1, int16_t y1,
-                                                         int16_t x2, int16_t y2, uint16_t color, int16_t border) {
+                                                         int16_t x2, int16_t y2, Color color, int16_t border) {
         if (border <= 0) {
             return;
         }
@@ -280,7 +285,7 @@ namespace graphics {
     }
 
     template <class Screen>
-    inline void Shapes<Screen>::drawHollowTriangleSize(int16_t x, int16_t y, int16_t w, int16_t h, uint16_t color, int16_t border) {
+    inline void Shapes<Screen>::drawHollowTriangleSize(int16_t x, int16_t y, int16_t w, int16_t h, Color color, int16_t border) {
         if (w <= 0 || h <= 0) {
             return;
         }
@@ -288,18 +293,18 @@ namespace graphics {
     }
 
     template <class Screen>
-    inline void Shapes<Screen>::drawHollowTriangleCenter(int16_t cx, int16_t cy, int16_t w, int16_t h, uint16_t color, int16_t border) {
+    inline void Shapes<Screen>::drawHollowTriangleCenter(int16_t cx, int16_t cy, int16_t w, int16_t h, Color color, int16_t border) {
         drawHollowTriangleSize(cx - w / 2, cy - h / 2, w, h, color, border);
     }
 
     template <class Screen>
     inline void Shapes<Screen>::drawFilledTrianglePoints(int16_t x0, int16_t y0, int16_t x1, int16_t y1,
-                                                         int16_t x2, int16_t y2, uint16_t color) {
+                                                         int16_t x2, int16_t y2, Color color) {
         drawTriangle(x0, y0, x1, y1, x2, y2, color, 0);
     }
 
     template <class Screen>
-    inline void Shapes<Screen>::drawFilledTriangleSize(int16_t x, int16_t y, int16_t w, int16_t h, uint16_t color) {
+    inline void Shapes<Screen>::drawFilledTriangleSize(int16_t x, int16_t y, int16_t w, int16_t h, Color color) {
         if (w <= 0 || h <= 0) {
             return;
         }
@@ -307,14 +312,14 @@ namespace graphics {
     }
 
     template <class Screen>
-    inline void Shapes<Screen>::drawFilledTriangleCenter(int16_t cx, int16_t cy, int16_t w, int16_t h, uint16_t color) {
+    inline void Shapes<Screen>::drawFilledTriangleCenter(int16_t cx, int16_t cy, int16_t w, int16_t h, Color color) {
         drawFilledTriangleSize(cx - w / 2, cy - h / 2, w, h, color);
     }
 
     // ---------- circle ----------
 
     template <class Screen>
-    inline void Shapes<Screen>::drawHollowCircleRadius(int16_t cx, int16_t cy, int16_t r, uint16_t color, int16_t border) {
+    inline void Shapes<Screen>::drawHollowCircleRadius(int16_t cx, int16_t cy, int16_t r, Color color, int16_t border) {
         if (r < 0 || border <= 0) {
             return;
         }
@@ -322,12 +327,12 @@ namespace graphics {
     }
 
     template <class Screen>
-    inline void Shapes<Screen>::drawHollowCirclePoints(int16_t cx, int16_t cy, int16_t px, int16_t py, uint16_t color, int16_t border) {
+    inline void Shapes<Screen>::drawHollowCirclePoints(int16_t cx, int16_t cy, int16_t px, int16_t py, Color color, int16_t border) {
         drawHollowCircleRadius(cx, cy, distance(cx, cy, px, py), color, border);
     }
 
     template <class Screen>
-    inline void Shapes<Screen>::drawFilledCircleRadius(int16_t cx, int16_t cy, int16_t r, uint16_t color) {
+    inline void Shapes<Screen>::drawFilledCircleRadius(int16_t cx, int16_t cy, int16_t r, Color color) {
         if (r < 0) {
             return;
         }
@@ -335,7 +340,7 @@ namespace graphics {
     }
 
     template <class Screen>
-    inline void Shapes<Screen>::drawFilledCirclePoints(int16_t cx, int16_t cy, int16_t px, int16_t py, uint16_t color) {
+    inline void Shapes<Screen>::drawFilledCirclePoints(int16_t cx, int16_t cy, int16_t px, int16_t py, Color color) {
         drawFilledCircleRadius(cx, cy, distance(cx, cy, px, py), color);
     }
 
@@ -391,7 +396,7 @@ namespace graphics {
 
     template <class Screen>
     inline void Shapes<Screen>::drawTriangle(int16_t x0, int16_t y0, int16_t x1, int16_t y1,
-                                             int16_t x2, int16_t y2, uint16_t color, int16_t border) {
+                                             int16_t x2, int16_t y2, Color color, int16_t border) {
         // corners counterclockwise on screen (y down): every edge function is positive inside
         if ((int32_t)(x2 - x0) * (y1 - y0) - (int32_t)(y2 - y0) * (x1 - x0) < 0) {
             swap(x1, x2);
@@ -467,7 +472,7 @@ namespace graphics {
     }
 
     template <class Screen>
-    inline void Shapes<Screen>::drawRing(int16_t cx, int16_t cy, int16_t outer, int16_t inner, uint16_t color) {
+    inline void Shapes<Screen>::drawRing(int16_t cx, int16_t cy, int16_t outer, int16_t inner, Color color) {
         int32_t outerLimit = (int32_t)outer * outer + outer;
         int32_t innerLimit = inner >= 0 ? (int32_t)inner * inner + inner : -1;
         // half heights of the column, they only shrink while dx grows

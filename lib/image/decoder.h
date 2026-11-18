@@ -2,6 +2,7 @@
 #define IMAGE_DECODER_H
 
 #include <stdint.h>
+#include <stdlib.h>
 
 namespace image {
     // pixel data (format 1, see lib/image/output/README.md), made by lib/image/source/convert.py:
@@ -24,18 +25,46 @@ namespace image {
     constexpr uint8_t ENCODING_RUNS = 1;
 
     // who a picture was made for (Picture::target, bit flags), see lib/image/source/config.json
-    constexpr uint8_t TARGET_UNO = 1; // FlashImage: the pixels are in the struct (flash)
-    constexpr uint8_t TARGET_MAC = 2; // StreamImage: the struct has the path, stream.py sends the pixels
+    constexpr uint8_t TARGET_FLASH = 1; // FlashImage: the pixels are in the struct (flash)
+    constexpr uint8_t TARGET_STREAM = 2; // StreamImage: the struct has the path, stream.py sends the pixels
 
     // compile-time warnings: static_assert(image::warn::Xxx<condition>::ok, "")
     namespace warn {
-        template <bool> struct NotForMac { static constexpr bool ok = true; };
-        template <> struct NotForMac<true> {
-            __attribute__((deprecated("this picture was made with --target uno only: it streams, "
-                                      "but was not checked against the mac ranges (make it with --target uno mac)")))
+        template <bool> struct NotForStream { static constexpr bool ok = true; };
+        template <> struct NotForStream<true> {
+            __attribute__((deprecated("this picture was made with --target flash only: it streams, "
+                                      "but was not checked against the stream ranges (make it with --target flash stream)")))
+            static constexpr bool ok = true;
+        };
+        template <bool> struct PaletteInRam { static constexpr bool ok = true; };
+        template <> struct PaletteInRam<true> {
+            __attribute__((deprecated("a 256-color picture streamed: the whole palette comes first (more waiting before "
+                                      "the first pixel) and is kept in RAM taken at run time (malloc, up to 256 colors x "
+                                      "the color's size; not in the compiler's RAM figure), given back after draw(); "
+                                      "draw() returns ERROR_NO_MEMORY if it does not fit")))
             static constexpr bool ok = true;
         };
     }
+
+    // a palette in RAM taken at run time (malloc) and given back when it goes out of scope (or release()):
+    // a streamed COLORS_256 palette, whose size is only known when it arrives
+    template <class Color>
+    class HeapPalette {
+    public:
+        inline HeapPalette() = default;
+        HeapPalette(const HeapPalette &) = delete;
+        HeapPalette &operator=(const HeapPalette &) = delete;
+        inline ~HeapPalette();
+
+        // count colors (1 ~ 256), the old ones given back first; false (and nothing kept) if the RAM is short
+        // (avr-libc's malloc keeps __malloc_margin, 128 bytes, free for the stack)
+        inline bool take(uint16_t count);
+        inline void release();
+        inline Color *colors() const;
+
+    private:
+        Color *_colors = nullptr;
+    };
 
     // draws a picture on a Screen at (x, y), every stored pixel as scaleX x scaleY
     // a row is cut into pieces of SEGMENT screen pixels, each sent with writeWindow():
@@ -43,23 +72,31 @@ namespace image {
     // writeWindow works: ST7789 (lib/ST7789/basic/window.h) or the RAM picture of an OLED
     // (lib/SSD1306/basic/frame.h, then display())
     //
-    // Screen: provides writeWindow(x, y, w, h, colors) clipped, BusType::readFlash16 (COLORS_256)
+    // Screen: provides
+    //   ColorFormat: the screen's colors (lib/color): Value, fromRGB565(c) (the colors of the file are always
+    //     RGB565: turned once per palette color, and per pixel for COLORS_565 / a flash COLORS_256 palette)
+    //   writeWindow(x, y, w, h, const ColorFormat::Value *colors) clipped, BusType::readFlash16 (COLORS_256)
     // Reader: anything with uint8_t read8() giving the next byte of the pixel data
     template <class Screen, uint8_t SEGMENT = 32>
     class Decoder {
     public:
         static_assert(SEGMENT >= 1, "image::Decoder: SEGMENT must be 1 ~ 255");
 
+        using ColorFormat = typename Screen::ColorFormat;
+        using Color = typename ColorFormat::Value;
+
         inline explicit Decoder(Screen &screen);
 
         inline void setArea(int16_t x, int16_t y, uint8_t width, uint8_t height, uint8_t scaleX, uint8_t scaleY);
 
-        // COLORS_2 / COLORS_16: colors set one by one into RAM
-        // COLORS_256: palette in flash (PROGMEM)
+        // COLORS_2 / COLORS_16: colors set one by one into RAM (setColor: an RGB565 color of the file)
+        // COLORS_256: palette in flash (RGB565, PROGMEM), or already turned into the screen's colors in RAM
+        //   (setRamPalette, e.g. a HeapPalette: it must live until draw() returns)
         // COLORS_565: no palette
         inline void setFormat(uint8_t colorMode, uint8_t encoding);
         inline void setColor(uint8_t index, uint16_t color);
         inline void setFlashPalette(const uint16_t *palette);
+        inline void setRamPalette(const Color *palette);
 
         // reads all width * height pixels and draws them
         template <class Reader>
@@ -77,22 +114,23 @@ namespace image {
         uint8_t _scaleY = 1;
         uint8_t _colorMode = COLORS_565;
         uint8_t _encoding = ENCODING_RAW;
-        uint16_t _palette[MAX_RAM_COLORS] = {};
+        Color _palette[MAX_RAM_COLORS] = {};
         const uint16_t *_flashPalette = nullptr;
-        uint16_t _segment[SEGMENT] = {};
+        const Color *_ramPalette = nullptr;
+        Color _segment[SEGMENT] = {};
 
         // the run being read (ENCODING_RUNS), may go on into the next row
         uint16_t _runLeft = 0;
-        uint16_t _runColor = 0;
+        Color _runColor = 0;
 
         // the byte being read bit by bit (ENCODING_RAW, COLORS_2 / COLORS_16)
         uint8_t _bits = 0;
         uint8_t _bitsLeft = 0;
 
-        inline uint16_t indexColor(uint8_t index) const;
+        inline Color indexColor(uint8_t index) const;
 
         template <class Reader>
-        inline uint16_t nextPixel(Reader &reader);
+        inline Color nextPixel(Reader &reader);
 
         template <class Reader>
         inline void nextRun(Reader &reader);
@@ -127,13 +165,20 @@ namespace image {
     template <class Screen, uint8_t SEGMENT>
     inline void Decoder<Screen, SEGMENT>::setColor(uint8_t index, uint16_t color) {
         if (index < MAX_RAM_COLORS) {
-            _palette[index] = color;
+            _palette[index] = ColorFormat::fromRGB565(color);
         }
     }
 
     template <class Screen, uint8_t SEGMENT>
     inline void Decoder<Screen, SEGMENT>::setFlashPalette(const uint16_t *palette) {
         _flashPalette = palette;
+        _ramPalette = nullptr;
+    }
+
+    template <class Screen, uint8_t SEGMENT>
+    inline void Decoder<Screen, SEGMENT>::setRamPalette(const Color *palette) {
+        _ramPalette = palette;
+        _flashPalette = nullptr;
     }
 
     template <class Screen, uint8_t SEGMENT>
@@ -146,7 +191,7 @@ namespace image {
             int16_t segmentX = _x;
             uint8_t count = 0;
             for (uint8_t col = 0; col < _width; col++) {
-                uint16_t color = nextPixel(reader);
+                Color color = nextPixel(reader);
                 for (uint8_t i = 0; i < _scaleX; i++) {
                     _segment[count++] = color;
                     if (count == SEGMENT) {
@@ -164,16 +209,19 @@ namespace image {
     }
 
     template <class Screen, uint8_t SEGMENT>
-    inline uint16_t Decoder<Screen, SEGMENT>::indexColor(uint8_t index) const {
+    inline typename Decoder<Screen, SEGMENT>::Color Decoder<Screen, SEGMENT>::indexColor(uint8_t index) const {
         if (_colorMode == COLORS_256) {
-            return _flashPalette ? Bus::readFlash16(_flashPalette + index) : 0;
+            if (_ramPalette) {
+                return _ramPalette[index];
+            }
+            return _flashPalette ? ColorFormat::fromRGB565(Bus::readFlash16(_flashPalette + index)) : 0;
         }
         return _palette[index & (MAX_RAM_COLORS - 1)];
     }
 
     template <class Screen, uint8_t SEGMENT>
     template <class Reader>
-    inline uint16_t Decoder<Screen, SEGMENT>::nextPixel(Reader &reader) {
+    inline typename Decoder<Screen, SEGMENT>::Color Decoder<Screen, SEGMENT>::nextPixel(Reader &reader) {
         if (_encoding == ENCODING_RUNS) {
             if (_runLeft == 0) {
                 nextRun(reader);
@@ -183,7 +231,7 @@ namespace image {
         }
         if (_colorMode == COLORS_565) {
             uint16_t color = reader.read8();
-            return color | ((uint16_t)reader.read8() << 8);
+            return ColorFormat::fromRGB565((uint16_t)(color | ((uint16_t)reader.read8() << 8)));
         }
         if (_colorMode == COLORS_256) {
             return indexColor(reader.read8());
@@ -218,8 +266,8 @@ namespace image {
             _runColor = indexColor(reader.read8());
         } else {
             _runLeft = (uint16_t)reader.read8() + 1;
-            _runColor = reader.read8();
-            _runColor |= (uint16_t)reader.read8() << 8;
+            uint16_t color = reader.read8();
+            _runColor = ColorFormat::fromRGB565((uint16_t)(color | ((uint16_t)reader.read8() << 8)));
         }
     }
 
@@ -228,6 +276,29 @@ namespace image {
         for (uint8_t repeat = 0; repeat < _scaleY; repeat++) {
             _screen.writeWindow(x, top + repeat, count, 1, _segment);
         }
+    }
+
+    template <class Color>
+    inline HeapPalette<Color>::~HeapPalette() {
+        release();
+    }
+
+    template <class Color>
+    inline bool HeapPalette<Color>::take(uint16_t count) {
+        release();
+        _colors = (Color *)malloc((size_t)count * sizeof(Color));
+        return _colors != nullptr;
+    }
+
+    template <class Color>
+    inline void HeapPalette<Color>::release() {
+        free(_colors);
+        _colors = nullptr;
+    }
+
+    template <class Color>
+    inline Color *HeapPalette<Color>::colors() const {
+        return _colors;
     }
 }
 

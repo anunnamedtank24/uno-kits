@@ -20,8 +20,8 @@ namespace Uno {
     // IDLE_HIGH: the level of the pin while stopped: false = LOW (a buzzer or speaker on the pin and GND),
     //            true = HIGH (a 3-pin module with a PNP transistor, on while LOW)
     template <uint8_t PIN, bool IDLE_HIGH = false>
-    struct UnoPcmOut {
-        static_assert(PIN == 9 || PIN == 10, "UnoPcmOut: PIN must be 9 (OC1A) or 10 (OC1B)");
+    struct UnoPcmOut : UnoBoard {
+        static_assert(PIN == 9 || PIN == 10, "Uno::UnoPcmOut: PIN must be 9 (OC1A) or 10 (OC1B)");
 
         static constexpr uint16_t MIN_RATE = 1954;
         static constexpr uint16_t MAX_RATE = 32000;
@@ -41,13 +41,8 @@ namespace Uno {
         // the rate really used (whole timer ticks), 0 if stopped
         static inline uint16_t realRate();
 
-        // no interrupts until restoreInterrupts(saved): to read what next() wrote, all at once
-        static inline uint8_t stopInterrupts();
-        static inline void restoreInterrupts(uint8_t saved);
+        // nowMs, nowUs, delayMs, delayUs, readFlash8 / 16, stopInterrupts, restoreInterrupts: from UnoBoard
 
-        static inline uint32_t nowMs();
-        static inline uint8_t readFlash8(const uint8_t *address);
-        static inline uint16_t readFlash16(const uint16_t *address);
     };
 
     namespace pcm_out_state {
@@ -125,32 +120,6 @@ namespace Uno {
         return (uint16_t)((clock + ticks / 2) / ticks);
     }
 
-    template <uint8_t PIN, bool IDLE_HIGH>
-    inline uint8_t UnoPcmOut<PIN, IDLE_HIGH>::stopInterrupts() {
-        uint8_t saved = SREG;
-        cli();
-        return saved;
-    }
-
-    template <uint8_t PIN, bool IDLE_HIGH>
-    inline void UnoPcmOut<PIN, IDLE_HIGH>::restoreInterrupts(uint8_t saved) {
-        SREG = saved;
-    }
-
-    template <uint8_t PIN, bool IDLE_HIGH>
-    inline uint32_t UnoPcmOut<PIN, IDLE_HIGH>::nowMs() {
-        return Uno::nowMs();
-    }
-
-    template <uint8_t PIN, bool IDLE_HIGH>
-    inline uint8_t UnoPcmOut<PIN, IDLE_HIGH>::readFlash8(const uint8_t *address) {
-        return Uno::readFlash8(address);
-    }
-
-    template <uint8_t PIN, bool IDLE_HIGH>
-    inline uint16_t UnoPcmOut<PIN, IDLE_HIGH>::readFlash16(const uint16_t *address) {
-        return Uno::readFlash16(address);
-    }
 }
 
 // Timer2 compare A: the next sample into the PWM duty of UnoPcmOut

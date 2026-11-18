@@ -7,16 +7,18 @@ namespace ST7789 {
     // composite: Bus init + reset + a minimal init sequence for any ST7789 panel
     // optional: a module may have its own sequence (e.g. M130T::init),
     // or the user may call the commands one by one instead
-    // works on anything built on Datasheet (Window, M130T, graphics::Shapes<...>)
-    template <class Bus>
-    inline void initDefault(Datasheet<Bus> &screen, uint8_t blk = 255) {
+    // works on anything built on Window (M130T, graphics::Canvas<...>): COLMOD and the color order
+    // come from its ColorFormat
+    template <class Screen>
+    inline void initDefault(Screen &screen, uint8_t blk = 255) {
+        using Bus = typename Screen::BusType;
         Bus::init(blk);
 
         screen.hwReset();
         screen.swReset();
         screen.slpOut();
-        screen.colmod(COLMOD_16BIT);
-        screen.madctl(0x00);
+        screen.colmod(Screen::COLMOD_VALUE);
+        screen.madctl(Screen::MADCTL_ORDER);
         screen.invOn(); // most IPS ST7789 panels need inversion on
         screen.norOn();
         Bus::delayMs(10);

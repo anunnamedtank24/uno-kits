@@ -1,0 +1,74 @@
+#include <Arduino.h>
+#include "Uno_serial.h"
+#include "Uno_pin.h"
+#include "switch.h"
+
+// UNO + switch module (GND, VCC, OUT): its state on the USB serial
+//   pio device monitor        (platformio.ini: monitor_speed = BAUD)
+//
+// every change at once:     "on  (level HIGH), presses 3, was off for 1520 ms"
+// every second, a status:   "      level LOW, off for 2300 ms"
+// if "on" shows while the switch is not pressed, flip SWITCH_ACTIVE_HIGH below
+
+// ---------- settings ----------
+
+// wiring: switch module VCC -> 5V, GND -> GND
+constexpr uint8_t SWITCH_PIN = 2;           // OUT
+constexpr bool SWITCH_ACTIVE_HIGH = true;   // OUT is HIGH while pressed
+constexpr uint8_t DEBOUNCE_MS = 20;         // a change must stay this long
+constexpr uint32_t BAUD = 1000000;          // USB serial: the same as monitor_speed in platformio.ini
+
+constexpr uint16_t STATUS_MS = 1000;        // a status line this often
+
+// ---------- parts ----------
+
+using Link = Uno::UnoSerial<BAUD>;
+using Button = switches::Switch3Pins<Uno::UnoPin<SWITCH_PIN>, SWITCH_ACTIVE_HIGH, DEBOUNCE_MS>;
+Button button;
+
+uint32_t nextStatusMs = 0;
+
+// ---------- text over the serial link ----------
+
+void printLevel() {
+    Link::printText(button.readLevel() ? "level HIGH" : "level LOW");
+}
+
+// ---------- main ----------
+
+void setup() {
+    Link::init();
+    button.init();
+    Link::printText("\r\nswitch on ");
+    Link::printPin(SWITCH_PIN);
+    Link::printText(", SWITCH_ACTIVE_HIGH = ");
+    Link::printText(SWITCH_ACTIVE_HIGH ? "true" : "false");
+    Link::printText("\r\nstarts ");
+    Link::printText(button.isOn() ? "on, " : "off, ");
+    printLevel();
+    Link::printText("\r\n");
+    nextStatusMs = millis() + STATUS_MS;
+}
+
+void loop() {
+    if (button.update()) {
+        Link::printText(button.isOn() ? "on  (" : "off (");
+        printLevel();
+        Link::printText("), presses ");
+        Link::printNumber(button.pressCount());
+        Link::printText(button.isOn() ? ", was off for " : ", was on for ");
+        Link::printNumber(button.lastStateMs());
+        Link::printText(" ms\r\n");
+        // drop the flags: this test only prints
+        button.wasPressed();
+        button.wasReleased();
+    }
+    if ((int32_t)(millis() - nextStatusMs) >= 0) {
+        nextStatusMs += STATUS_MS;
+        Link::printText("      ");
+        printLevel();
+        Link::printText(button.isOn() ? ", on for " : ", off for ");
+        Link::printNumber(button.stateMs());
+        Link::printText(" ms\r\n");
+    }
+}

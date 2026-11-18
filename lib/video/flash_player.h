@@ -6,12 +6,12 @@
 namespace video {
     // plays an animation stored in flash (made by lib/video/source/convert.py), looping
     //
-    // Screen: as for Decoder, plus BusType::readFlash8 / readFlash16 / nowMs
+    // Screen: as for Decoder (ColorFormat, setWindow, writePixel ...), plus BusType::readFlash8 / readFlash16 / nowMs
     //
     // Animation: a struct providing (every struct in namespace animation, see lib/video/output/selected.h)
     //   target, width, height, scaleX, scaleY, colorMode, colorCount, frameCount
     //   getPalette(), getOffsets(), getFrames()
-    //   made with --target uno (or uno mac); --target mac only has no frames here: an error
+    //   made with --target flash (or flash stream); --target stream only has no frames here: an error
     //
     // timing: the board's own clock (Bus::nowMs), every frame is due at the sum of the delays before it
     // late by more than one frame: jumps to the last I frame that is already due (if any),
@@ -82,9 +82,9 @@ namespace video {
     template <class Screen>
     template <class Animation>
     inline bool FlashPlayer<Screen>::start(int16_t x, int16_t y) {
-        static_assert(Animation::target & TARGET_UNO,
-                      "video::FlashPlayer: made with --target mac only (the frames stay on the computer): "
-                      "play it with video::StreamPlayer, or make it with --target uno");
+        static_assert(Animation::target & TARGET_FLASH,
+                      "video::FlashPlayer: made with --target stream only (the frames stay on the computer): "
+                      "play it with video::StreamPlayer, or make it with --target flash");
         static_assert(Animation::colorMode != COLORS_16 || Animation::colorCount <= MAX_RAM_COLORS,
                       "video::FlashPlayer: COLORS_16 has at most 16 colors");
         _frames = Animation::getFrames();

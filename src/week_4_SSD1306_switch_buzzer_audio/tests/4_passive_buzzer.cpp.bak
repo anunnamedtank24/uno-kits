@@ -1,0 +1,210 @@
+#include <Arduino.h>
+#include "Uno_serial.h"
+#include "Uno_tone.h"
+#include "buzzer.h"
+#include "audio.h"
+
+// UNO + passive buzzer (two legs, silent on DC: the board sends the pitch): every function of
+// audio::Player and buzzer::PassiveBuzzer; what each test should sound like, and the frequency
+// measured on the pin, go to the USB serial:
+//   pio device monitor        (platformio.ini: monitor_speed = BAUD)
+//
+// the measurement reads the pin back, so it works with nothing connected as well
+
+// ---------- settings ----------
+
+// wiring: passive buzzer - -> GND (a 100 Ω resistor in series is safer for a magnetic one, see lib/buzzer)
+constexpr uint8_t BUZZER_PIN = 9;           // +; D9 / D10: Timer1 flips the pin itself, any other pin: an interrupt
+constexpr uint32_t BAUD = 1000000;          // USB serial: the same as monitor_speed in platformio.ini
+
+constexpr uint8_t GAP_MS = 20;              // silence between two notes of a melody
+constexpr uint16_t PAUSE_MS = 1000;         // between two tests
+constexpr uint32_t MEASURE_US = 200000;     // the frequency is measured over this long
+
+// ---------- parts ----------
+
+using Tone = Uno::UnoTone<BUZZER_PIN>;
+using Link = Uno::UnoSerial<BAUD>;
+using Speaker = buzzer::PassiveBuzzer2Pins<Tone>;
+audio::Player<Speaker, GAP_MS> speaker;
+
+// update() until the sound is over: the player itself never waits
+void waitDone() {
+    while (speaker.isPlaying()) {
+        speaker.update();
+    }
+}
+
+// the frequency on the pin: rising edges for MEASURE_US, timed from the first to the last
+uint32_t measureHz() {
+    uint32_t start = micros();
+    uint32_t firstUs = 0;
+    uint32_t lastUs = 0;
+    uint32_t edges = 0;
+    bool last = Uno::pinRead<BUZZER_PIN>();
+    while (micros() - start < MEASURE_US) {
+        bool level = Uno::pinRead<BUZZER_PIN>();
+        if (level && !last) {
+            lastUs = micros();
+            if (edges == 0) {
+                firstUs = lastUs;
+            }
+            edges++;
+        }
+        last = level;
+    }
+    if (edges < 2) {
+        return 0;
+    }
+    return ((edges - 1) * 1000000UL + (lastUs - firstUs) / 2) / (lastUs - firstUs);
+}
+
+// "440 Hz: plays 440, measured 440"
+void printCheck(uint16_t hz) {
+    Link::printNumber(hz);
+    Link::printText(" Hz: plays ");
+    Link::printNumber(Speaker::realHz());
+    Link::printText(", measured ");
+    Link::printNumber(measureHz());
+}
+
+// ---------- tests ----------
+
+// 0. one pitch: A4 = 440 Hz for 1 s
+void testA4() {
+    Link::printText("A4 1 s, ");
+    speaker.tone(audio::noteHz(audio::A, 4));
+    printCheck(audio::noteHz(audio::A, 4));
+    delay(1000 - MEASURE_US / 1000);
+    speaker.stop();
+}
+
+// 1. low to high, 0.4 s each: loudest near the buzzer's resonance (often 2 ~ 4 kHz)
+//    expected: measured within 1 % of the asked hz (the measuring loop limits it above ~15 kHz)
+void testRange() {
+    const uint16_t HZ[] = { 50, 100, 262, 440, 1000, 2000, 3000, 4000, 8000, 15000 };
+    Link::printText("range");
+    for (uint16_t hz : HZ) {
+        Link::printText("\r\n  ");
+        speaker.tone(hz);
+        printCheck(hz);
+        delay(200);
+    }
+    speaker.stop();
+}
+
+// 2. C major scale C5 ~ C6 and back
+void testScale() {
+    Link::printText("scale C5 ~ C6 ~ C5");
+    speaker.play<melody::scale_flash_passive_medium>();
+    waitDone();
+}
+
+// 3. slide(): a smooth siren up 200 ~ 3000 Hz in 1.5 s, then down
+void testSlide() {
+    Link::printText("siren up, then down");
+    speaker.slide(200, 3000, 1500);
+    waitDone();
+    speaker.slide(3000, 200, 1500);
+    waitDone();
+}
+
+// 4. beeps(): 3 high beeps at 2 kHz
+void testBeeps() {
+    Link::printText("3 beeps at 2 kHz");
+    speaker.beeps(2000, 3, 120, 120);
+    waitDone();
+}
+
+// 5. the cues of lib/audio/output: startup (up), success (short, up), error (low, down)
+void testCues() {
+    Link::printText("startup, success, error");
+    speaker.play<melody::startup_flash_passive_medium>();
+    waitDone();
+    delay(500);
+    speaker.play<melody::success_flash_passive_medium>();
+    waitDone();
+    delay(500);
+    speaker.play<melody::error_flash_passive_medium>();
+    waitDone();
+}
+
+// 6. two melodies: Twinkle Twinkle, then Ode to Joy (the repeated notes must be separate)
+void testMelodies() {
+    Link::printText("Twinkle Twinkle, Ode to Joy");
+    speaker.play<melody::twinkle_star_flash_passive_medium>();
+    waitDone();
+    delay(500);
+    speaker.play<melody::ode_to_joy_flash_passive_medium>();
+    waitDone();
+}
+
+// 7. volume: 2 kHz at 255, 128, 64, 32, 16, 4, 1 (0.6 s each), each step 6 ~ 12 dB quieter
+//    the duty is read back from the pin (share of HIGH samples) and printed next to what was set
+//    expected on D9 / D10: duty 50.0 %, 16.7 %, 8.1 %, 4.0 %, 2.0 %, 0.5 %, 0.1 % (measured within ~0.1 %)
+//    on other pins the reading is ~1 % low and misses the shortest pulses: the measuring loop pauses
+//    while the tone interrupts run, and they run right at the edges
+uint16_t measureDutyPermille() {
+    uint32_t start = micros();
+    uint32_t high = 0;
+    uint32_t total = 0;
+    while (micros() - start < MEASURE_US) {
+        high += Uno::pinRead<BUZZER_PIN>();
+        total++;
+    }
+    return (uint16_t)((high * 1000UL + total / 2) / total);
+}
+
+void testVolume() {
+    const uint8_t VOLUMES[] = { 255, 128, 64, 32, 16, 4, 1 };
+    Link::printText("volume at 2000 Hz");
+    speaker.tone(2000);
+    for (uint8_t volume : VOLUMES) {
+        speaker.setVolume(volume);
+        Link::printText("\r\n  volume ");
+        Link::printNumber(volume);
+        Link::printText(": duty set ");
+        Link::printNumber((uint32_t)Tone::realDuty() * 1000UL / 65536UL);
+        Link::printText(" / 1000, measured ");
+        Link::printNumber(measureDutyPermille());
+        Link::printText(" / 1000, still ");
+        Link::printNumber(Speaker::realHz());
+        Link::printText(" Hz");
+        delay(400);
+    }
+    speaker.stop();
+    speaker.setVolume(255);
+}
+
+void (*const tests[])() = {
+    testA4,
+    testRange,
+    testScale,
+    testSlide,
+    testBeeps,
+    testCues,
+    testMelodies,
+    testVolume,
+};
+constexpr uint8_t TEST_COUNT = sizeof(tests) / sizeof(tests[0]);
+
+// ---------- main ----------
+
+void setup() {
+    Link::init();
+    speaker.init();
+    Link::printText("\r\npassive buzzer on ");
+    Link::printPin(BUZZER_PIN);
+    Link::printText(BUZZER_PIN == 9 || BUZZER_PIN == 10 ? " (Timer1 output)\r\n" : " (Timer1 interrupt)\r\n");
+}
+
+void loop() {
+    for (uint8_t i = 0; i < TEST_COUNT; i++) {
+        Link::printText("test ");
+        Link::printNumber(i);
+        Link::printText(": ");
+        tests[i]();
+        Link::printText("\r\n");
+        delay(PAUSE_MS);
+    }
+}

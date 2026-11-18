@@ -14,11 +14,13 @@ namespace Uno {
     // interrupts are off inside each time slot (about 70 µs per bit) so millis() cannot stretch it;
     // a whole byte takes about 0.6 ms, a reset about 1 ms
     template <uint8_t PIN, bool INTERNAL_PULLUP = true>
-    struct UnoOneWire {
-        static_assert(exists(PIN), "UnoOneWire: PIN must be 0 ~ 19");
+    struct UnoOneWire : UnoBoard {
+        static_assert(exists(PIN), "Uno::UnoOneWire: PIN must be 0 ~ 19");
         static_assert(warn::SerialPin<(PIN == 0 || PIN == 1)>::ok, "");
 
         // ---------- Wire functions ----------
+
+        // nowMs, nowUs, delayMs, delayUs, readFlash8 / 16, stopInterrupts, restoreInterrupts: from UnoBoard
 
         // releases the line
         static inline void init();
@@ -34,8 +36,6 @@ namespace Uno {
         static inline void write8(uint8_t byte);
         static inline uint8_t read8();
 
-        static inline void delayMs(uint16_t ms);
-        static inline uint32_t nowMs();
 
     private:
         static inline void driveLow();
@@ -123,16 +123,6 @@ namespace Uno {
             }
         }
         return byte;
-    }
-
-    template <uint8_t PIN, bool INTERNAL_PULLUP>
-    inline void UnoOneWire<PIN, INTERNAL_PULLUP>::delayMs(uint16_t ms) {
-        Uno::delayMs(ms);
-    }
-
-    template <uint8_t PIN, bool INTERNAL_PULLUP>
-    inline uint32_t UnoOneWire<PIN, INTERNAL_PULLUP>::nowMs() {
-        return Uno::nowMs();
     }
 
     template <uint8_t PIN, bool INTERNAL_PULLUP>

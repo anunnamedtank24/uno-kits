@@ -4,14 +4,14 @@
 #include "decoder.h"
 
 namespace image {
-    // draws a picture stored in flash (made by lib/image/source/convert.py with --target uno)
+    // draws a picture stored in flash (made by lib/image/source/convert.py with --target flash)
     //
-    // Screen: as for Decoder (writeWindow, BusType::readFlash8 / readFlash16)
+    // Screen: as for Decoder (ColorFormat, writeWindow, BusType::readFlash8 / readFlash16)
     //
     // Picture: a struct providing (every struct in namespace picture, see lib/image/output/selected.h)
     //   target, width, height, scaleX, scaleY, colorMode, encoding, colorCount
     //   getPalette(), getPixels()
-    //   made with --target uno (or uno mac); --target mac only has no pixels here: an error
+    //   made with --target flash (or flash stream); --target stream only has no pixels here: an error
     //
     // RAM: the decoder (2 x SEGMENT bytes + 32 bytes of palette + ~20); keep it in a function
     // (on the stack) if RAM is short, it is only needed while drawing
@@ -60,9 +60,9 @@ namespace image {
     template <class Screen, uint8_t SEGMENT>
     template <class Picture>
     inline void FlashImage<Screen, SEGMENT>::draw(int16_t x, int16_t y) {
-        static_assert(Picture::target & TARGET_UNO,
-                      "image::FlashImage: made with --target mac only (the pixels stay on the computer): "
-                      "draw it with image::StreamImage, or make it with --target uno");
+        static_assert(Picture::target & TARGET_FLASH,
+                      "image::FlashImage: made with --target stream only (the pixels stay on the computer): "
+                      "draw it with image::StreamImage, or make it with --target flash");
         static_assert(Picture::colorMode == COLORS_256 || Picture::colorMode == COLORS_565
                       || Picture::colorCount <= MAX_RAM_COLORS,
                       "image::FlashImage: COLORS_2 / COLORS_16 have at most 16 colors");

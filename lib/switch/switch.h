@@ -6,8 +6,11 @@
 // module/  the parts you buy
 //   switch_2_pins.h     Switch2Pins<Pin>               bare switch to GND, internal pull-up (on = LOW)
 //   switch_3_pins.h     Switch3Pins<Pin, ACTIVE_HIGH>  module with GND, VCC, OUT
+// tool/  what is often built on it
+//   clicks.h            Clicks<Switch>: click, double click, long press, repeat
 #include "debounced_switch.h"
 #include "module/switch_2_pins.h"
 #include "module/switch_3_pins.h"
+#include "tool/clicks.h"
 
 #endif

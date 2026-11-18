@@ -1,0 +1,147 @@
+#include <Arduino.h>
+#include "Uno_serial.h"
+#include "Uno_pin.h"
+#include "Uno_interrupt_pin.h"
+#include "Uno_tone.h"
+#include "switch.h"
+#include "ultrasonic.h"
+#include "buzzer.h"
+
+// UNO + switch module + HC-SR04 + passive buzzer: a parking sensor you switch on by hand
+//
+// while the switch is pressed and something is nearer than NEAR_MM, the buzzer sounds;
+// its volume is inversely proportional to the distance:  volume = MAX_VOLUME × FULL_MM / distance,
+// so half the distance = twice the volume, up to MAX_VOLUME at FULL_MM and nearer
+//   e.g. MAX_VOLUME 255, FULL_MM 50, NEAR_MM 500:  50 cm -> 26,  25 cm -> 51,  10 cm -> 128,  5 cm and nearer -> 255
+// released, nothing near, or no echo: silent
+//
+// the distance is measured every 60 ms (the HC-SR04's minimum) whether pressed or not,
+// so the sound starts at once when the switch is pressed
+// the state goes to the USB serial every PRINT_MS: pio device monitor
+
+// ---------- settings ----------
+
+// wiring: switch module VCC -> 5V, GND -> GND
+constexpr uint8_t SWITCH_PIN = 2;           // OUT
+constexpr bool SWITCH_ACTIVE_HIGH = false;  // this module: OUT is LOW while pressed (measured)
+constexpr uint8_t DEBOUNCE_MS = 20;
+// wiring: HC-SR04 VCC -> 5V, GND -> GND
+constexpr uint8_t TRIG_PIN = 7;             // Trig: any pin
+constexpr uint8_t ECHO_PIN = 8;             // Echo: any pin (pin-change interrupt); D8 keeps D2 free for the
+                                            // infrared receiver (one interrupt per group: D0 ~ D7, D8 ~ D13, A0 ~ A5)
+constexpr int16_t AIR_TENTHS_C = 250;       // the room's temperature, 0.1 °C: the speed of sound
+// wiring: passive buzzer - -> GND
+constexpr uint8_t BUZZER_PIN = 9;           // + (through 100 Ω); any pin, D9 / D10 are driven by Timer1 itself
+constexpr uint32_t BAUD = 1000000;          // USB serial: the same as monitor_speed in platformio.ini
+
+constexpr uint16_t NEAR_MM = 100;           // sounds only nearer than this (10 cm)
+constexpr uint16_t FULL_MM = 20;            // MAX_VOLUME from here on (2 cm); FULL_MM < NEAR_MM
+constexpr uint8_t MAX_VOLUME = 8;           // 0 ~ 255: the volume at FULL_MM (128 = -6 dB)
+constexpr uint16_t TONE_HZ = 2700;          // near the buzzer's resonance: the loudest pitch
+constexpr uint16_t PRINT_MS = 300;          // a status line this often
+
+// ---------- parts ----------
+
+using Button = switches::Switch3Pins<Uno::UnoPin<SWITCH_PIN>, SWITCH_ACTIVE_HIGH, DEBOUNCE_MS>;
+using Ranger = ultrasonic::HCSR04<Uno::UnoOutputPin<TRIG_PIN>, Uno::UnoInterruptPin<ECHO_PIN>>;
+using Speaker = buzzer::PassiveBuzzer2Pins<Uno::UnoTone<BUZZER_PIN>>;
+using Link = Uno::UnoSerial<BAUD>;
+
+static_assert(FULL_MM > 0 && FULL_MM < NEAR_MM, "FULL_MM must be 1 ~ NEAR_MM - 1");
+
+Button button;
+uint8_t volume = 0;                        // from the last measurement: 0 = too far / nothing
+bool sounding = false;
+uint32_t nextPrintMs = 0;
+
+// ---------- distance -> volume ----------
+
+// MAX_VOLUME × FULL_MM / mm (rounded), MAX_VOLUME at FULL_MM and nearer, 0 from NEAR_MM on
+uint8_t volumeFor(uint16_t mm) {
+    if (mm >= NEAR_MM) {
+        return 0;
+    }
+    if (mm <= FULL_MM) {
+        return MAX_VOLUME;
+    }
+    uint32_t v = ((uint32_t)MAX_VOLUME * FULL_MM + mm / 2) / mm;
+    return v == 0 ? 1 : (uint8_t)v;
+}
+
+void measured() {
+    switch (Ranger::result()) {
+        case ultrasonic::RESULT_OK:
+            volume = volumeFor(Ranger::distanceMm());
+            break;
+        case ultrasonic::RESULT_TOO_NEAR:          // closer than 2 cm: as near as it gets
+            volume = MAX_VOLUME;
+            break;
+        default:                                   // too far, no echo, busy
+            volume = 0;
+            break;
+    }
+}
+
+// ---------- the buzzer ----------
+
+void updateSound() {
+    bool on = button.isOn() && volume > 0;
+    if (on) {
+        if (!sounding) {
+            Speaker::setVolume(volume);
+            Speaker::start(TONE_HZ);
+            sounding = true;
+        } else if (Speaker::volume() != volume) {
+            Speaker::setVolume(volume);            // while playing, no click
+        }
+    } else if (sounding) {
+        Speaker::stop();
+        sounding = false;
+    }
+}
+
+void printState() {
+    Link::printText(button.isOn() ? "pressed   " : "released  ");
+    if (Ranger::result() == ultrasonic::RESULT_OK) {
+        uint16_t mm = Ranger::distanceMm();
+        Link::printNumber(mm / 10);
+        Link::printText(".");
+        Link::printNumber(mm % 10);
+        Link::printText(" cm");
+    } else if (Ranger::result() == ultrasonic::RESULT_TOO_NEAR) {
+        Link::printText("< 2 cm");
+    } else {
+        Link::printText("---");
+    }
+    Link::printText("  volume ");
+    Link::printNumber(volume);
+    Link::printText(sounding ? "  (sounding)\r\n" : "\r\n");
+}
+
+// ---------- main ----------
+
+void setup() {
+    Link::init();
+    Speaker::init();
+    button.init();
+    Ranger::init();
+    Ranger::setTemperature(AIR_TENTHS_C);
+    Link::printText("\r\nhold the switch (");
+    Link::printPin(SWITCH_PIN);
+    Link::printText(") and bring something nearer than ");
+    Link::printNumber(NEAR_MM / 10);
+    Link::printText(" cm to the HC-SR04\r\n");
+    nextPrintMs = millis();
+}
+
+void loop() {
+    button.update();
+    if (Ranger::update()) {
+        measured();
+    }
+    updateSound();
+    if ((int32_t)(millis() - nextPrintMs) >= 0) {
+        nextPrintMs += PRINT_MS;
+        printState();
+    }
+}

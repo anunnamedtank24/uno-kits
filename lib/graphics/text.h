@@ -36,6 +36,10 @@ namespace graphics {
     public:
         using Screen::Screen;
 
+        // the screen's color: Screen::ColorFormat::Value (uint16_t for RGB565, uint8_t for BW ...)
+        using ColorFormat = typename Screen::ColorFormat;
+        using Color = typename ColorFormat::Value;
+
         // ---------- font ----------
 
         template <class Font>
@@ -74,7 +78,7 @@ namespace graphics {
         //   T[N]                      every element, setSeparator() between them
         // returns x after the last char (on the last line)
         template <class... Values>
-        inline int16_t drawTexts(int16_t x, int16_t y, uint16_t color, const Values &... values);
+        inline int16_t drawTexts(int16_t x, int16_t y, Color color, const Values &... values);
 
     private:
         using Bus = typename Screen::BusType;
@@ -98,49 +102,49 @@ namespace graphics {
 
         inline int16_t newLine();
 
-        inline int16_t drawValues(int16_t x, uint16_t color);
+        inline int16_t drawValues(int16_t x, Color color);
         template <class First, class... Rest>
-        inline int16_t drawValues(int16_t x, uint16_t color, const First &first, const Rest &... rest);
+        inline int16_t drawValues(int16_t x, Color color, const First &first, const Rest &... rest);
 
-        inline int16_t drawValue(int16_t x, uint16_t color, char value);
-        inline int16_t drawValue(int16_t x, uint16_t color, const char *value);
-        inline int16_t drawValue(int16_t x, uint16_t color, const FlashString *value);
+        inline int16_t drawValue(int16_t x, Color color, char value);
+        inline int16_t drawValue(int16_t x, Color color, const char *value);
+        inline int16_t drawValue(int16_t x, Color color, const FlashString *value);
 
         // bool only, "true" / "false"
         template <class Bool>
-        inline auto drawValue(int16_t x, uint16_t color, const Bool &value)
+        inline auto drawValue(int16_t x, Color color, const Bool &value)
             -> typename detail::EnableIf<detail::IsBool<Bool>::value, int16_t>::type;
-        inline int16_t drawValue(int16_t x, uint16_t color, signed char value);
-        inline int16_t drawValue(int16_t x, uint16_t color, unsigned char value);
-        inline int16_t drawValue(int16_t x, uint16_t color, short value);
-        inline int16_t drawValue(int16_t x, uint16_t color, unsigned short value);
-        inline int16_t drawValue(int16_t x, uint16_t color, int value);
-        inline int16_t drawValue(int16_t x, uint16_t color, unsigned int value);
-        inline int16_t drawValue(int16_t x, uint16_t color, long value);
-        inline int16_t drawValue(int16_t x, uint16_t color, unsigned long value);
-        inline int16_t drawValue(int16_t x, uint16_t color, long long value);
-        inline int16_t drawValue(int16_t x, uint16_t color, unsigned long long value);
-        inline int16_t drawValue(int16_t x, uint16_t color, float value);
-        inline int16_t drawValue(int16_t x, uint16_t color, double value);
-        inline int16_t drawValue(int16_t x, uint16_t color, long double value);
+        inline int16_t drawValue(int16_t x, Color color, signed char value);
+        inline int16_t drawValue(int16_t x, Color color, unsigned char value);
+        inline int16_t drawValue(int16_t x, Color color, short value);
+        inline int16_t drawValue(int16_t x, Color color, unsigned short value);
+        inline int16_t drawValue(int16_t x, Color color, int value);
+        inline int16_t drawValue(int16_t x, Color color, unsigned int value);
+        inline int16_t drawValue(int16_t x, Color color, long value);
+        inline int16_t drawValue(int16_t x, Color color, unsigned long value);
+        inline int16_t drawValue(int16_t x, Color color, long long value);
+        inline int16_t drawValue(int16_t x, Color color, unsigned long long value);
+        inline int16_t drawValue(int16_t x, Color color, float value);
+        inline int16_t drawValue(int16_t x, Color color, double value);
+        inline int16_t drawValue(int16_t x, Color color, long double value);
 
         // anything with c_str()
         template <class String>
-        inline auto drawValue(int16_t x, uint16_t color, const String &value)
+        inline auto drawValue(int16_t x, Color color, const String &value)
             -> decltype((void)value.c_str(), int16_t());
 
         // arrays (char arrays go to const char *)
         template <class Value, size_t N>
-        inline int16_t drawValue(int16_t x, uint16_t color, const Value (&values)[N]);
+        inline int16_t drawValue(int16_t x, Color color, const Value (&values)[N]);
 
         template <class Signed, class Unsigned>
-        inline int16_t drawSigned(int16_t x, uint16_t color, Signed value);
+        inline int16_t drawSigned(int16_t x, Color color, Signed value);
         template <class Unsigned>
-        inline int16_t drawUnsigned(int16_t x, uint16_t color, Unsigned value);
-        inline int16_t drawFloat(int16_t x, uint16_t color, double value);
+        inline int16_t drawUnsigned(int16_t x, Color color, Unsigned value);
+        inline int16_t drawFloat(int16_t x, Color color, double value);
 
         // one char: reads its shapes (points, hLines, vLines, rects) and draws each
-        inline int16_t drawChar(int16_t x, uint16_t color, char c);
+        inline int16_t drawChar(int16_t x, Color color, char c);
     };
 
     // ================= definitions =================
@@ -199,32 +203,32 @@ namespace graphics {
 
     template <class Screen>
     template <class... Values>
-    inline int16_t Text<Screen>::drawTexts(int16_t x, int16_t y, uint16_t color, const Values &... values) {
+    inline int16_t Text<Screen>::drawTexts(int16_t x, int16_t y, Color color, const Values &... values) {
         _lineStartX = x;
         _lineY = y;
         return drawValues(x, color, values...);
     }
 
     template <class Screen>
-    inline int16_t Text<Screen>::drawValues(int16_t x, uint16_t color) {
+    inline int16_t Text<Screen>::drawValues(int16_t x, Color color) {
         (void)color;
         return x;
     }
 
     template <class Screen>
     template <class First, class... Rest>
-    inline int16_t Text<Screen>::drawValues(int16_t x, uint16_t color, const First &first, const Rest &... rest) {
+    inline int16_t Text<Screen>::drawValues(int16_t x, Color color, const First &first, const Rest &... rest) {
         x = drawValue(x, color, first);
         return drawValues(x, color, rest...);
     }
 
     template <class Screen>
-    inline int16_t Text<Screen>::drawValue(int16_t x, uint16_t color, char value) {
+    inline int16_t Text<Screen>::drawValue(int16_t x, Color color, char value) {
         return drawChar(x, color, value);
     }
 
     template <class Screen>
-    inline int16_t Text<Screen>::drawValue(int16_t x, uint16_t color, const char *value) {
+    inline int16_t Text<Screen>::drawValue(int16_t x, Color color, const char *value) {
         if (!value) {
             return x;
         }
@@ -236,7 +240,7 @@ namespace graphics {
     }
 
     template <class Screen>
-    inline int16_t Text<Screen>::drawValue(int16_t x, uint16_t color, const FlashString *value) {
+    inline int16_t Text<Screen>::drawValue(int16_t x, Color color, const FlashString *value) {
         if (!value) {
             return x;
         }
@@ -250,86 +254,86 @@ namespace graphics {
 
     template <class Screen>
     template <class Bool>
-    inline auto Text<Screen>::drawValue(int16_t x, uint16_t color, const Bool &value)
+    inline auto Text<Screen>::drawValue(int16_t x, Color color, const Bool &value)
         -> typename detail::EnableIf<detail::IsBool<Bool>::value, int16_t>::type {
         return drawValue(x, color, value ? "true" : "false");
     }
 
     template <class Screen>
-    inline int16_t Text<Screen>::drawValue(int16_t x, uint16_t color, signed char value) {
+    inline int16_t Text<Screen>::drawValue(int16_t x, Color color, signed char value) {
         return drawSigned<long, unsigned long>(x, color, value);
     }
 
     template <class Screen>
-    inline int16_t Text<Screen>::drawValue(int16_t x, uint16_t color, unsigned char value) {
+    inline int16_t Text<Screen>::drawValue(int16_t x, Color color, unsigned char value) {
         return drawUnsigned<unsigned long>(x, color, value);
     }
 
     template <class Screen>
-    inline int16_t Text<Screen>::drawValue(int16_t x, uint16_t color, short value) {
+    inline int16_t Text<Screen>::drawValue(int16_t x, Color color, short value) {
         return drawSigned<long, unsigned long>(x, color, value);
     }
 
     template <class Screen>
-    inline int16_t Text<Screen>::drawValue(int16_t x, uint16_t color, unsigned short value) {
+    inline int16_t Text<Screen>::drawValue(int16_t x, Color color, unsigned short value) {
         return drawUnsigned<unsigned long>(x, color, value);
     }
 
     template <class Screen>
-    inline int16_t Text<Screen>::drawValue(int16_t x, uint16_t color, int value) {
+    inline int16_t Text<Screen>::drawValue(int16_t x, Color color, int value) {
         return drawSigned<long, unsigned long>(x, color, value);
     }
 
     template <class Screen>
-    inline int16_t Text<Screen>::drawValue(int16_t x, uint16_t color, unsigned int value) {
+    inline int16_t Text<Screen>::drawValue(int16_t x, Color color, unsigned int value) {
         return drawUnsigned<unsigned long>(x, color, value);
     }
 
     template <class Screen>
-    inline int16_t Text<Screen>::drawValue(int16_t x, uint16_t color, long value) {
+    inline int16_t Text<Screen>::drawValue(int16_t x, Color color, long value) {
         return drawSigned<long, unsigned long>(x, color, value);
     }
 
     template <class Screen>
-    inline int16_t Text<Screen>::drawValue(int16_t x, uint16_t color, unsigned long value) {
+    inline int16_t Text<Screen>::drawValue(int16_t x, Color color, unsigned long value) {
         return drawUnsigned<unsigned long>(x, color, value);
     }
 
     template <class Screen>
-    inline int16_t Text<Screen>::drawValue(int16_t x, uint16_t color, long long value) {
+    inline int16_t Text<Screen>::drawValue(int16_t x, Color color, long long value) {
         return drawSigned<long long, unsigned long long>(x, color, value);
     }
 
     template <class Screen>
-    inline int16_t Text<Screen>::drawValue(int16_t x, uint16_t color, unsigned long long value) {
+    inline int16_t Text<Screen>::drawValue(int16_t x, Color color, unsigned long long value) {
         return drawUnsigned<unsigned long long>(x, color, value);
     }
 
     template <class Screen>
-    inline int16_t Text<Screen>::drawValue(int16_t x, uint16_t color, float value) {
+    inline int16_t Text<Screen>::drawValue(int16_t x, Color color, float value) {
         return drawFloat(x, color, value);
     }
 
     template <class Screen>
-    inline int16_t Text<Screen>::drawValue(int16_t x, uint16_t color, double value) {
+    inline int16_t Text<Screen>::drawValue(int16_t x, Color color, double value) {
         return drawFloat(x, color, value);
     }
 
     template <class Screen>
-    inline int16_t Text<Screen>::drawValue(int16_t x, uint16_t color, long double value) {
+    inline int16_t Text<Screen>::drawValue(int16_t x, Color color, long double value) {
         return drawFloat(x, color, (double)value);
     }
 
     template <class Screen>
     template <class String>
-    inline auto Text<Screen>::drawValue(int16_t x, uint16_t color, const String &value)
+    inline auto Text<Screen>::drawValue(int16_t x, Color color, const String &value)
         -> decltype((void)value.c_str(), int16_t()) {
         return drawValue(x, color, (const char *)value.c_str());
     }
 
     template <class Screen>
     template <class Value, size_t N>
-    inline int16_t Text<Screen>::drawValue(int16_t x, uint16_t color, const Value (&values)[N]) {
+    inline int16_t Text<Screen>::drawValue(int16_t x, Color color, const Value (&values)[N]) {
         for (size_t i = 0; i < N; i++) {
             if (i > 0) {
                 x = drawValue(x, color, _separator);
@@ -341,7 +345,7 @@ namespace graphics {
 
     template <class Screen>
     template <class Signed, class Unsigned>
-    inline int16_t Text<Screen>::drawSigned(int16_t x, uint16_t color, Signed value) {
+    inline int16_t Text<Screen>::drawSigned(int16_t x, Color color, Signed value) {
         if (value < 0) {
             x = drawChar(x, color, '-');
             // works for the most negative value too
@@ -352,7 +356,7 @@ namespace graphics {
 
     template <class Screen>
     template <class Unsigned>
-    inline int16_t Text<Screen>::drawUnsigned(int16_t x, uint16_t color, Unsigned value) {
+    inline int16_t Text<Screen>::drawUnsigned(int16_t x, Color color, Unsigned value) {
         // 20 digits fit 2^64, + '\0'
         char digits[21];
         uint8_t i = sizeof(digits) - 1;
@@ -366,7 +370,7 @@ namespace graphics {
     }
 
     template <class Screen>
-    inline int16_t Text<Screen>::drawFloat(int16_t x, uint16_t color, double value) {
+    inline int16_t Text<Screen>::drawFloat(int16_t x, Color color, double value) {
         if (isnan(value)) {
             return drawValue(x, color, "nan");
         }
@@ -408,7 +412,7 @@ namespace graphics {
     }
 
     template <class Screen>
-    inline int16_t Text<Screen>::drawChar(int16_t x, uint16_t color, char c) {
+    inline int16_t Text<Screen>::drawChar(int16_t x, Color color, char c) {
         if (!_shapes) {
             return x;
         }

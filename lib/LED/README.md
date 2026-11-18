@@ -1,19 +1,67 @@
 # LED
 
-用 PWM 調亮度的 LED，`namespace LED`。亮度照眼睛的感覺換算（0 ～ 255 看起來均勻變亮），不是直接的工作週期。只依賴 Pwm（例如 `Uno::UnoPwmPin`），換主板只要換它。
+| 需要 | 得到 |
+|---|---|
+| 一個 `Pwm`：`init()`、`write(duty)`（`Uno::UnoPwmPin<PIN>`） | `LED::LED2Pins`、`RGBLED4Pins`、`TrafficLight4Pins`：照眼睛感覺的亮度 0 ～ 255；`LED::Effect`：閃爍、呼吸、漸變、心跳 |
 
-## 檔案
+「需要」是介面（duck typing），括號裡是這個專案現成的實作，換主板只要換它們。開發者看的細節（前提條件、介面需求、每個函式、參數、資源）在 [INTERFACE.md](INTERFACE.md)。
 
+用 PWM 調亮度的 LED，`namespace LED`。亮度照眼睛的感覺換算（0 ～ 255 看起來均勻變亮），不是直接的工作週期。
+
+## 用法
+
+```cpp
+#include "Uno_pin.h"
+#include "LED.h"
+
+constexpr uint8_t RGB_RED_PIN = 3;                     // 都要是 PWM 腳：3、5、6、9、10、11
+constexpr uint8_t RGB_GREEN_PIN = 5;
+constexpr uint8_t RGB_BLUE_PIN = 6;
+constexpr uint8_t LIGHT_RED_PIN = 9;
+constexpr uint8_t LIGHT_GREEN_PIN = 10;
+constexpr uint8_t SINGLE_PIN = 11;
+
+LED::RGBLED4Pins<Uno::UnoPwmPin<RGB_RED_PIN>, Uno::UnoPwmPin<RGB_GREEN_PIN>, Uno::UnoPwmPin<RGB_BLUE_PIN>> rgb;
+LED::TrafficLight4Pins<Uno::UnoPwmPin<LIGHT_RED_PIN>, LED::NoPwm, Uno::UnoPwmPin<LIGHT_GREEN_PIN>> trafficLight;   // 只用紅、綠
+LED::LED2Pins<Uno::UnoPwmPin<SINGLE_PIN>> single;
+
+void setup() {
+    rgb.init();
+    rgb.set(255, 128, 0);                                  // 橘色
+    rgb.setBlue(LED::levelToBrightness(3, 10));            // 藍色第 3 格（共 10 格）
+    trafficLight.init();
+    trafficLight.setGreen(255);
+    single.init();
+    single.set(128);                                       // 看起來一半亮
+}
 ```
-lib/LED/
-├── LED.h                       入口：全部（程式只 include 它）
-├── brightness.h                toDuty（眼睛的亮度 → 工作週期）、levelToBrightness（第幾格 → 亮度）
-├── single_LED.h                SingleLED<Pwm, ACTIVE_HIGH>：一個顏色（模組共用的核心）；NoPwm：沒接的顏色
-└── module/                     實際買到的零件
-    ├── LED_2_pins.h            LED2Pins<Pwm>：一顆 LED（2 隻腳）
-    ├── RGB_LED_4_pins.h        RGBLED4Pins<RedPwm, GreenPwm, BluePwm, COMMON_ANODE>：RGB LED（4 隻腳）
-    └── traffic_light_4_pins.h  TrafficLight4Pins<RedPwm, YellowPwm, GreenPwm>：紅綠燈模組（R、Y、G、GND）
+
+完整的例子：`src/week_5_NEC/assignments/1_rgb_remote.cpp`（遙控器調紅綠燈的紅、綠和一顆藍色 LED）。
+
+## Effect：閃爍、呼吸、漸變、心跳
+
+```cpp
+constexpr uint8_t LED_PIN = 6;
+LED::LED2Pins<Uno::UnoPwmPin<LED_PIN>> light;
+LED::Effect<decltype(light)> effect(light);
+
+effect.breathe(2000);          // 2 秒一次呼吸
+// loop 裡：effect.update();
 ```
+
+| 函式 | 說明 |
+|---|---|
+| `steady(brightness)` | 固定亮度 |
+| `blink(onMs, offMs, count, brightness)` | 閃爍；`count` 次後熄滅（0 = 一直閃） |
+| `breathe(periodMs, low, high)` | 在 low 和 high 之間平順地變亮變暗，一次呼吸 periodMs |
+| `fadeTo(brightness, ms)` | 從現在的亮度漸變到 brightness |
+| `heartbeat(periodMs, brightness)` | 兩下短跳、休息（心跳） |
+| `update()` | 每次 loop 都要呼叫 |
+| `kind()`、`isRunning()` | 現在是哪一種；有次數的閃爍、漸變結束後是 false |
+
+- **亮度是眼睛看的**（0 ～ 255，見 `brightness.h`），所以呼吸看起來是均勻的。
+- 用在一個顏色上（`SingleLED`、`LED2Pins`）；RGB LED 的顏色要一起變，用 `set(r, g, b)`。
+- 完整的例子：`src/week_2_LED/tests/1_effects.cpp`（每種效果輪流）、`src/week_4_SSD1306_switch_buzzer_audio/tests/6_clicks.cpp`（按鈕手勢換效果）。
 
 ## 接線
 
@@ -50,57 +98,6 @@ RGB LED（4 隻腳，最長的是共用腳）：
 
 - **三顆分開的 LED 也可以**：紅、綠、藍三顆的長腳各串 220 Ω 接 D3、D5、D6，短腳都接 GND，就等於共陰極的 RGB LED，程式不用改。差別是光從三個點出來，近看不會混成一個顏色；靠在一起、蓋一張白紙就會混。
 
-## 用法
-
-```cpp
-#include "Uno_pin.h"
-#include "LED.h"
-
-LED::RGBLED4Pins<Uno::UnoPwmPin<3>, Uno::UnoPwmPin<5>, Uno::UnoPwmPin<6>> rgb;            // R = D3、G = D5、B = D6
-LED::TrafficLight4Pins<Uno::UnoPwmPin<9>, LED::NoPwm, Uno::UnoPwmPin<10>> trafficLight;    // 只用紅、綠
-LED::LED2Pins<Uno::UnoPwmPin<11>> single;
-
-void setup() {
-    rgb.init();
-    rgb.set(255, 128, 0);                                  // 橘色
-    rgb.setBlue(LED::levelToBrightness(3, 10));            // 藍色第 3 格（共 10 格）
-    trafficLight.init();
-    trafficLight.setGreen(255);
-    single.init();
-    single.set(128);                                       // 看起來一半亮
-}
-```
-
-完整的例子：`src/week_5/assignment_1.cpp`（遙控器調紅綠燈的紅、綠和一顆藍色 LED）。
-
-## 介面需求
-
-| 參數 | 需要的 static 函式 | 現成的實作 |
-|---|---|---|
-| `Pwm` | `init()`（腳位 LOW）、`write(duty)`（0 = 一直 LOW、255 = 一直 HIGH） | `Uno::UnoPwmPin` |
-
-## 函式
-
-| 函式 | 說明 |
-|---|---|
-| `init()` | 設定腳位，關掉 |
-| `SingleLED::set(brightness)` | 設定亮度：0 = 關 ～ 255 = 最亮，照眼睛的感覺 |
-| `SingleLED::setDuty(duty)` | 直接設定工作週期，不換算 |
-| `SingleLED::brightness()` | 回傳目前的亮度 |
-| `RGBLED4Pins::set(red, green, blue)`、`TrafficLight4Pins::set(red, yellow, green)` | 設定每個顏色的亮度 |
-| `setRed`、`setGreen`、`setBlue`、`setYellow` | 設定一個顏色 |
-| `red`、`green`、`blue`、`yellow` | 回傳一個顏色的亮度 |
-| `NoPwm` | 什麼都不做的 Pwm：給沒接的顏色 |
-| `toDuty(brightness)` | 回傳亮度對應的工作週期：brightness² / 255 |
-| `levelToBrightness(level, levels)` | 回傳第 level 格（共 levels 格）的亮度，0 ～ 255 |
-
-## 參數
-
-| 參數 | 預設 | 說明 |
-|---|---|---|
-| `ACTIVE_HIGH`（核心 `SingleLED`） | `true` | 自己接線時用：5V → LED → 電阻 → 腳位時改成 `false`（`LED2Pins` 固定 `true`） |
-| `COMMON_ANODE`（`RGBLED4Pins`） | `false` | 共陰是 `false`、共陽是 `true` |
-
 ## 亮度和 PWM
 
 **PWM**：腳位很快地開關（UNO 約 976 Hz），開的時間比例（工作週期）越長看起來越亮。眼睛跟不上這麼快的閃爍，所以看到的是平均亮度。
@@ -124,14 +121,6 @@ void setup() {
 | 腳位 | 3、5、6、9、10、11 | 編譯錯誤 |
 | 亮度、工作週期 | 0 ～ 255 | — |
 | `levelToBrightness` 的 level | 0 ～ levels | 大於 levels 時是 255；levels = 0 時是 0 |
-
-## 資源
-
-| 項目 | 用量 |
-|---|---|
-| RAM | `LED2Pins` 1 byte，`RGBLED4Pins`、`TrafficLight4Pins` 3 bytes（記住的亮度） |
-| 計時器 | D5、D6：Timer0（跟 `millis` 共用，只開關輸出）；D9、D10：Timer1；D3、D11：Timer2 |
-| CPU | 不用：計時器自己產生 PWM |
 
 ## 注意事項
 

@@ -1,0 +1,95 @@
+#include <Arduino.h>
+#include "Uno_serial.h"
+#include "Uno_pin.h"
+#include "switch.h"
+#include "LED.h"
+
+// UNO + a button + an LED: switches::Clicks, one button for many commands, shown by LED effects (week_2), told on the USB serial
+//   pio device monitor        (platformio.ini: monitor_speed = BAUD)
+//
+//   click: LED blinks BLINK_TIMES times     double click: LED breathes     triple or more: heartbeat
+//   long press: LED fades on, then every REPEAT (held) a little brighter     long release: fades off
+
+// ---------- settings ----------
+
+// wiring: button, the other leg -> GND (a bare button: the UNO's pull-up)
+constexpr uint8_t BUTTON_PIN = 2;           // one leg: any pin
+constexpr uint8_t DEBOUNCE_MS = 20;
+constexpr uint16_t DOUBLE_MS = 300;         // the longest gap between the clicks of a double click
+constexpr uint16_t LONG_MS = 800;           // held this long = a long press
+constexpr uint16_t REPEAT_MS = 150;         // then REPEAT this often while held
+// wiring: LED short leg -> GND
+constexpr uint8_t LED_PIN = 6;              // long leg through 220 Ω: a PWM pin (3, 5, 6, 9, 10, 11)
+constexpr uint32_t BAUD = 1000000;          // USB serial: the same as monitor_speed in platformio.ini
+
+constexpr uint16_t BLINK_MS = 150;          // click: on and off this long,
+constexpr uint8_t BLINK_TIMES = 3;          //        this many times
+constexpr uint16_t BREATHE_MS = 2000;       // double click: one breath
+constexpr uint8_t LONG_LEVEL = 64;          // long press: fades to this brightness (0 ~ 255),
+constexpr uint16_t LONG_FADE_MS = 300;      //             in this long
+constexpr uint8_t REPEAT_STEP = 20;         // every REPEAT: this much brighter,
+constexpr uint16_t REPEAT_FADE_MS = 100;    //               in this long
+constexpr uint16_t OFF_FADE_MS = 800;       // long release: fades off in this long
+
+// ---------- parts ----------
+
+using Button = switches::Switch2Pins<Uno::UnoInputPin<BUTTON_PIN, true>, DEBOUNCE_MS>;
+using Light = LED::LED2Pins<Uno::UnoPwmPin<LED_PIN>>;
+using Link = Uno::UnoSerial<BAUD>;
+
+Button button;
+switches::Clicks<Button> clicks(button);
+Light light;
+LED::Effect<Light> effect(light);
+uint8_t level = 0;
+
+// ---------- main ----------
+
+void setup() {
+    Link::init();
+    clicks.init();
+    clicks.setDoubleMs(DOUBLE_MS);
+    clicks.setLongMs(LONG_MS);
+    clicks.setRepeatMs(REPEAT_MS);
+    light.init();
+    Link::printText("\r\nbutton ");
+    Link::printPin(BUTTON_PIN);
+    Link::printText(", LED ");
+    Link::printPin(LED_PIN);
+    Link::printText(": click, double, triple, long press\r\n");
+}
+
+void loop() {
+    switch (clicks.update()) {
+        case switches::CLICK:
+            Link::printText("click: blink\r\n");
+            effect.blink(BLINK_MS, BLINK_MS, BLINK_TIMES);
+            break;
+        case switches::DOUBLE_CLICK:
+            Link::printText("double click: breathe\r\n");
+            effect.breathe(BREATHE_MS);
+            break;
+        case switches::MULTI_CLICK:
+            Link::printText("clicks: ");
+            Link::printNumber(clicks.count());
+            Link::printText(" -> heartbeat\r\n");
+            effect.heartbeat();
+            break;
+        case switches::LONG_PRESS:
+            Link::printText("long press: fade on\r\n");
+            level = LONG_LEVEL;
+            effect.fadeTo(level, LONG_FADE_MS);
+            break;
+        case switches::REPEAT:
+            level = level > 255 - REPEAT_STEP ? 255 : (uint8_t)(level + REPEAT_STEP);
+            effect.fadeTo(level, REPEAT_FADE_MS);
+            break;
+        case switches::LONG_RELEASE:
+            Link::printText("released: fade off\r\n");
+            effect.fadeTo(0, OFF_FADE_MS);
+            break;
+        default:
+            break;
+    }
+    effect.update();
+}

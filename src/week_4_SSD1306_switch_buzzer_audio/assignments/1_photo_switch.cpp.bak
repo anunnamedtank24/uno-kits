@@ -1,0 +1,84 @@
+#include <Arduino.h>
+#include "Uno_I2C.h"
+#include "Uno_pin.h"
+#include "SSD1306.h"
+#include "image.h"
+#include "switch.h"
+#include "color.h"
+
+// UNO + 128x64 I2C OLED + switch module: every press shows the next photo
+//
+// the photos are black / white (the OLED has no colors), made by lib/image/source/convert.py:
+//   python source/convert.py assets/moon.jpg output --target flash --fill 128x64 --palette 2 --dither
+// a photo is drawn into the OLED's RAM copy, then display() sends the bytes that changed
+
+// ---------- settings ----------
+
+// wiring: OLED VCC -> 5V, GND -> GND
+constexpr uint8_t SCL_PIN = 13;             // SCL: any pin (I2C made by the program)
+constexpr uint8_t SDA_PIN = 11;             // SDA: any pin
+constexpr bool I2C_INTERNAL_PULLUP = true;  // the UNO's ~35 kΩ pull-ups as well (the modules have their own)
+constexpr uint16_t I2C_KHZ = 400;           // 1 ~ 400 (really ~160): lower it if the picture breaks up
+constexpr bool FLIP = false;                // true: the OLED turned 180° (pins at the bottom)
+// wiring: switch module VCC -> 5V, GND -> GND
+constexpr uint8_t SWITCH_PIN = 2;           // OUT
+constexpr bool SWITCH_ACTIVE_HIGH = true;   // OUT is HIGH while pressed (src/week_4_SSD1306_switch_buzzer_audio/tests/2_switch.cpp tells)
+constexpr uint8_t DEBOUNCE_MS = 20;
+constexpr uint8_t BW_THRESHOLD = 128;       // a picture's color lights a dot from this brightness on (0 ~ 255)
+
+// ---------- parts ----------
+
+using Bus = Uno::UnoI2C<SCL_PIN, SDA_PIN, I2C_INTERNAL_PULLUP, I2C_KHZ>;
+using ScreenColor = color::BW<BW_THRESHOLD>;       // the OLED: dots on / off
+using Screen = SSD1306::OLED128x64<Bus, ScreenColor>;
+using Button = switches::Switch3Pins<Uno::UnoPin<SWITCH_PIN>, SWITCH_ACTIVE_HIGH, DEBOUNCE_MS>;
+Screen screen;
+Button button;
+
+// ---------- photos ----------
+
+template <class Picture>
+void drawPicture() {
+    image::FlashImage<Screen> pictures(screen);
+    pictures.draw<Picture>(0, 0);
+}
+
+void (*const photos[])() = {
+    drawPicture<picture::sunset_flash_128x64_palette_2>,
+    drawPicture<picture::moon_flash_128x64_palette_2>,
+    drawPicture<picture::city_flash_128x64_palette_2>,
+    drawPicture<picture::logo_flash_stream_128x64_palette_2>,
+};
+constexpr uint8_t PHOTO_COUNT = sizeof(photos) / sizeof(photos[0]);
+
+uint8_t photo = 0;
+
+void showPhoto() {
+    screen.clear();
+    photos[photo]();
+    screen.display();
+}
+
+// ---------- main ----------
+
+// nothing answered at 0x3C: stop (the built-in LED is on SCL, it cannot blink)
+void halt() {
+    while (true) {
+    }
+}
+
+void setup() {
+    if (!screen.init(FLIP)) {
+        halt();
+    }
+    button.init();
+    showPhoto();
+}
+
+void loop() {
+    button.update();
+    if (button.wasPressed()) {
+        photo = (uint8_t)((photo + 1) % PHOTO_COUNT);
+        showPhoto();
+    }
+}

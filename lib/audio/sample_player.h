@@ -5,7 +5,7 @@
 #include "format.h"
 
 namespace audio {
-    // plays a PCM sound (--sound pcm --target uno) from flash, without waiting: start it, then call update()
+    // plays a PCM sound (--sound pcm --target flash) from flash, without waiting: start it, then call update()
     //
     // SampleOut: a struct providing these static functions (see lib/Uno/Uno_pcm_out.h)
     //   void init()
@@ -22,7 +22,7 @@ namespace audio {
         // silent
         static inline void init();
 
-        // a sound of output/selected.h: play<melody::hello_uno_pcm_8000_adpcm>()
+        // a sound of output/selected.h: play<melody::hello_flash_pcm_8000_adpcm>()
         template <class Clip>
         static inline void play(bool repeat = false);
 
@@ -85,8 +85,8 @@ namespace audio {
     inline void SamplePlayer<SampleOut>::play(bool repeat) {
         static_assert(Clip::kind == KIND_PCM,
                       "audio::SamplePlayer: not a PCM sound (--sound pcm): notes and rhythms are played by audio::Player");
-        static_assert(Clip::target & TARGET_UNO,
-                      "audio::SamplePlayer: made with --target mac only (no samples on the board): use audio::StreamSamplePlayer");
+        static_assert(Clip::target & TARGET_FLASH,
+                      "audio::SamplePlayer: made with --target stream only (no samples on the board): use audio::StreamSamplePlayer");
         play(Clip::getSamples(), Clip::count, Clip::encoding, Clip::rate, repeat);
     }
 

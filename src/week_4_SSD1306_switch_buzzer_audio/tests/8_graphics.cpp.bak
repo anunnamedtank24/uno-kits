@@ -1,0 +1,309 @@
+#include <Arduino.h>
+#include "Uno_I2C.h"
+#include "SSD1306.h"
+#include "graphics.h"
+#include "font.h"
+#include "color.h"
+
+// UNO + 0.96" 128x64 I2C OLED (SSD1306): every function of lib/graphics (shapes and text), one test after another
+//
+// the same tests as week_3's tests/1_screen, made for 128 x 64 black / white: ON = a lit pixel, OFF = dark;
+// every test draws into the RAM copy, then screen.display() sends it (graphics never sends by itself)
+// the small font is 4 x 12: 32 characters x 5 lines
+
+// ---------- settings ----------
+
+// wiring: OLED VCC -> 5V (or 3.3V), GND -> GND
+constexpr uint8_t SCL_PIN = 13;             // SCL: any pin (I2C made by the program)
+constexpr uint8_t SDA_PIN = 11;             // SDA: any pin
+constexpr bool I2C_INTERNAL_PULLUP = true;  // the UNO's ~35 kΩ pull-ups as well (the modules have their own)
+constexpr uint16_t I2C_KHZ = 400;           // 1 ~ 400 (really ~160): lower it if the picture breaks up
+constexpr bool FLIP = false;                // true: the OLED turned 180° (pins at the bottom)
+
+constexpr uint32_t ONLY_TESTS = 0;          // 0: every test; bit i = only test i, e.g. (1UL << 2) | (1UL << 9)
+constexpr uint16_t TITLE_MS = 800;          // "test n" before each test
+constexpr uint16_t HOLD_MS = 2500;          // the result stays this long
+constexpr uint8_t BW_THRESHOLD = 128;       // a picture's color lights a dot from this brightness on (0 ~ 255)
+
+// ---------- parts ----------
+
+using Bus = Uno::UnoI2C<SCL_PIN, SDA_PIN, I2C_INTERNAL_PULLUP, I2C_KHZ>;
+using ScreenColor = color::BW<BW_THRESHOLD>;       // the OLED: dots on / off
+using Screen = graphics::Canvas<SSD1306::OLED128x64<Bus, ScreenColor>>;
+using SmallPrintable = font::menlo_height_12_first_32_last_126_default_63;  // 4 x 12, ASCII 32 ~ 126
+using BigPrintable = font::menlo_height_23_first_32_last_126_default_63;    // 8 x 23, for the titles
+using BigDigits = font::menlo_height_46_first_48_last_57_default_63;        // 16 x 46, '0' ~ '9' + '?'
+Screen screen;
+
+constexpr uint16_t ON = 1;
+constexpr uint16_t OFF = 0;
+constexpr int16_t LINE = 13;                // a text line: 12 px + 1 px gap
+
+// ---------- shapes ----------
+
+// 0. point
+//    expected: a dotted grid every 8 px
+void testPoint() {
+    for (int16_t y = 4; y < (int16_t)screen.height(); y += 8) {
+        for (int16_t x = 4; x < (int16_t)screen.width(); x += 8) {
+            screen.drawPoint(x, y, ON);
+        }
+    }
+}
+
+// 1. horizontal / vertical lines, 3 forms each
+//    expected: 3 horizontal lines x 10 ~ 59 of the same length, 3 vertical lines y 10 ~ 59 of the same length
+void testHVLines() {
+    screen.drawHLineSize(10, 10, 50, ON);
+    screen.drawHLinePoints(59, 20, 10, ON);   // reversed order on purpose
+    screen.drawHLineCenter(35, 30, 50, ON);
+    screen.drawVLineSize(80, 10, 50, ON);
+    screen.drawVLinePoints(90, 59, 10, ON);
+    screen.drawVLineCenter(100, 35, 50, ON);
+}
+
+// 2. lines, 3 forms
+//    expected: left a fan (Points), middle a star every 30° (Angle; the longest spoke = 0°, to the right),
+//              right an X (Delta)
+void testLines() {
+    for (int16_t y = 0; y < 64; y += 8) {
+        screen.drawLinePoints(0, 32, 36, y, ON);
+    }
+    for (int16_t deg = 0; deg < 360; deg += 30) {
+        screen.drawLineAngle(64, 32, deg == 0 ? 26 : 20, deg, ON);
+    }
+    screen.drawLineDelta(96, 12, 30, 40, ON);
+    screen.drawLineDelta(126, 12, -30, 40, ON);
+}
+
+// 3. rectangles, 3 forms
+//    expected: top row outlines, bottom row filled; the 3 shapes of a row have the same size
+void testRects() {
+    screen.drawHollowRectSize(4, 2, 30, 26, ON);
+    screen.drawHollowRectPoints(77, 27, 48, 2, ON);   // reversed corners on purpose
+    screen.drawHollowRectCenter(106, 15, 30, 26, ON);
+
+    screen.drawFilledRectSize(4, 34, 30, 26, ON);
+    screen.drawFilledRectPoints(77, 59, 48, 34, ON);
+    screen.drawFilledRectCenter(106, 47, 30, 26, ON);
+}
+
+// 4. triangles, 3 forms
+//    expected: top row outlines, bottom row filled
+void testTriangles() {
+    screen.drawHollowTrianglePoints(4, 28, 18, 2, 34, 24, ON);
+    screen.drawHollowTriangleSize(48, 2, 30, 26, ON);
+    screen.drawHollowTriangleCenter(106, 15, 30, 26, ON);
+
+    screen.drawFilledTrianglePoints(4, 60, 18, 34, 34, 56, ON);
+    screen.drawFilledTriangleSize(48, 34, 30, 26, ON);
+    screen.drawFilledTriangleCenter(106, 47, 30, 26, ON);
+}
+
+// 5. circles, 2 forms
+//    expected: left Radius, right Points, the same size; outline on the left, filled on the right;
+//              the dark dot in the right disc is the given point on its edge
+void testCircles() {
+    screen.drawHollowCircleRadius(24, 32, 20, ON);
+    screen.drawHollowCirclePoints(64, 32, 76, 48, ON);    // distance = 20
+    screen.drawFilledCircleRadius(104, 32, 20, ON);
+    screen.drawFilledCirclePoints(104, 32, 116, 48, ON);
+    screen.drawPoint(116, 48, OFF);
+}
+
+// 6. border width of hollow shapes: (x, y, w, h) / corners / radius are the outer edge, the border grows inward
+//    expected: 3 columns with border 1, 4, 20 (wider than half: solid); a rectangle above, a circle below
+void testBorders() {
+    const int16_t borders[] = {1, 4, 20};
+    for (uint8_t i = 0; i < 3; i++) {
+        int16_t x = 6 + i * 42;
+        screen.drawHollowRectSize(x, 1, 32, 28, ON, borders[i]);
+        screen.drawHollowCircleRadius(x + 16, 47, 15, ON, borders[i]);
+    }
+}
+
+// 7. screen edges: shapes touching the edges exactly (0 and 127 / 63), nothing may be cut
+//    expected: a square in the top-left corner, a half disc on the right edge, a triangle with its tip on the top,
+//              a ring on the bottom edge, a line from the left edge to the right edge
+void testEdges() {
+    screen.drawFilledRectSize(0, 0, 16, 16, ON);
+    screen.drawFilledCircleRadius(111, 32, 16, ON);
+    screen.drawFilledTrianglePoints(48, 0, 36, 20, 60, 20, ON);
+    screen.drawHollowCircleRadius(64, 47, 16, ON);
+    screen.drawLinePoints(0, 60, 127, 24, ON);
+}
+
+// ---------- text (font SmallPrintable: 4 x 12) ----------
+
+// 8. every char of the font, drawn one by one with the returned x
+//    expected: ' ' ~ '~' in 3 lines, no gaps, no overlap
+void testTextChars() {
+    int16_t x = 0;
+    int16_t y = 0;
+    for (uint8_t code = 32; code <= 126; code++) {
+        if (x + 4 > (int16_t)screen.width()) {
+            x = 0;
+            y += LINE;
+        }
+        x = screen.drawTexts(x, y, ON, (char)code);
+    }
+}
+
+// 9. value types: strings, char, every integer type
+//    expected:  char*: abc  char[]: buffer  /  F(): Arduino  char: Az  /  int8 -5 uint8 200
+//               int: -123 65535 true  /  long: -2147483648 ulong: 4294967295
+void testTextTypes() {
+    char buffer[] = "buffer";
+    screen.drawTexts(0, LINE * 0, ON, "char*: ", "abc", "  char[]: ", buffer);
+    screen.drawTexts(0, LINE * 1, ON, "F(): ", F("Arduino"), "  char: ", 'A', 'z');
+    screen.drawTexts(0, LINE * 2, ON, "int8 ", (int8_t)-5, " uint8 ", (uint8_t)200);
+    screen.drawTexts(0, LINE * 3, ON, "int: ", -123, ' ', 65535U, ' ', true);
+    screen.drawTexts(0, LINE * 4, ON, "long: ", -2147483647L - 1, " ul: ", 4294967295UL);
+}
+
+// 10. float / double, setDecimals
+//     expected:  float: 3.14  double: 2.50  /  round: 2.35 -1.50  /  nan inf: nan inf -inf  1e10: ovf
+//                decimals 0: 3  /  decimals 4: 3.1416
+void testTextFloat() {
+    screen.drawTexts(0, LINE * 0, ON, "float: ", 3.14159f, "  double: ", 2.5);
+    screen.drawTexts(0, LINE * 1, ON, "round: ", 2.345f, ' ', -1.5f);
+    screen.drawTexts(0, LINE * 2, ON, "nan inf: ", NAN, ' ', INFINITY, ' ', -INFINITY, " 1e10: ", 1e10f);
+    screen.setDecimals(0);
+    screen.drawTexts(0, LINE * 3, ON, "decimals 0: ", 2.5f);
+    screen.setDecimals(4);
+    screen.drawTexts(0, LINE * 4, ON, "decimals 4: ", 3.14159f);
+    screen.setDecimals(2);
+}
+
+// 11. arrays, setSeparator
+//     expected:  int[]: 123 (no separator by default)  /  int[]: 1, 2, 3  /  float[]: 1.50, -2.25
+//                char*[]: ab, cd, ef  uint8[]: 10, 20, 255  /  mixed: 1|2|3 / ab|cd|ef
+void testTextArrays() {
+    const int ints[] = {1, 2, 3};
+    const float floats[] = {1.5f, -2.25f};
+    const char *words[] = {"ab", "cd", "ef"};
+    const uint8_t bytes[] = {10, 20, 255};
+    screen.drawTexts(0, LINE * 0, ON, "int[]: ", ints);
+    screen.setSeparator(", ");
+    screen.drawTexts(0, LINE * 1, ON, "int[]: ", ints);
+    screen.drawTexts(0, LINE * 2, ON, "float[]: ", floats);
+    screen.drawTexts(0, LINE * 3, ON, "char*[]: ", words, " u8[]: ", bytes);
+    screen.setSeparator("|");
+    screen.drawTexts(0, LINE * 4, ON, "mixed: ", ints, " / ", words);
+    screen.setSeparator("");
+}
+
+// 12. the default char for codes outside first ~ last
+//     expected:  tab:?|  utf-8:??|  newline:?|  code 200:?|  (small font)
+//                12?34 in big digits (':' is not in that font)
+void testTextDefault() {
+    screen.drawTexts(0, 0, ON, "tab:\t| utf-8:\xC3\xA9| newline:\n|");
+    screen.drawTexts(0, LINE, ON, "code 200:", (char)200, '|');
+    screen.setFont<BigDigits>();
+    screen.drawTexts(0, 2 * LINE, ON, "12:34");
+    screen.setFont<SmallPrintable>();
+}
+
+// 13. layout: transparent background, returned x, empty call, fontHeight, black on white
+//     expected:  dark text over a lit bar (only the letters' pixels change)
+//                "x=123" then a short bar right after it, then "(x)" with its value
+//                "empty ok fontHeight=12"  /  "right edge" ending at x 127  /  "bottom" on the last row
+void testTextLayout() {
+    screen.drawFilledRectSize(0, 0, 128, LINE, ON);
+    screen.drawTexts(20, 0, OFF, "transparent text");
+
+    int16_t x = screen.drawTexts(0, LINE, ON, "x=");
+    x = screen.drawTexts(x, LINE, ON, 123);
+    screen.drawFilledRectSize(x, LINE, 2, screen.fontHeight(), ON);
+    screen.drawTexts(x + 4, LINE, ON, "(", x, ")");
+
+    int16_t empty = screen.drawTexts(50, 2 * LINE, ON);
+    screen.drawTexts(0, 2 * LINE, ON, empty == 50 ? "empty ok" : "empty FAIL", " fontHeight=", screen.fontHeight());
+    screen.drawTexts(128 - 10 * 4, 3 * LINE, ON, "right edge");
+    screen.drawTexts(0, 64 - 12, ON, "bottom");
+}
+
+// 14. setAutoLineBreak, setLineSpacing
+//     expected:  "line 1" / "line 2" / "3 follows" ('\n' starts again at x 0)
+//                a long sentence wrapped at the right edge, a short bar after its end (the returned x)
+void testTextLineBreak() {
+    screen.setAutoLineBreak(true);
+    screen.drawTexts(0, 0, ON, "line 1\nline 2\n", 3, " follows");
+    screen.setLineSpacing(1);
+    int16_t x = screen.drawTexts(0, 3 * LINE, ON, "this sentence is too long for one line");
+    screen.drawFilledRectSize(x, 4 * LINE, 2, screen.fontHeight(), ON);
+    screen.setLineSpacing(0);
+    screen.setAutoLineBreak(false);
+}
+
+// 15. clipping: shapes partly off the screen
+//     expected: only the parts on the screen, nothing wraps to the other side
+void testOffScreen() {
+    screen.drawFilledRectSize(-15, 20, 30, 20, ON);
+    screen.drawFilledCircleRadius(124, 32, 16, ON);
+    screen.drawFilledTrianglePoints(50, -20, 80, -20, 65, 20, ON);
+    screen.drawHollowCircleRadius(64, 62, 16, ON);
+    screen.drawLinePoints(-20, 60, 150, 10, ON);
+    screen.drawTexts(100, 2, ON, "off screen");
+}
+
+void (*const tests[])() = {
+    testPoint,
+    testHVLines,
+    testLines,
+    testRects,
+    testTriangles,
+    testCircles,
+    testBorders,
+    testEdges,
+    testTextChars,
+    testTextTypes,
+    testTextFloat,
+    testTextArrays,
+    testTextDefault,
+    testTextLayout,
+    testTextLineBreak,
+    testOffScreen,
+};
+
+using Test = void (*)();
+constexpr uint8_t TEST_COUNT = sizeof(tests) / sizeof(tests[0]);
+static_assert(ONLY_TESTS < (1UL << TEST_COUNT), "ONLY_TESTS: a bit for a test that is not there");
+
+// "test {n}" in the big font for TITLE_MS
+void showTitle(uint8_t index) {
+    screen.clear();
+    screen.setFont<BigPrintable>();
+    screen.drawTexts(28, 20, ON, "test ", index);
+    screen.display();
+    delay(TITLE_MS);
+    screen.setFont<SmallPrintable>();
+    screen.clear();
+}
+
+// nothing answered at 0x3C: the built-in LED (D13 = SCL) cannot be used, so just stop here
+void halt() {
+    while (true) {
+    }
+}
+
+// ---------- main ----------
+
+void setup() {
+    if (!screen.init(FLIP)) {
+        halt();
+    }
+    screen.setFont<SmallPrintable>();
+}
+
+void loop() {
+    for (uint8_t i = 0; i < TEST_COUNT; i++) {
+        if (ONLY_TESTS != 0 && !(ONLY_TESTS & (1UL << i))) {
+            continue;
+        }
+        showTitle(i);
+        tests[i]();
+        screen.display();
+        delay(HOLD_MS);
+    }
+}

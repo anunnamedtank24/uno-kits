@@ -1,0 +1,39 @@
+#include <Arduino.h>
+#include "Uno_tone.h"
+#include "buzzer.h"
+#include "audio.h"
+
+// UNO + passive buzzer: any sound file on the computer, turned into notes while the program is built
+//
+// MELODY("path", "options"): tools/assets.py finds the notes of the file (the loudest pitch at each moment)
+// before the build; a buzzer plays one note at a time, so a song with chords becomes its tune
+
+// ---------- settings ----------
+
+// wiring: passive buzzer - -> GND (a 3-pin module: see Speaker below)
+constexpr uint8_t BUZZER_PIN = 9;           // + (through 100 Ω); any pin, D9 / D10 are driven by Timer1 itself
+
+// the file, and the options of lib/audio/source/convert.py, e.g. "--start 30 --duration 20" (a part),
+// "--quality high", "--transpose -12" (an octave down), "--speed 1.5", "--sound pcm --quality low" (the real sound, short)
+using Song = MELODY("~/Mine/4_assets/audio/Pokemon/8-2 LA/Disc 4/16 戦い：ウォロ.aiff");
+
+constexpr uint8_t VOLUME = 255;             // 0 = silent ~ 255 = the loudest; 128 = -6 dB, 64 = -12 dB
+constexpr uint8_t GAP_MS = 20;              // silence between two notes: two equal notes stay two
+constexpr bool REPEAT = true;               // again from the start when it ends
+
+// ---------- parts ----------
+
+using Speaker = buzzer::PassiveBuzzer2Pins<Uno::UnoTone<BUZZER_PIN>>;   // 3-pin module: PassiveBuzzer3Pins<Uno::UnoTone<BUZZER_PIN, true>>
+audio::Player<Speaker, GAP_MS> speaker;
+
+// ---------- main ----------
+
+void setup() {
+    speaker.init();
+    speaker.setVolume(VOLUME);
+    speaker.play<Song>(REPEAT);
+}
+
+void loop() {
+    speaker.update();
+}

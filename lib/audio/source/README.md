@@ -1,26 +1,26 @@
 # audio/source
 
-在電腦上跑的工具。需要 Python 3、`pip install numpy pyserial`，以及 `brew install ffmpeg`（解碼音檔；沒有時 macOS 的 `afconvert` 也能讀大部分格式）。都在 `lib/audio` 裡執行，加 `-B` 不產生 `__pycache__`。
+在電腦上跑的工具。需要 Python 3、`pip install numpy pyserial`，以及 `brew install ffmpeg`（解碼音檔；沒有時 macOS 的 `afconvert` 也能讀大部分格式）。都在 `lib/audio` 裡執行。
 
 ## 檔案
 
 | 檔案 | 作用 |
 |---|---|
-| `convert.py` | 音檔 → `output/*.h`（`--target mac` 另外寫 `output/mac/*.h`），並把新產生的那個加進 `output/selected.h` |
-| `check.py` | 檢查 `output/selected.h` |
-| `stream.py` | 把 `--target mac` 的聲音串流給板子（`StreamPlayer`、`StreamSamplePlayer`），並印出板子送來的 `'M'` 訊息 |
+| `convert.py` | 音檔 → `output/*.h`（`--target stream` 的資料在同一個檔案的 `#if 0` 裡），並把新產生的那個加進 `output/selected.h` |
+| `check.py` | 檢查 `output/` 的每個檔案：目前的格式、原始檔沒變（`convert.py` 每次轉完會自動跑） |
+| `stream_handler.py` | [lib/stream](../../stream/README.md) 的 `stream.py` 用它讀聲音、回答板子的 `'A'`（`StreamPlayer`、`StreamSamplePlayer`）；不單獨執行 |
 
 ## 用法
 
 ```bash
 cd lib/audio
-python -B source/convert.py assets/twinkle_star.wav output
-python -B source/convert.py ~/Music/song.mp3 output --start 12.5 --duration 8 --preview song.wav
-python -B source/convert.py assets/sos.webm output --sound active
-python -B source/convert.py assets/hello.aiff output --sound pcm --quality low --preview hello.wav
-python -B source/convert.py assets/ode_to_joy.flac output --target mac --sound pcm --quality high
-python -B source/check.py
-python -B source/stream.py
+python source/convert.py assets/twinkle_star.wav output
+python source/convert.py ~/Music/song.mp3 output --start 12.5 --duration 8 --preview song.wav
+python source/convert.py assets/sos.webm output --sound active
+python source/convert.py assets/hello.aiff output --sound pcm --quality low --preview hello.wav
+python source/convert.py assets/ode_to_joy.flac output --target stream --sound pcm --quality high
+python source/check.py
+cd ../.. && python lib/stream/source/stream.py     # 串流：圖片、動畫、聲音都是它
 ```
 
 ## convert.py
@@ -53,16 +53,16 @@ python -B source/stream.py
 8. **時間**：除以 `--speed`，每個音的長度用「四捨五入後的起點、終點」相減，所以整首的總長不會因為四捨五入而飄掉。
 
 - **和弦、有伴奏的歌**：得到的是每一刻最強的那條線，不一定是主旋律。挑一段主旋律單獨或最大聲的地方（`--start`、`--duration`）。
-- **試聽**：`--preview x.wav` 把結果合成成無源蜂鳴器的方波（含 `GAP_MS` 20 ms 的間隔），在 Mac 上就能聽，不用燒錄。
+- **試聽**：`--preview x.wav` 把結果合成成無源蜂鳴器的方波（含 `GAP_MS` 20 ms 的間隔），在電腦上就能聽，不用燒錄。
 
 ### 參數
 
 | 參數 | 預設 | 說明 |
 |---|---|---|
-| `--target uno / mac` | `uno` | `uno`：資料燒進 Flash；`mac`：資料留在 Mac（`output/mac/`），`stream.py` 串流；兩個都寫：Flash 有資料，也能串流 |
+| `--target flash / stream` | `flash` | `flash`：資料燒進 Flash；`stream`：資料留在電腦（`output/x.h` 的 `#if 0` 裡），`stream.py` 串流；兩個都寫：Flash 有資料，也能串流 |
 | `--sound passive / active / pcm` | `passive` | 誰播：無源蜂鳴器（音符）、有源蜂鳴器（節奏）、取樣（真正的波形） |
 | `--quality low / medium / high` | `medium` | 預設組合，見 [audio 的格式和品質](../README.md#格式和品質)；下面的單一參數可以蓋過它 |
-| `--name` | `{檔名}_{target}_{sound}_{quality}`；取樣：`{檔名}_{target}_pcm_{rate}_{encoding}` | 檔名和 struct 名稱 |
+| `--name` | `{檔名}_{target}_{sound}_{quality}`；取樣：`{檔名}_{target}_pcm_{rate}_{encoding}`（`assets/` 外面的檔案前面加上資料夾；撞名，例如只差 `--transpose`，加 `_2`、`_3`，不蓋掉別的；見 [output/README.md](../output/README.md#名稱和來源)） | 檔名和 struct 名稱 |
 | `--preview F.wav` | — | 存一個試聽用的 wav：音符、節奏是方波；取樣是板子實際播的值 |
 | `--start S`、`--duration S` | 0、到結尾 | 取哪一段（秒） |
 | `--speed F` | 1 | > 1 變快、< 1 變慢，音高不變；0.1 ～ 10（取樣要 ffmpeg） |
@@ -93,9 +93,9 @@ python -B source/stream.py
 |---|---|
 | 檔案不存在、副檔名不支援、參數超出範圍 | 錯誤，不產生檔案 |
 | 解碼失敗、少於 46 ms、一個音都找不到 | 錯誤，並提示可以調哪個參數 |
-| `--target uno` 時超過 65535 步，或超過 UNO 的 Flash（32256 bytes） | 錯誤：剪短、降低 `--quality`，或 `--target mac` |
-| `--target uno` 時音符、節奏超過 8192 bytes，取樣超過 20000 bytes | 警告：留給程式的 Flash 不多 |
-| `--target mac` 的取樣每秒超過 12000 bytes | 警告：串流可能跟不上（實測 16000 在邊緣；`underruns()` 會算） |
+| `--target flash` 時超過 65535 步，或超過 UNO 的 Flash（32256 bytes） | 錯誤：剪短、降低 `--quality`，或 `--target stream` |
+| `--target flash` 時音符、節奏超過 8192 bytes，取樣超過 20000 bytes | 警告：留給程式的 Flash 不多 |
+| `--target stream` 的取樣每秒超過 12000 bytes | 警告：串流可能跟不上（實測 16000 在邊緣；`underruns()` 會算） |
 | 取樣率高於 22050 / 低於 4000 | 警告：中斷佔很多 CPU / 聲音很悶 |
 | 超過 1% 的取樣被切掉 | 警告：`--gain` 調小 |
 | 有短於 40 ms 的音 | 警告：`GAP_MS` 20 會讓它一半時間是安靜的 |
@@ -106,19 +106,15 @@ python -B source/stream.py
 
 - `selected.h` 存在，而且有 include guard。
 - 每個 `#include` 都是 `output/` 裡的檔案，只列一次。
-- 每個檔案都是目前的格式（`// format: 2`），有 `struct melody::{檔名}`、`getPath()`；給 UNO 的（`--target uno`）還要有資料：`getNotes()`（音符、節奏）或 `getSamples()`（取樣）。
+- 每個檔案都是目前的格式（`// format: 2`），有 `struct melody::{檔名}`、`getPath()`；給 UNO 的（`--target flash`）還要有資料：`getNotes()`（音符、節奏）或 `getSamples()`（取樣）。
 - 原始音檔（記錄的路徑和 sha256）沒有變過；找不到原始檔時只警告。
 - `output/` 裡沒被選的 .h 只警告。
 
-## stream.py
+## stream_handler.py
 
-```bash
-python -B source/stream.py                       # 自己找板子；拔掉、重插、燒錄都會自己接回
-python -B source/stream.py --port /dev/cu.usbmodem1101
-```
+[lib/stream](../../stream/README.md) 的 `stream.py`（找板子、燒錄時放開串口、印出板子的 `'M'` 訊息）收到 `'A'` 時交給它：
 
-- **板子說要哪個檔**：路徑是 struct 的 `getPath()`（相對於 `lib/audio`），只開 `lib/audio` 裡的 .h；`--target uno` 和 `--target mac` 的都可以串流。
+- **板子說要哪個檔**：路徑是 struct 的 `getPath()`（相對於 `lib/audio`），只開 `lib/audio` 裡的 .h；`--target flash` 和 `--target stream`（資料在 `#if 0` 裡）的都可以串流。
 - **檔案改了會重讀**（看修改時間），不用重開。
-- **印出**：每個聲音的格式、大小，傳完的時間和速度；板子用 `StreamLink::message` 送的文字印成 `[Board] …`。
-- **燒錄**：看到 avrdude 或 `pio run -t upload` 就放開串口，燒完再接回；開串口會讓板子重置。
-- 協定見 [audio 的串流](../README.md#串流)。
+- **印出**：每個聲音的格式、大小，傳完的時間和速度。
+- 協定見 [audio 的串流](../INTERFACE.md#串流)。

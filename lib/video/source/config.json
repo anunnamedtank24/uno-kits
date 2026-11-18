@@ -17,7 +17,7 @@
     "maxStoredSize": 255,
     "recommendedMaxFps": 50,
     "targets": {
-        "uno": {
+        "flash": {
             "note": "frames in flash (output/*.h), played by video::FlashPlayer",
             "palettes": [16, 256, 565],
             "recommendedPalettes": [16, 256],
@@ -26,9 +26,9 @@
             "recommendedMaxBytes": 12000,
             "useKeyframe": true
         },
-        "mac": {
-            "note": "frames stay on the computer (output/mac/*.h), stream.py sends them to video::StreamPlayer; the board only has the size and the path (output/*.h); 256 colors would need 512 B RAM on the board",
-            "palettes": [16, 565],
+        "stream": {
+            "note": "frames stay on the computer (in output/*.h, after #if 0), stream.py sends them to video::StreamPlayer; the board only has the size and the path (output/*.h); palette 256 works (the board keeps it in RAM taken at run time, 2 bytes a color), but warns",
+            "palettes": [16, 256, 565],
             "recommendedPalettes": [16, 565],
             "defaultPalette": 565,
             "baud": 1000000,

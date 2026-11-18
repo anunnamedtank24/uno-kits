@@ -1,0 +1,190 @@
+#include <Arduino.h>
+#include "Uno_interrupt_pin.h"
+#include "Uno_serial.h"
+#include "Uno_tone.h"
+#include "NEC.h"
+#include "buzzer.h"
+#include "audio.h"
+
+// UNO + infrared receiver + passive buzzer: play the remote like a piano, OK plays it back
+//
+//   0 ~ 9: A3 B3 C4 D4 E4 F4 G4 A4 B4 C5 (the white keys from A3 to C5), sounding while the key is held
+//   the first key pressed starts a recording: every note and every silence between notes, in ms
+//   OK: plays the recording back (keys are ignored meanwhile), then the next key starts a new recording
+//
+// a remote has no "released": while a key is held it repeats its code every 108 ms, and the key counts as
+// released when the repeats stop (Receiver::HOLD_TIMEOUT_MS = 150 ms after the last one). So a note sounds
+// a little longer than the finger was on the key (and a short tap ~150 ms); the recording keeps what was
+// heard, so the replay sounds the same
+// every event also goes to the USB serial: pio device monitor
+
+// ---------- settings ----------
+
+// wiring: infrared receiver + -> 5V, - -> GND
+constexpr uint8_t IR_PIN = 2;               // S (OUT): any pin (pin-change interrupt)
+constexpr uint8_t IR_QUEUE = 4;             // codes kept while the program is busy
+// wiring: passive buzzer - -> GND (a 3-pin module: see Speaker below)
+constexpr uint8_t BUZZER_PIN = 9;           // + (through 100 Ω); any pin, D9 / D10 are driven by Timer1 itself
+constexpr uint32_t BAUD = 1000000;          // USB serial: the same as monitor_speed in platformio.ini
+
+using Remote = NEC::Remote17KeyNumbersTop;  // or Remote17KeyArrowsTop: see src/week_5_NEC/tests/1_receiver.cpp
+constexpr uint8_t VOLUME = 1;               // 0 = silent ~ 255 = the loudest
+constexpr uint8_t MAX_STEPS = 120;          // notes + silences kept (4 bytes each)
+// the key's note: 0 = A3 ... 9 = C5
+const uint16_t NOTE_HZ[10] = {
+    audio::noteHz(audio::A, 3), audio::noteHz(audio::B, 3), audio::noteHz(audio::C, 4), audio::noteHz(audio::D, 4),
+    audio::noteHz(audio::E, 4), audio::noteHz(audio::F, 4), audio::noteHz(audio::G, 4), audio::noteHz(audio::A, 4),
+    audio::noteHz(audio::B, 4), audio::noteHz(audio::C, 5),
+};
+const char *const NOTE_NAMES[10] = {"A3", "B3", "C4", "D4", "E4", "F4", "G4", "A4", "B4", "C5"};
+
+// ---------- parts ----------
+
+using Receiver = NEC::HX1838<Uno::UnoInterruptPin<IR_PIN>, IR_QUEUE>;
+using Link = Uno::UnoSerial<BAUD>;
+using Speaker = buzzer::PassiveBuzzer2Pins<Uno::UnoTone<BUZZER_PIN>>;   // 3-pin module: PassiveBuzzer3Pins<Uno::UnoTone<BUZZER_PIN, true>>
+audio::Player<Speaker> speaker;
+
+// a recording: hz 0 = silence
+struct Step {
+    uint16_t hz;
+    uint16_t ms;
+};
+Step steps[MAX_STEPS];
+uint8_t stepCount = 0;
+
+enum State : uint8_t { WAITING, RECORDING, REPLAYING };
+State state = WAITING;
+
+int8_t sounding = -1;          // the key sounding now, -1 = none
+uint32_t noteStartMs = 0;
+uint32_t silenceStartMs = 0;   // when the last note ended (RECORDING)
+uint8_t replayIndex = 0;
+uint32_t replayStepMs = 0;     // when the step playing back started
+
+// ---------- recording ----------
+
+// false when full (the rest of the playing is not kept)
+bool addStep(uint16_t hz, uint32_t ms) {
+    if (stepCount >= MAX_STEPS || ms == 0) {
+        return false;
+    }
+    steps[stepCount].hz = hz;
+    steps[stepCount].ms = (uint16_t)(ms > 65535 ? 65535 : ms);
+    stepCount++;
+    return true;
+}
+
+void startNote(int8_t key, uint32_t now) {
+    if (state == WAITING) {
+        state = RECORDING;
+        stepCount = 0;
+        Link::printText("recording (OK plays it back)\r\n");
+    } else if (stepCount > 0) {
+        addStep(audio::REST, now - silenceStartMs);
+    }
+    sounding = key;
+    noteStartMs = now;
+    speaker.tone(NOTE_HZ[key]);
+    Link::printText(NOTE_NAMES[key]);
+}
+
+void endNote(uint32_t now) {
+    if (sounding < 0) {
+        return;
+    }
+    speaker.stop();
+    uint32_t ms = now - noteStartMs;
+    if (!addStep(NOTE_HZ[sounding], ms)) {
+        Link::printText(" (full, not kept)");
+    }
+    Link::printText(" ");
+    Link::printNumber(ms);
+    Link::printText(" ms\r\n");
+    sounding = -1;
+    silenceStartMs = now;
+}
+
+// ---------- replay ----------
+
+void startReplay(uint32_t now) {
+    endNote(now);
+    Link::printText("replay: ");
+    Link::printNumber(stepCount);
+    Link::printText(" steps\r\n");
+    state = REPLAYING;
+    replayIndex = 0;
+    replayStepMs = now;
+    if (steps[0].hz != audio::REST) {
+        speaker.tone(steps[0].hz);
+    }
+}
+
+// the next step when this one's time is over (timed from where it should have started: no drift)
+void updateReplay(uint32_t now) {
+    if (now - replayStepMs < steps[replayIndex].ms) {
+        return;
+    }
+    replayStepMs += steps[replayIndex].ms;
+    replayIndex++;
+    if (replayIndex >= stepCount) {
+        speaker.stop();
+        state = WAITING;
+        stepCount = 0;
+        Link::printText("done: the next key starts a new recording\r\n");
+        return;
+    }
+    if (steps[replayIndex].hz == audio::REST) {
+        speaker.stop();
+    } else {
+        speaker.tone(steps[replayIndex].hz);
+    }
+}
+
+// ---------- keys ----------
+
+void onKey(NEC::Key key, uint8_t repeats, uint32_t now) {
+    if (state == REPLAYING) {
+        return;
+    }
+    if (key == NEC::KEY_OK) {
+        if (repeats == 0 && state == RECORDING) {
+            startReplay(now);
+        }
+        return;
+    }
+    int8_t digit = NEC::keyDigit(key);
+    if (digit < 0) {
+        return;
+    }
+    // a repeat of the key sounding: it is still held
+    if (repeats > 0 && digit == sounding) {
+        return;
+    }
+    // a new press (another key, or the same one pressed again): the note before ends here
+    endNote(now);
+    startNote(digit, now);
+}
+
+// ---------- main ----------
+
+void setup() {
+    Link::init();
+    speaker.init();
+    speaker.setVolume(VOLUME);
+    Receiver::init();
+    Link::printText("\r\nremote piano: 0 ~ 9 = A3 ~ C5, OK = play back\r\n");
+}
+
+void loop() {
+    uint32_t now = millis();
+    NEC::Code code;
+    while (Receiver::read(code)) {
+        onKey(Remote::toKey(code), code.repeats, now);
+    }
+    if (state == REPLAYING) {
+        updateReplay(now);
+    } else if (sounding >= 0 && !Receiver::isHeld()) {
+        endNote(now);
+    }
+}

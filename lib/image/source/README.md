@@ -1,23 +1,23 @@
 # image/source
 
-在電腦上跑的工具。需要 Python 3、`pip install pillow pyserial`。HEIC 可以另外裝 `pillow-heif`，沒裝的話 macOS 會用內建的 `sips`。都在 `lib/image` 裡執行，加 `-B` 不產生 `__pycache__`。
+在電腦上跑的工具。需要 Python 3、`pip install pillow`（串流另外要 `pyserial`）。HEIC 可以另外裝 `pillow-heif`，沒裝的話 macOS 會用內建的 `sips`。都在 `lib/image` 裡執行。
 
 ## 檔案
 
 | 檔案 | 作用 |
 |---|---|
-| `config.json` | 兩個目標（uno、mac）的參數範圍、預設值，以及畫圖時間的估計值 |
+| `config.json` | 兩個目標（flash、stream）的參數範圍、預設值，以及畫圖時間的估計值 |
 | `convert.py` | 圖片 → `output/*.h`，並把新產生的那個加進 `output/selected.h` |
-| `check.py` | 檢查 `output/selected.h` |
-| `stream.py` | 不用參數：自動找板子，板子要哪張圖就送哪張 |
+| `check.py` | 檢查 `output/` 的每個檔案：目前的格式、原始檔沒變（`convert.py` 每次轉完會自動跑） |
+| `stream_handler.py` | [lib/stream](../../stream/README.md) 的 `stream.py` 用它讀圖片、回答板子的 `'I'`；不單獨執行 |
 
 ## 用法
 
 ```bash
 cd lib/image
-python -B source/convert.py assets/sunset.jpg output --target uno --fit 120x80 --scale 2 --palette 16
-python -B source/check.py
-python -B source/stream.py
+python source/convert.py assets/sunset.jpg output --target flash --fit 120x80 --scale 2 --palette 16
+python source/check.py
+cd ../.. && python lib/stream/source/stream.py     # 串流：圖片、動畫、聲音都是它
 ```
 
 ## convert.py
@@ -35,14 +35,14 @@ python -B source/stream.py
 
 ### 目標
 
-`--target` 必填，可以給一個或兩個：
+`--target` 可以給一個或兩個，省略時是 `flash`：
 
-| | `--target uno` | `--target mac` | `--target uno mac` |
+| | `--target flash` | `--target stream` | `--target flash stream` |
 |---|---|---|---|
-| 像素在哪 | `output/x.h`，燒進 Flash | `output/mac/x.h`，留在 Mac | `output/x.h` |
+| 像素在哪 | `output/x.h`，燒進 Flash | `output/x.h` 的 `#if 0` 裡，留在電腦 | `output/x.h` |
 | `output/x.h` 裡有什麼 | 像素 + 路徑 | 只有尺寸、顏色、路徑 | 像素 + 路徑 |
-| 顏色（`--palette`） | 2、16（預設）、256、565（警告） | 2、16、565（預設） | 2、16（預設）、565（警告） |
-| 範圍 | uno 的 | mac 的 | 兩者都允許的（交集） |
+| 顏色（`--palette`） | 2、16（預設）、256、565（警告） | 2、16、256（警告：調色盤先傳、板子執行時配置 RAM）、565（預設） | 2、16（預設）、256、565（警告） |
+| 範圍 | flash 的 | stream 的 | 兩者都允許的（交集） |
 
 ### 尺寸（解析度）
 
@@ -68,7 +68,7 @@ python -B source/stream.py
 |---|---|
 | `--palette 2` | 黑白，1 bit。灰階 ≥ `--threshold`（預設 128）是白；`--dither` 用 Floyd–Steinberg 抖色；`--invert` 黑白反過來 |
 | `--palette 16` | 調色盤最多 16 色（median cut），4 bits |
-| `--palette 256` | 調色盤最多 256 色，1 byte。只有 uno：調色盤直接從 Flash 讀 |
+| `--palette 256` | 調色盤最多 256 色，1 byte。flash：調色盤直接從 Flash 讀；stream：調色盤先傳，板子放在執行時配置的 RAM（警告） |
 | `--palette 565` | 每個像素自己的 RGB565 顏色，2 bytes |
 | `--colors N` | 調色盤只用 N 色（16 / 256） |
 | `--dither` | 抖色（2 / 16 / 256）：漸層比較平滑，但 runs 變短 |
@@ -86,7 +86,7 @@ python -B source/stream.py
 | `--max-bytes N` | 資料超過 N 就把尺寸乘 0.85 重做，直到放得下；小到 4 px 還放不下就報錯 |
 | `--name` | 自訂檔名和 struct 名稱 |
 
-- **檔名**：`{檔名}_{uno|mac|uno_mac}_{寬}x{高}_palette_{2|16|256|565}.h`，struct 同名。
+- **檔名**：`{檔名}_{flash|stream|flash_stream}_{寬}x{高}_palette_{2|16|256|565}.h`，struct 同名。`assets/` 外面的檔案前面加上資料夾；撞名（例如只差 `--dither`）加 `_2`、`_3`，不蓋掉別的（見 [output/README.md](../output/README.md#名稱和來源)）。
 
 ### 流程
 
@@ -99,7 +99,7 @@ python -B source/stream.py
    - 2：轉灰階，再用門檻或抖色變成黑白。
    - 16 / 256：median cut 做調色盤，可以加抖色。
 4. **編碼**：raw 和 runs，依 `--encoding` 選。
-5. **估計時間**：每段（`SEGMENT` = 32 個螢幕像素）約 900 週期，每個螢幕像素約 60 週期，每 byte 讀取 uno 6 週期、mac 176 週期（1 Mbaud），數值在 `config.json`。
+5. **估計時間**：每段（`SEGMENT` = 32 個螢幕像素）約 900 週期，每個螢幕像素約 60 週期，每 byte 讀取 flash 6 週期、stream 176 週期（1 Mbaud），數值在 `config.json`。
 
 產生的檔案格式見 [output/README.md](../output/README.md)。
 
@@ -111,6 +111,7 @@ python -B source/stream.py
 | 超過格式或板子的硬限制（存的寬高 ≤ 240、scale ≤ 8） | 錯誤，並提示可以調哪個參數 |
 | 編碼後用 Python 版的解碼器解回來不一致 | 錯誤（程式的問題），不產生檔案 |
 | `--max-bytes` 小到 4 px 還放不下 | 錯誤 |
+| `--target flash` 時超過 UNO 的 Flash（32256 bytes） | 錯誤：`--max-bytes`、小一點的尺寸或調色盤，或 `--target stream` |
 | 螢幕上超過 240×240 | 警告：會裁切，多的資料是浪費 |
 | 超出 `config.json` 的建議範圍 | 警告 |
 
@@ -125,38 +126,29 @@ python -B source/stream.py
 | 錯誤 | 檔案的 `// format:` 不是目前的 `FORMAT_VERSION`（1） |
 | 錯誤 | 檔案裡沒有 `struct picture::{檔名}` |
 | 錯誤 | 原始圖片跟產生時不一樣了（比對 sha256） |
-| 錯誤 | mac 描述檔指到的 `output/mac/` 像素檔不存在、格式不對或過時 |
+| 錯誤 | 檔案裡沒有像素（`--target stream` 的在 `#if 0` 裡） |
 | 警告 | 原始圖片找不到 |
 | 警告 | `output/` 裡有沒被選到的 .h |
 
-## stream.py
+## stream_handler.py
 
-- **不用參數**：自動找 `/dev/cu.usbmodem*` 等串口，沒插板子就等，拔掉重插也會自己接回。
-- **選用參數**：`--port`、`--baud`（預設讀 `config.json`）。
-- **安全**：只開 `lib/image` 裡面的 `.h`。
-- **燒錄時自動放開串口**：跟 video 的一樣，每 0.3 秒檢查有沒有 avrdude 或 `pio run -t upload` 在跑。
-- **打開串口會讓板子重置**：建議先開 `stream.py`，再燒錄（詳見 [video/source/README.md](../../video/source/README.md#streampy)）。
-- **跟 video 的 `stream.py` 二選一**：兩個都要用同一個串口。
+[lib/stream](../../stream/README.md) 的 `stream.py`（找板子、燒錄時放開串口、`'D'` / `'R'` 一塊一塊送）收到 `'I'` 時交給它：
+
+- **安全**：只開 `lib/image` 裡面的 `.h`；`--target stream`（像素在 `#if 0` 裡）和 `--target flash` 的檔案都可以。
 - **檢查檔案**：讀進來時會把像素解碼一次，壞掉的檔案直接回答錯誤，不會送到一半。
 - **每張都印出來**：送了幾個 byte、花幾秒。
 
-### 串流協定
-
-跟 video 一樣的原則：**Mac 主動送的資料永遠不超過 1 byte**（UNO 的 UART 只能暫存 2 個 byte）。
+### 圖片的回答
 
 | 方向 | 內容 |
 |---|---|
-| 板子 → Mac | `'I'`、CHUNK、路徑長度、路徑 |
-| Mac → 板子 | `'D'`（回答準備好了） |
-| 板子 → Mac | `'R'`（要下一塊），每塊都要一次 |
-| Mac → 板子 | `[長度 1 ～ CHUNK][資料]` |
-
-回答（被一塊一塊拉走）：
+| 板子 → 電腦 | `'I'`、CHUNK、路徑長度、路徑 |
+| 電腦 → 板子 | `'D'`，之後板子用 `'R'` 一塊一塊拉（[lib/stream 的協定](../../stream/INTERFACE.md#協定)） |
 
 | 回答 | 內容 |
 |---|---|
-| `'H'` 圖片 | 寬、高、scaleX、scaleY、顏色模式、編碼、色數、資料長度（uint32）、調色盤（色數 × RGB565，只有 2 / 16 色）、像素 |
-| `'E'` 錯誤 | 代碼（1 找不到、2 讀不懂、3 256 色不能串流）、訊息長度、訊息 |
+| `'H'` 圖片 | 寬、高、scaleX、scaleY、顏色模式、編碼、色數（0 = 256）、資料長度（uint32）、調色盤（色數 × RGB565；565 沒有）、像素 |
+| `'E'` 錯誤 | 代碼（1 找不到、2 讀不懂、3 不能串流）、訊息長度、訊息 |
 
 板子邊收邊畫，所以只需要 CHUNK 大小的緩衝。
 

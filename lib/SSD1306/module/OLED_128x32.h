@@ -8,10 +8,10 @@ namespace SSD1306 {
     // the 0.91" 128x32 I2C OLED module (GND, VCC, SCL, SDA), SSD1306 with charge pump
     // init: the datasheet's software initialization flow (Rev 1.1, application example),
     // with the COM pins of a 128x32 panel (sequential) and the pre-charge for the charge pump
-    template <class Bus>
-    class OLED128x32 : public Frame<Bus, 128, 32> {
+    template <class Bus, class ColorFormat>
+    class OLED128x32 : public Frame<Bus, ColorFormat, 128, 32> {
     public:
-        using Frame<Bus, 128, 32>::Frame;
+        using Frame<Bus, ColorFormat, 128, 32>::Frame;
 
         // composite: Bus init + the init sequence + a cleared panel, then display on
         // flip: false = pins at the top; true = turned 180° (pins at the bottom)
@@ -21,8 +21,8 @@ namespace SSD1306 {
 
     // ================= definitions =================
 
-    template <class Bus>
-    inline bool OLED128x32<Bus>::init(bool flip) {
+    template <class Bus, class ColorFormat>
+    inline bool OLED128x32<Bus, ColorFormat>::init(bool flip) {
         Bus::init();
         this->setDisplayOn(false);
         if (!this->ok()) {

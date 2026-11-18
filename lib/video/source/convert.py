@@ -15,16 +15,16 @@ import check
 
 
 """
-Func: convert an animation or a video to .h (c header) for video::FlashPlayer (--target uno)
-      and / or stream.py (--target mac). also the frame encoder / decoder used by stream.py.
+Func: convert an animation or a video to .h (c header) for video::FlashPlayer (--target flash)
+      and / or stream.py (--target stream). also the frame encoder / decoder used by stream.py.
 Usage:
-    python source/convert.py assets/orbit.gif output --target uno --width 120 --scale 2 --palette 16 --colors 8
-    python source/convert.py assets/orbit.gif output --target uno --fit 240x240 --scale 2 --max-bytes 8000
-    python source/convert.py assets/orbit.gif output --target mac --fit 240x240 --palette 565
-    python source/convert.py assets/orbit.gif output --target uno mac --width 120 --scale 2
+    python source/convert.py assets/orbit.gif output --target flash --width 120 --scale 2 --palette 16 --colors 8
+    python source/convert.py assets/orbit.gif output --target flash --fit 240x240 --scale 2 --max-bytes 8000
+    python source/convert.py assets/orbit.gif output --target stream --fit 240x240 --palette 565
+    python source/convert.py assets/orbit.gif output --target flash stream --width 120 --scale 2
 Output (struct animation::{name}, name = {file}_{target}_{w}x{h}_palette_{p} or --name):
-    --target uno / uno mac: output/{name}.h with the frames (FlashPlayer plays it, StreamPlayer can open it)
-    --target mac:           output/mac/{name}.h with the frames (never compiled in, stream.py reads it)
+    --target flash / flash stream: output/{name}.h with the frames (FlashPlayer plays it, StreamPlayer can open it)
+    --target stream:               output/{name}.h: size + path for the board, the frames after it in #if 0 (stream.py reads them)
                             + output/{name}.h without frames: size, colors, duration, path of the frames
     every output/{name}.h is added to output/selected.h, then selected.h is checked (source/check.py)
     every setting is written at the top of the files, whatever the name says
@@ -49,7 +49,7 @@ Size (all sizes are on the screen, after scale):
     --resample              nearest (pixel art) / bilinear / bicubic / lanczos (default)
 Colors:
     --palette 16            one palette of up to 16 colors, 1 byte per run
-    --palette 256           one palette of up to 256 colors, 2 bytes per run (uno only: palette stays in flash)
+    --palette 256           one palette of up to 256 colors, 2 bytes per run (flash only: palette stays in flash)
     --palette 565           every pixel its own RGB565 color, 3 bytes per run
     --colors N              fewer colors in the palette (16 / 256 only), --dither for gradients
     --mono                  black and white only (palette 16 with 0x0000 / 0xFFFF), for OLEDs:
@@ -59,9 +59,9 @@ Frame rate:
     --min-fps F             lower limit for --max-bytes, and a warning if the board cannot draw that fast
     --max-bytes N           too big: lower the fps (--reduce fps) or the size (--reduce size) until it fits
 Frames:
-    frame 0 and every keyframe-th frame (uno only): I frame (one window = the whole animation)
+    frame 0 and every keyframe-th frame (flash only): I frame (one window = the whole animation)
     other frames: the cheapest of changed windows / one window around every change / I frame
-    cost = draw time (cycles) + bytes * byteCycles (flash read for uno, serial for mac)
+    cost = draw time (cycles) + bytes * byteCycles (flash read for flash, serial for stream)
 """
 
 
@@ -69,8 +69,8 @@ CONFIG_PATH = Path(__file__).resolve().parent/"config.json"
 CONFIG = json.loads(CONFIG_PATH.read_text())
 BOARD = CONFIG["board"]
 TARGETS = CONFIG["targets"]
-TARGET_BITS = {"uno": 1, "mac": 2} # video::TARGET_UNO / TARGET_MAC
-MAC_DIR_NAME = "mac" # output/mac/: frames for stream.py only
+FLASH_BYTES = 32256 # UNO flash for the program
+TARGET_BITS = {"flash": 1, "stream": 2} # video::TARGET_FLASH / TARGET_STREAM
 
 PILLOW_SUFFIXES = (".gif", ".webp", ".png", ".apng")
 FFMPEG_SUFFIXES = (".mp4", ".mov", ".m4v", ".webm", ".mkv", ".avi")
@@ -99,7 +99,7 @@ RESAMPLES = {
 @dataclass
 class Settings:
     # everything one conversion needs, after the arguments are resolved
-    targets: list[str] # "uno", "mac" or both
+    targets: list[str] # "flash", "stream" or both
     byte_cycles: float
     palette: int
     colors: int | None
@@ -626,7 +626,7 @@ def get_settings_str(settings: Settings, video_info: str, delays: list[int], pal
     if settings.mono:
         way = "dither" if settings.dither else f"threshold {settings.threshold}"
         color_count = f"mono (black / white), {way}, invert {'on' if settings.invert else 'off'}"
-    time_name = "draw" if "uno" in settings.targets else "draw + send"
+    time_name = "draw" if "flash" in settings.targets else "draw + send"
     target_lines = [f"target      {target}: {TARGETS[target]['note']}" for target in settings.targets]
     lines = target_lines + [
         f"video       {video_info}",
@@ -668,7 +668,7 @@ def get_c_start_str(name: str, command: str, video_path: Path, settings_str: str
     c_str += f"#ifndef ANIMATION_{name.upper()}_H\n"
     c_str += f"#define ANIMATION_{name.upper()}_H\n\n"
     c_str += "// generated by convert.py, do not edit\n"
-    c_str += f"// {command}\n"
+    c_str += command
     c_str += check.get_format_str()
     c_str += check.get_source_str(video_path)
     c_str += settings_str + "\n"
@@ -719,7 +719,7 @@ def get_c_data_str(name: str, command: str, video_path: Path, settings: Settings
     # uint16_t for FlashPlayer; a frames file for stream.py only may be bigger (it never goes into flash)
     offset_type = "uint16_t"
     if offset > 0xFFFF:
-        if "uno" in settings.targets:
+        if "flash" in settings.targets:
             raise ValueError(f"Frame data is {offset} bytes, offsets must fit in uint16_t (65535): "
                              "use --max-bytes, a smaller size or fewer frames.")
         offset_type = "uint32_t"
@@ -736,27 +736,25 @@ def get_c_data_str(name: str, command: str, video_path: Path, settings: Settings
                                     get_c_list_str("uint8_t", "frames", get_frames_str(all_frame_bytes)), "frames")
 
     usages = []
-    if "uno" in settings.targets:
+    if "flash" in settings.targets:
         usages.append(f"video::FlashPlayer::start<animation::{name}>(x, y)")
-    if "mac" in settings.targets:
+    if "stream" in settings.targets:
         usages.append(f"video::StreamPlayer::open<animation::{name}>(x, y), with stream.py running")
-    if settings.targets == ["mac"]:
+    if settings.targets == ["stream"]:
         usages = [f"frames for stream.py only, never included: video::StreamPlayer::open<animation::{name}>(x, y)"]
     return get_c_start_str(name, command, video_path, settings_str) + get_c_struct_str(name, "\n".join(usages), c_const_str)
 
 
 def get_c_descriptor_str(name: str, command: str, video_path: Path, settings: Settings, settings_str: str,
                          palette: list[int], all_frame_bytes: list, delays: list[int], path: str) -> str:
-    # --target mac: no frames, only what the board needs to open it
+    # --target stream: no frames, only what the board needs to open it
     c_const_str = get_c_info_str(settings, palette, all_frame_bytes, delays, path)
     usage = f"video::StreamPlayer::open<animation::{name}>(x, y), with stream.py running\nthe frames are in {path}"
     return get_c_start_str(name, command, video_path, settings_str) + get_c_struct_str(name, usage, c_const_str)
 
 
 def get_name(video_path: Path, settings: Settings) -> str:
-    video_name = "".join(c if c.isalnum() else "_" for c in video_path.stem.lower())
-    if video_name[0].isdigit():
-        video_name = "_" + video_name
+    video_name = check.get_file_name(video_path)
     screen_width = settings.stored_width*settings.scale_x
     screen_height = settings.stored_height*settings.scale_y
     mono = "_mono" if settings.mono else ""
@@ -839,14 +837,14 @@ def get_identifier(value: str) -> str:
 def get_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Convert an animation (.gif / .webp / .png) or a video (.mp4 / .mov / .webm ...) to a c header "
-                    "for video::FlashPlayer (--target uno) and / or video::StreamPlayer (--target mac).",
+                    "for video::FlashPlayer (--target flash) and / or video::StreamPlayer (--target stream).",
         epilog=(
             "examples:\n"
-            "  python source/convert.py assets/orbit.gif output --target uno --width 120 --scale 2 --palette 16 --colors 8\n"
-            "  python source/convert.py assets/orbit.gif output --target uno --fit 240x240 --scale 2 --max-bytes 8000\n"
-            "  python source/convert.py assets/orbit.gif output --target mac --fit 240x240 --palette 565\n"
-            "  python source/convert.py assets/orbit.gif output --target uno mac --width 120 --scale 2\n"
-            "  python source/convert.py clip.mp4 output --target uno --fit 64x64 --mono --start 3 --duration 2 --max-fps 10\n"
+            "  python source/convert.py assets/orbit.gif output --target flash --width 120 --scale 2 --palette 16 --colors 8\n"
+            "  python source/convert.py assets/orbit.gif output --target flash --fit 240x240 --scale 2 --max-bytes 8000\n"
+            "  python source/convert.py assets/orbit.gif output --target stream --fit 240x240 --palette 565\n"
+            "  python source/convert.py assets/orbit.gif output --target flash stream --width 120 --scale 2\n"
+            "  python source/convert.py clip.mp4 output --target flash --fit 64x64 --mono --start 3 --duration 2 --max-fps 10\n"
             "  python source/check.py    (checks output/selected.h)\n"
             "ranges and defaults per target: source/config.json"
         ),
@@ -854,9 +852,9 @@ def get_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("video_path", help="animation or video: " + " ".join(SUFFIXES))
     parser.add_argument("output_dir_path", help="dir for the generated .h (made if missing)")
-    parser.add_argument("--target", choices=sorted(TARGETS), nargs="+", required=True,
-                        help="uno: frames in flash (FlashPlayer), mac: frames on the computer (StreamPlayer + stream.py), "
-                             "both: within the ranges of both")
+    parser.add_argument("--target", choices=sorted(TARGETS), nargs="+", default=["flash"],
+                        help="flash: frames in flash (FlashPlayer), stream: frames on the computer (StreamPlayer + stream.py), "
+                             "both: within the ranges of both (default flash)")
     parser.add_argument("--name", type=get_identifier, help="file / struct name instead of the default (every setting is in the file anyway)")
 
     size_group = parser.add_argument_group("size on the screen (one way; --width and --height may go together)")
@@ -884,7 +882,7 @@ def get_parser() -> argparse.ArgumentParser:
     frame_group.add_argument("--min-fps", type=get_positive_float, help="lower limit for --max-bytes; warns if the board cannot reach it")
     frame_group.add_argument("--max-bytes", type=get_positive_int, help="lower the fps or the size until the data fits")
     frame_group.add_argument("--reduce", choices=("fps", "size"), default="size", help="what --max-bytes lowers first (default size)")
-    frame_group.add_argument("--keyframe", type=get_non_negative_int, default=0, help="uno: I frame every N frames, to catch up when late (default 0)")
+    frame_group.add_argument("--keyframe", type=get_non_negative_int, default=0, help="flash: I frame every N frames, to catch up when late (default 0)")
     frame_group.add_argument("--tile", type=get_positive_int, default=8, help="tile size in px for finding changed areas (default 8)")
     return parser
 
@@ -892,7 +890,7 @@ def get_parser() -> argparse.ArgumentParser:
 def check_args(parser: argparse.ArgumentParser, args: argparse.Namespace) -> list[str]:
     # errors stop here, warnings are returned
     warnings = []
-    args.target = [target for target in ("uno", "mac") if target in args.target]
+    args.target = [target for target in ("flash", "stream") if target in args.target]
     target = get_target_config(args.target)
     target_str = " ".join(args.target)
     size_ways = [way for way in ("resize", "fit", "fill") if getattr(args, way) is not None]
@@ -929,7 +927,11 @@ def check_args(parser: argparse.ArgumentParser, args: argparse.Namespace) -> lis
         args.palette = target["defaultPalette"]
     if args.palette not in target["palettes"]:
         parser.error(f"--palette {args.palette} is not possible for --target {target_str} (config.json: {target['palettes']})")
-    if args.palette not in target["recommendedPalettes"]:
+    if args.palette == 256 and "stream" in args.target:
+        warnings.append("--palette 256 with --target stream: the board waits for the whole palette (512 bytes) before "
+                        "the first pixel and keeps it in RAM taken at run time (2 bytes a color for RGB565, more for "
+                        "18-bit screens), which the compiler's RAM figure does not show; 16 or 565 need none")
+    elif args.palette not in target["recommendedPalettes"]:
         warnings.append(f"--palette {args.palette} with --target {target_str} makes a lot of data")
     if args.colors is not None:
         if args.palette == 565:
@@ -952,20 +954,20 @@ def check_args(parser: argparse.ArgumentParser, args: argparse.Namespace) -> lis
 
 
 def get_target_config(targets: list[str]) -> dict:
-    # one target: its ranges; both: what both allow (the stricter limit, the uno costs)
+    # one target: its ranges; both: what both allow (the stricter limit, the flash costs)
     if len(targets) == 1:
         return TARGETS[targets[0]]
-    uno = TARGETS["uno"]
-    mac = TARGETS["mac"]
-    palettes = [palette for palette in uno["palettes"] if palette in mac["palettes"]]
-    default_palette = uno["defaultPalette"] if uno["defaultPalette"] in palettes else palettes[0]
+    flash = TARGETS["flash"]
+    stream = TARGETS["stream"]
+    palettes = [palette for palette in flash["palettes"] if palette in stream["palettes"]]
+    default_palette = flash["defaultPalette"] if flash["defaultPalette"] in palettes else palettes[0]
     return {
         "palettes": palettes,
-        "recommendedPalettes": [palette for palette in uno["recommendedPalettes"] if palette in mac["recommendedPalettes"]],
+        "recommendedPalettes": [palette for palette in flash["recommendedPalettes"] if palette in stream["recommendedPalettes"]],
         "defaultPalette": default_palette,
-        "byteCycles": uno["byteCycles"],
-        "recommendedMaxBytes": uno["recommendedMaxBytes"],
-        "useKeyframe": uno["useKeyframe"],
+        "byteCycles": flash["byteCycles"],
+        "recommendedMaxBytes": flash["recommendedMaxBytes"],
+        "useKeyframe": flash["useKeyframe"],
     }
 
 
@@ -1034,7 +1036,7 @@ def convert_video_to_h(args: argparse.Namespace, command: str, warnings: list[st
         if args.max_bytes is None or data_bytes <= args.max_bytes:
             break
 
-        print(f"[Info] {data_bytes} bytes > --max-bytes {args.max_bytes} "
+        print(f"[INFO] {data_bytes} bytes > --max-bytes {args.max_bytes} "
               f"({settings.stored_width} x {settings.stored_height} px, {get_fps(delays):.1f} fps), lowering")
         reduced = False
         for way in reduce_order:
@@ -1052,50 +1054,49 @@ def convert_video_to_h(args: argparse.Namespace, command: str, warnings: list[st
             raise ValueError(f"cannot fit --max-bytes {args.max_bytes}: smallest try is {data_bytes} bytes "
                              f"(--min-fps {args.min_fps} and size {MIN_STORED_SIZE} px reached)")
     warnings += size_warnings
+    if "flash" in args.target and data_bytes > FLASH_BYTES:
+        raise ValueError(f"{data_bytes} bytes: more than the UNO's flash ({FLASH_BYTES}); make it smaller "
+                         f"(--max-bytes, a smaller size or palette) or use --target stream")
 
     reachable_fps = get_reachable_fps(all_frame_bytes, delays)
     fps = get_fps(delays)
     if reachable_fps < fps*0.95:
-        way = "FlashPlayer jumps to I frames or slows down" if "uno" in args.target else "stream.py skips frames"
+        way = "FlashPlayer jumps to I frames or slows down" if "flash" in args.target else "stream.py skips frames"
         warnings.append(f"the board reaches ~{reachable_fps:.1f} fps of {fps:.1f} ({way})")
     if args.min_fps is not None and reachable_fps < args.min_fps:
         warnings.append(f"the board reaches ~{reachable_fps:.1f} fps, below --min-fps {args.min_fps}")
     if target["recommendedMaxBytes"] is not None and data_bytes > target["recommendedMaxBytes"]:
         warnings.append(f"{data_bytes} bytes is above {target['recommendedMaxBytes']} (config.json) for --target {' '.join(args.target)}")
 
-    name = args.name or get_name(video_path, settings)
+    name = args.name or check.get_free_name(output_dir_path, get_name(video_path, settings), video_path, command)
     output_file_path = output_dir_path/(name + ".h")
     settings_str = get_settings_str(settings, video_info, delays, palette, data_bytes, all_frame_bytes, reachable_fps)
-    if args.target == ["mac"]:
-        # frames in output/mac/ (never included), the board gets a small file with the path
-        data_file_path = output_dir_path/MAC_DIR_NAME/(name + ".h")
-        path = get_lib_relative_str(data_file_path)
-        files = [
-            (data_file_path, get_c_data_str(name, command, video_path, settings, settings_str, palette, all_frame_bytes, delays, path)),
-            (output_file_path, get_c_descriptor_str(name, command, video_path, settings, settings_str, palette, all_frame_bytes, delays, path)),
-        ]
+    path = get_lib_relative_str(output_file_path)
+    if args.target == ["stream"]:
+        files = [(output_file_path, check.get_stream_file_str(
+            get_c_descriptor_str(name, command, video_path, settings, settings_str, palette, all_frame_bytes, delays, path),
+            get_c_data_str(name, command, video_path, settings, settings_str, palette, all_frame_bytes, delays, path)))]
     else:
-        path = get_lib_relative_str(output_file_path)
         files = [(output_file_path, get_c_data_str(name, command, video_path, settings, settings_str, palette, all_frame_bytes, delays, path))]
     if path.startswith("/"):
         warnings.append(f"{path} is outside lib/video: stream.py only opens files inside lib/video")
 
-    print(f"[Info] {name}:")
+    print(f"[INFO] {name}:")
     print("\n".join(" "*4 + line[5:] for line in settings_str.splitlines()[1:]))
     for warning in warnings:
-        print(f"[Warning] {warning}")
+        print(f"[WARNING] {warning}")
     for file_path, c_str in files:
         file_path.parent.mkdir(parents=True, exist_ok=True)
         if file_path.exists():
-            print(f"[Info] Replaced the old {file_path.name}")
+            print(f"[INFO] Replaced the old {file_path.name}")
         with open(file_path, "w") as f:
             f.write(c_str)
-        print(f"[Success] Saved as: {file_path}")
+        print(f"[SUCCESS] Saved as: {file_path}")
 
     if check.add_selected(output_dir_path, output_file_path):
-        print(f"[Success] Added to {check.SELECTED_NAME}")
+        print(f"[SUCCESS] Added to {check.SELECTED_NAME}")
     if output_dir_path != (check.LIB_DIR_PATH/"output").resolve():
-        print(f"[Warning] video.h includes {check.LIB_DIR_PATH.name}/output/{check.SELECTED_NAME}, not this dir")
+        print(f"[WARNING] video.h includes {check.LIB_DIR_PATH.name}/output/{check.SELECTED_NAME}, not this dir")
     return check.print_check(output_dir_path)
 
 
@@ -1103,7 +1104,7 @@ def main():
     parser = get_parser()
     args = parser.parse_args()
     warnings = check_args(parser, args)
-    command = " ".join([Path(args.video_path).name] + sys.argv[2:])
+    command = check.get_options_str(check.get_options(sys.argv[1:], [args.video_path, args.output_dir_path]))
     try:
         is_fine = convert_video_to_h(args, command, warnings)
     except (ValueError, OSError) as e:

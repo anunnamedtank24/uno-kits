@@ -6,7 +6,10 @@
 //   ranger.h  ultrasonic::Ranger<Trigger, Echo, MIN_MM, MAX_MM>: Trig pulse, Echo timed by its interrupt, mm
 // module/  the parts you buy
 //   HC_SR04.h  HCSR04<Trigger, Echo>  VCC, Trig, Echo, GND; 2 ~ 400 cm
+// tool/  what is often built on it
+//   median.h   Median<Ranger, N>: the median of the last N measurements (steadier)
 #include "ranger.h"
 #include "module/HC_SR04.h"
+#include "tool/median.h"
 
 #endif

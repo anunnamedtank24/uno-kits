@@ -1,0 +1,107 @@
+#include <Arduino.h>
+#include "Uno_I2C.h"
+#include "Uno_tone.h"
+#include "SSD1306.h"
+#include "graphics.h"
+#include "font.h"
+#include "image.h"
+#include "video.h"
+#include "buzzer.h"
+#include "audio.h"
+#include "color.h"
+
+// UNO + 128x64 I2C OLED + passive buzzer: fonts, pictures, animations and sounds straight from files,
+// converted while the program is built (no convert.py by hand, the files can be anywhere)
+//
+// FONT / PICTURE / ANIMATION / MELODY ("path", "options"): tools/assets.py (platformio.ini extra_scripts) finds
+// them before the build, converts what was never converted into lib/<kind>/output/ (the same as convert.py by hand),
+// and the macro becomes that type
+//   path: absolute, ~/..., relative to this file, the project, or lib/<kind>/assets/
+//   options: those of lib/<kind>/source/convert.py (see the READMEs)
+// the first build converts (a few seconds each), the next ones find it in output/
+
+// ---------- settings ----------
+
+// wiring: OLED VCC -> 5V, GND -> GND
+constexpr uint8_t SCL_PIN = 13;             // SCL: any pin (I2C made by the program)
+constexpr uint8_t SDA_PIN = 11;             // SDA: any pin
+constexpr bool I2C_INTERNAL_PULLUP = true;  // the UNO's ~35 kΩ pull-ups as well (the modules have their own)
+constexpr uint16_t I2C_KHZ = 400;           // 1 ~ 400 (really ~160): lower it if the picture breaks up
+constexpr bool FLIP = false;                // true: the OLED turned 180° (pins at the bottom)
+// wiring: passive buzzer - -> GND
+constexpr uint8_t BUZZER_PIN = 9;           // + (through 100 Ω); any pin, D9 / D10 are driven by Timer1 itself
+
+// the files: change the path or the options, the next build converts them
+// absolute path (a macOS font, spaces are fine)
+using Title = FONT("/System/Library/Fonts/Supplemental/Arial Bold.ttf", "--height 16");
+// relative to this file
+using Moon = PICTURE("../../../lib/image/assets/moon.jpg", "--fit 64x64 --palette 2 --dither");
+// only a name: found in lib/video/assets/
+using Orbit = ANIMATION("orbit.gif", "--width 64 --mono");
+// no options: the converter's defaults (--sound passive --quality medium)
+using Chime = MELODY("success.m4a");
+
+constexpr uint8_t VOLUME = 255;             // 0 = silent ~ 255 = the loudest
+constexpr uint16_t TEXT_MS = 2000;          // how long each part stays
+constexpr uint16_t PICTURE_MS = 2000;
+constexpr uint16_t ANIMATION_MS = 3000;
+constexpr int16_t X = 32;                   // the picture's and the animation's top left: (128 - 64) / 2
+constexpr int16_t Y = 0;
+constexpr uint8_t BW_THRESHOLD = 128;       // a picture's color lights a dot from this brightness on (0 ~ 255)
+
+// ---------- parts ----------
+
+using Bus = Uno::UnoI2C<SCL_PIN, SDA_PIN, I2C_INTERNAL_PULLUP, I2C_KHZ>;
+using ScreenColor = color::BW<BW_THRESHOLD>;       // the OLED: dots on / off
+using Screen = graphics::Canvas<SSD1306::OLED128x64<Bus, ScreenColor>>;
+using Speaker = buzzer::PassiveBuzzer2Pins<Uno::UnoTone<BUZZER_PIN>>;
+
+Screen screen;
+audio::Player<Speaker> speaker;
+constexpr bool ON = true;
+
+void halt() {
+    while (true) {
+    }
+}
+
+// ---------- main ----------
+
+void setup() {
+    speaker.init();
+    speaker.setVolume(VOLUME);
+    if (!screen.init(FLIP)) {
+        halt();
+    }
+}
+
+void loop() {
+    // 1. text in a font from the system
+    screen.clear();
+    screen.setFont<Title>();
+    screen.drawTexts(0, 0, ON, "FONT(...)");
+    screen.drawTexts(0, 24, ON, "Arial Bold 16");
+    screen.display();
+    speaker.play<Chime>();
+    uint32_t start = millis();
+    while (millis() - start < TEXT_MS) {
+        speaker.update();
+    }
+
+    // 2. a picture
+    screen.clear();
+    image::FlashImage<Screen> pictures(screen);
+    pictures.draw<Moon>(X, Y);
+    screen.display();
+    delay(PICTURE_MS);
+
+    // 3. an animation
+    screen.clear();
+    screen.display();
+    video::FlashPlayer<Screen> player(screen);
+    player.start<Orbit>(X, Y);
+    start = millis();
+    while (millis() - start < ANIMATION_MS) {
+        player.update();
+    }
+}

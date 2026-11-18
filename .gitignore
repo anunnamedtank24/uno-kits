@@ -3,4 +3,4 @@
 /.vscode/
 /include/
 /test/
-.DS_Store
+**/.DS_Store

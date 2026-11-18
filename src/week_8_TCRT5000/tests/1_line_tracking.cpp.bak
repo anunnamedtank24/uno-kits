@@ -1,0 +1,71 @@
+#include <Arduino.h>
+#include "Uno_serial.h"
+#include "Uno_pin.h"
+#include "TCRT5000.h"
+
+// UNO + HW-006 line tracking board (TCRT5000): reflecting / dark goes to the USB serial
+//   pio device monitor        (platformio.ini: monitor_speed = BAUD)
+//
+// hold it 1 ~ 2 cm over white paper, then over black tape / ink (or lift it away):
+//   "reflecting  (OUT LOW,  change 3)"    white, near: the board's signal LED is on
+//   "dark        (OUT HIGH, change 4)    was reflecting 1250 ms"
+// and every STATUS_MS a status line, to see the level while nothing changes
+//
+// adjusting: turn the blue potentiometer until white turns the signal LED on and black turns it off
+
+// ---------- settings ----------
+
+// wiring: HW-006 VCC -> 5V, GND -> GND
+constexpr uint8_t OUT_PIN = 4;              // OUT (D0 on some boards): any pin
+constexpr bool ACTIVE_LOW = true;           // OUT is LOW while reflecting (HW-006); the other way round: false
+constexpr uint8_t FILTER_MS = 2;            // a change must stay this long (0 = every change)
+constexpr uint32_t BAUD = 1000000;          // USB serial: the same as monitor_speed in platformio.ini
+
+constexpr uint16_t STATUS_MS = 2000;        // a status line this often
+
+// ---------- parts ----------
+
+using Sensor = TCRT5000::Reflector<Uno::UnoPin<OUT_PIN>, ACTIVE_LOW, FILTER_MS>;   // = TCRT5000::HW006 with the defaults
+using Link = Uno::UnoSerial<BAUD>;
+
+Sensor sensor;
+uint32_t nextStatusMs = 0;
+
+// ---------- test ----------
+
+void printState() {
+    Link::printText(sensor.isReflecting() ? "reflecting  (OUT " : "dark        (OUT ");
+    Link::printText(sensor.readLevel() ? "HIGH, change " : "LOW,  change ");
+    Link::printNumber(sensor.changeCount());
+    Link::printText(")");
+}
+
+// ---------- main ----------
+
+void setup() {
+    Link::init();
+    sensor.init();
+    Link::printText("\r\nHW-006 on ");
+    Link::printPin(OUT_PIN);
+    Link::printText(": white / near = reflecting, black / far = dark\r\n");
+    printState();
+    Link::printText("\r\n");
+    nextStatusMs = millis() + STATUS_MS;
+}
+
+void loop() {
+    uint32_t lastMs = sensor.stateMs();
+    if (sensor.update()) {
+        printState();
+        Link::printText(sensor.isReflecting() ? "    was dark " : "    was reflecting ");
+        Link::printNumber(lastMs);
+        Link::printText(" ms\r\n");
+        nextStatusMs = millis() + STATUS_MS;
+    }
+    if ((int32_t)(millis() - nextStatusMs) >= 0) {
+        nextStatusMs += STATUS_MS;
+        Link::printText("still ");
+        printState();
+        Link::printText("\r\n");
+    }
+}

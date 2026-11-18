@@ -10,7 +10,7 @@
 
 namespace graphics {
     // a screen with every Graphics feature: Text needs Shapes below it
-    // e.g. graphics::Canvas<ST7789::M130T<Bus>>
+    // e.g. graphics::Canvas<ST7789::M130T<Bus, color::RGB565>>; colors: Canvas::ColorFormat::RED ...
     template <class Screen>
     using Canvas = Text<Shapes<Screen>>;
 }

@@ -1,24 +1,24 @@
 # video/source
 
-在電腦上跑的工具。需要 Python 3、`pip install pillow pyserial`；影片（.mp4、.mov、.webm…）另外要 `brew install ffmpeg`。都在 `lib/video` 裡執行，加 `-B` 不產生 `__pycache__`。
+在電腦上跑的工具。需要 Python 3、`pip install pillow`（串流另外要 `pyserial`）；影片（.mp4、.mov、.webm…）另外要 `brew install ffmpeg`。都在 `lib/video` 裡執行。
 
 ## 檔案
 
 | 檔案 | 作用 |
 |---|---|
-| `config.json` | 兩個目標（uno、mac）的參數範圍、預設值，以及畫圖時間的估計值 |
+| `config.json` | 兩個目標（flash、stream）的參數範圍、預設值，以及畫圖時間的估計值 |
 | `convert.py` | 動畫、影片 → `output/*.h`，並把新產生的那個加進 `output/selected.h` |
-| `check.py` | 檢查 `output/selected.h` |
-| `stream.py` | 不用參數：自動找板子，板子要哪個檔案就送哪個 |
+| `check.py` | 檢查 `output/` 的每個檔案：目前的格式、原始檔沒變（`convert.py` 每次轉完會自動跑） |
+| `stream_handler.py` | [lib/stream](../../stream/README.md) 的 `stream.py` 用它讀動畫、計時、送幀（指令 `'O'`、`'N'`、`'P'`、`'S'`、`'J'`、`'V'`、`'L'`）；不單獨執行 |
 
 ## 用法
 
 ```bash
 cd lib/video
-python -B source/convert.py assets/orbit.gif output --target uno --width 120 --scale 2 --palette 16 --colors 8 --keyframe 8
-python -B source/convert.py ~/Movies/clip.mp4 output --target uno --fit 64x64 --mono --start 3 --duration 2 --max-fps 10
-python -B source/check.py
-python -B source/stream.py
+python source/convert.py assets/orbit.gif output --target flash --width 120 --scale 2 --palette 16 --colors 8 --keyframe 8
+python source/convert.py ~/Movies/clip.mp4 output --target flash --fit 64x64 --mono --start 3 --duration 2 --max-fps 10
+python source/check.py
+cd ../.. && python lib/stream/source/stream.py     # 串流：圖片、動畫、聲音都是它
 ```
 
 ## convert.py
@@ -36,14 +36,14 @@ python -B source/stream.py
 
 ### 目標
 
-`--target` 必填，可以給一個或兩個：
+`--target` 可以給一個或兩個，省略時是 `flash`：
 
-| | `--target uno` | `--target mac` | `--target uno mac` |
+| | `--target flash` | `--target stream` | `--target flash stream` |
 |---|---|---|---|
-| 幀資料在哪 | `output/x.h`，燒進 Flash | `output/mac/x.h`，留在 Mac | `output/x.h` |
+| 幀資料在哪 | `output/x.h`，燒進 Flash | `output/x.h` 的 `#if 0` 裡，留在電腦 | `output/x.h` |
 | `output/x.h` 裡有什麼 | 幀資料 + 路徑 | 只有尺寸、時間、路徑 | 幀資料 + 路徑 |
-| 顏色（`--palette`） | 16（預設）、256、565（警告） | 16、565（預設） | 16（預設）、565（警告） |
-| 範圍 | uno 的 | mac 的 | 兩者都允許的（交集） |
+| 顏色（`--palette`） | 16（預設）、256、565（警告） | 16、256（警告：調色盤先傳、板子執行時配置 RAM）、565（預設） | 16（預設）、256、565（警告） |
+| 範圍 | flash 的 | stream 的 | 兩者都允許的（交集） |
 
 ### 時間
 
@@ -77,7 +77,7 @@ python -B source/stream.py
 | 參數 | 說明 |
 |---|---|
 | `--palette 16` | 共用調色盤，最多 16 色，每個 run 1 byte。適合扁平色塊、像素風 |
-| `--palette 256` | 共用調色盤，最多 256 色，每個 run 2 bytes。只有 uno：調色盤直接從 Flash 讀 |
+| `--palette 256` | 共用調色盤，最多 256 色，每個 run 2 bytes。flash：調色盤直接從 Flash 讀；stream：跟著標頭先傳，板子放在執行時配置的 RAM（警告） |
 | `--palette 565` | 每個像素自己的 RGB565 顏色，每個 run 3 bytes。適合照片、漸層 |
 | `--colors N` | 調色盤只用 N 色（16 / 256） |
 | `--dither` | 抖色：漸層比較平滑，但 run 變短、資料變大 |
@@ -92,11 +92,11 @@ python -B source/stream.py
 |---|---|
 | `--max-bytes N` | 資料超過 N 就自動降，直到放得下為止；降不下來就報錯 |
 | `--reduce fps` / `size` | `--max-bytes` 先降幀率還是先降尺寸（預設 size），一邊到下限就換另一邊 |
-| `--keyframe N` | uno：每 N 幀一個 I 幀（只有 mac 時忽略：Mac 直接送差異） |
+| `--keyframe N` | flash：每 N 幀一個 I 幀（只有 stream 時忽略：電腦直接送差異） |
 | `--tile N` | 找變化區域用的小方塊大小，預設 8 |
 | `--name` | 自訂檔名和 struct 名稱 |
 
-- **檔名**：`{檔名}_{uno|mac|uno_mac}_{寬}x{高}_palette_{16|256|565}.h`，struct 同名。
+- **檔名**：`{檔名}_{flash|stream|flash_stream}_{寬}x{高}_palette_{16|256|565}.h`，struct 同名。`assets/` 外面的檔案前面加上資料夾；撞名（例如只差 `--keyframe`）加 `_2`、`_3`，不蓋掉別的（見 [output/README.md](../output/README.md#名稱和來源)）。
 
 ### 流程
 
@@ -114,7 +114,7 @@ python -B source/stream.py
    - **整張重畫**：標成 I 幀，`FlashPlayer` 落後時也可以跳到這裡。
 6. **成本**：畫圖時間 + 資料量 × 每 byte 成本，數值都在 `config.json`：
    - 每個窗口約 480 週期，每個螢幕像素約 44 週期，每個 run 約 30 週期。
-   - 每 byte：uno 讀 Flash 約 6 週期；mac 經串口約 176 週期（1 Mbaud）。所以串流會偏向資料量少的畫法。
+   - 每 byte：flash 讀 Flash 約 6 週期；stream 經串口約 176 週期（1 Mbaud）。所以串流會偏向資料量少的畫法。
 7. **`--max-bytes`**：資料太大時，依 `--reduce` 把幀率或尺寸乘以 0.85 再重做。幀率不低於 `--min-fps`，尺寸不小於 4 px。
 
 產生的檔案格式見 [output/README.md](../output/README.md)。
@@ -127,6 +127,7 @@ python -B source/stream.py
 | 影片但沒有 ffmpeg / ffprobe | 錯誤：`brew install ffmpeg` |
 | 剪的範圍裡沒有幀 | 錯誤 |
 | 超過 3000 幀 | 錯誤：用 `--start` / `--duration` 剪短，或降低 `--max-fps` |
+| `--target flash` 時超過 UNO 的 Flash（32256 bytes） | 錯誤：`--max-bytes`、剪短、降低幀率或尺寸，或 `--target stream` |
 | 超過格式或板子的硬限制（螢幕上最大 240×240；有放大時存的寬度 ≤ 120；幀資料位移超過 64 KB） | 錯誤，並提示可以調哪個參數 |
 | 超出 `config.json` 的建議範圍 | 警告 |
 | 估計板子達不到動畫的 fps，或低於 `--min-fps` | 警告 |
@@ -140,32 +141,27 @@ python -B source/stream.py
 | 錯誤 | 檔案的 `// format:` 不是目前的 `FORMAT_VERSION` |
 | 錯誤 | 檔案裡沒有 `struct animation::{檔名}` |
 | 錯誤 | 原始檔跟產生時不一樣（比對 sha256） |
-| 錯誤 | mac 描述檔指到的 `output/mac/` 幀資料檔不存在、格式不對或過時 |
+| 錯誤 | 檔案裡沒有幀資料（`--target stream` 的在 `#if 0` 裡） |
 | 警告 | 原始檔找不到 |
 | 警告 | `output/` 裡有沒被選的 .h |
 
 檢查不通過時結束碼是 1。`convert.py` 產生完會自動跑一次。
 
-## stream.py
+## stream_handler.py
 
-- **不用參數**：自動找 `/dev/cu.usbmodem*`、`usbserial*`、`wchusbserial*`、`SLAB_USBtoUART*`。沒插板子就等，拔掉、重插、板子重置都會自己接回。
-- **選用參數**：`--port`、`--baud`（預設讀 `config.json`）、`--tile`。
-- **安全**：只開 `lib/video` 裡面的 `.h`。
-- **先關監看視窗**：PlatformIO 的序列監看視窗也會佔用串口。
-- **燒錄時自動放開串口**：每 0.3 秒檢查有沒有 avrdude 或 `pio run -t upload` 在跑；有的話立刻關掉串口，燒錄結束後再接回來，所以 `stream.py` 可以一直開著。
-- **打開串口會讓板子重置**：macOS 打開串口時一定會動到 DTR，UNO 就會重置。實測過三種開法都一樣，軟體沒辦法避免。所以：
-  - 板子正在跑程式時才啟動 `stream.py`，程式會從頭開始。例如 `tests[19]` 正在等的時候開，會看起來像直接結束了，其實是整個程式從 `tests[0]` 重來。
-  - **建議先開 `stream.py`**，再燒錄或按 reset。`stream.py` 一直開著時只有第一次會重置。
-  - 燒錄後 `stream.py` 接回來時也會重置一次，不過時間落在板子剛開機的時候，幾乎看不出來。
-  - 硬體上要完全避免，只能在 RESET 和 GND 之間接 10 µF 電容；但之後每次燒錄都要手動按 reset。
+[lib/stream](../../stream/README.md) 的 `stream.py`（找板子、燒錄時放開串口、開串口會重置板子的注意事項、`'D'` / `'R'` 一塊一塊送）收到動畫的指令時交給它：
 
-### 串流協定
+- **安全**：只開 `lib/video` 裡面的 `.h`；`--target stream`（幀在 `#if 0` 裡）和 `--target flash` 的檔案都可以；256 色的調色盤放在標頭裡（色數 0 = 256）。
+- **`--tile`**：`stream.py` 的選項，找變化區域的格子大小（預設 8）。
+- **每 5 秒印一次**：每秒畫了幾幀、為了跟上時間跳過幾幀。
 
-板子決定要播哪個檔案、怎麼播，Mac 負責計時和送幀。原則：**Mac 主動送的資料永遠不超過 1 byte**。UNO 的 UART 只能暫存 2 個 byte，板子在畫圖或做別的事時，多送的資料會遺失。
+### 動畫的指令和回答
 
-**板子 → Mac：指令**
+板子決定要播哪個檔案、怎麼播，電腦負責計時和送幀。傳法（`'D'` 通知、`'R'` 拉一塊、電腦主動送的永遠不超過 1 byte）見 [lib/stream 的協定](../../stream/INTERFACE.md#協定)。
 
-| 指令 | 參數 | Mac 的回答 |
+**板子 → 電腦：指令**
+
+| 指令 | 參數 | 電腦的回答 |
 |---|---|---|
 | `'O'` 開啟 | CHUNK、旗標（bit 0 播放、bit 1 循環）、速度（uint16 %）、起始位置（uint32 ms）、路徑長度、路徑 | `'G'` 或 `'E'` |
 | `'N'` 要下一幀 | — | `'F'`（有新幀時）或 `'K'`（沒有新幀） |
@@ -173,13 +169,6 @@ python -B source/stream.py
 | `'J'` 跳轉 | 位置（uint32 ms） | `'A'` |
 | `'V'` 速度 | 百分比（uint16，1～1000） | `'A'` |
 | `'L'` 循環 | 0 / 1 | `'A'` |
-| `'R'` 拉一塊 | — | 目前回答的下一塊 |
-
-**Mac → 板子**
-
-1. **通知**：回答準備好時，Mac 只送 1 byte 的 `'D'`。
-2. **拉取**：板子有空時送 `'R'`，Mac 送一塊 `[長度 1～CHUNK][資料]`；板子處理完再送 `'R'` 拿下一塊。
-3. **下一個回答**：前一個回答被拉完之後，Mac 才會送下一個 `'D'`。
 
 回答的第一個 byte 是種類：
 
@@ -189,11 +178,11 @@ python -B source/stream.py
 | `'F'` 幀 | 狀態 + 一幀（格式見 [output/README.md](../output/README.md#格式format-3)） |
 | `'K'` 沒有新幀 | 狀態。暫停、播完、或下一幀還很久時，最多每秒一次；狀態改變時（例如播完）立刻送。板子收到後再送 `'N'` |
 | `'A'` 指令完成 | 狀態 |
-| `'E'` 錯誤 | 代碼（1 找不到、2 讀不懂、3 256 色不能串流）、訊息長度、訊息 |
+| `'E'` 錯誤 | 代碼（1 找不到、2 讀不懂、3 不能串流）、訊息長度、訊息 |
 
 **狀態**（7 bytes）：旗標（bit 0 播放中、bit 1 已結束）、位置（uint32 ms）、幀號（uint16）。
 
-### 計時（Mac）
+### 計時（電腦）
 
 - **位置** = 起點 + （現在 − 開始時間）× 速度。暫停時位置不動。循環時超過總長就從頭；不循環時停在結尾，狀態變成已結束。
 - **送哪一幀**：收到 `'N'` 後，只要「現在位置該顯示的幀」跟螢幕上的不同，就送那一幀跟螢幕上那幀的差異。落後的幀直接跳過，不需要 I 幀。
@@ -208,4 +197,4 @@ python -B source/stream.py
   - 回答的種類不對。
   - 窗口超出動畫範圍。
 - **`'E'`**：記下錯誤代碼，等 3 秒再重試，因為檔案可能晚一點才產生。
-- **競爭**：板子送控制指令時，Mac 可能剛好在送幀。板子會先把那一幀畫完、再要下一幀，然後繼續等指令的 `'A'`；Mac 也會等那一幀被拉完，才回答指令。
+- **競爭**：板子送控制指令時，電腦可能剛好在送幀。板子會先把那一幀畫完、再要下一幀，然後繼續等指令的 `'A'`；電腦也會等那一幀被拉完，才回答指令。

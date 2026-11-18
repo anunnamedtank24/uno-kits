@@ -1,0 +1,47 @@
+# week_1_analog
+
+類比感測器（[lib/analog](../../lib/analog/README.md)）的測試：旋鈕、光敏電阻、搖桿、NTC 熱敏電阻、聲音模組，加上 UNO 晶片自己量的 5V 和溫度。
+
+全部的檔案現在都是 `.bak`，要跑哪個就留下哪個：
+
+```bash
+python src/hide.py week_1_analog/tests/1_sensors     # 只留下這個（拿掉 .bak），其他改成 .bak
+pio run -t upload
+pio device monitor                      # 1 Mbaud
+```
+
+| 檔案 | 內容 | 需要的硬體 |
+|---|---|---|
+| `tests/1_sensors.cpp` | 五種類比感測器和晶片的 5V、溫度，每 0.3 秒印一行，有事件時馬上印 | 有幾個接幾個 |
+
+## 接線
+
+| 零件 | 腳 | UNO |
+|---|---|---|
+| 旋鈕 | 兩邊、中間 | 5V、GND；**A0** |
+| 光敏電阻模組 | S、+、- | **A1**、5V、GND |
+| 搖桿 KY-023 | VRx、VRy、SW、+5V、GND | **A2**、**A3**、**D4**、5V、GND |
+| NTC 模組 KY-013 | S、中間、- | **A4**、5V、GND |
+| 聲音模組 KY-037 / KY-038 | AO、+、G | **A5**、5V、GND |
+
+- 每個都可以不接：沒接的只會讀到雜訊。
+- 換腳改 settings 的 `KNOB_PIN`、`LIGHT_PIN`、`STICK_X_PIN`…；類比的只能用 A0 ～ A5。
+
+# tests/1_sensors.cpp：類比感測器
+
+每 0.3 秒印一行，另外有事件時馬上印：
+
+```
+Vcc 4987 mV, chip 31.2 C
+knob 42%  light 63%  stick 0,0  24.8 C  sound 3
+joystick -> up
+knob turned: 55 %
+clap!
+dark: night light on
+```
+
+- **搖桿**：開機時不要碰，它記下中心。
+- **光敏電阻**：這裡 `BRIGHTER_IS_HIGHER = false`（模組：越亮讀數越低）；裸的光敏電阻改成 `true`。
+- **夜燈**：`DARK_ON`、`DARK_OFF`，變暗時印 `dark`，再亮時印 `light again`（數值依房間調）。
+- **聲音**：對著麥克風拍手會印 `clap!`；`sound` 是 0.3 秒內最大的擺幅。
+- **Vcc、chip**：`Uno::UnoChip` 量的實際 5V 和晶片溫度（晶片溫度比室溫高，只能參考）。

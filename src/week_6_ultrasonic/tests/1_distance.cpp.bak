@@ -1,0 +1,100 @@
+#include <Arduino.h>
+#include "Uno_serial.h"
+#include "Uno_pin.h"
+#include "Uno_interrupt_pin.h"
+#include "ultrasonic.h"
+
+// UNO + HC-SR04 ultrasonic distance module: every measurement goes to the USB serial
+//   pio device monitor        (platformio.ini: monitor_speed = BAUD)
+//
+// a line every MEASURE_MS:  " 23.4 cm  echo  1364 us  |###########"   (one # = BAR_CM_PER_CHAR cm, up to BAR_CM)
+// or what went wrong:       "too near (< 2 cm)", "too far / nothing (> 400 cm)",
+//                           "no echo: check VCC / GND, Trig on D7, Echo on D8 (not swapped)",
+//                           "busy: Echo still HIGH from the last one"
+
+// ---------- settings ----------
+
+// wiring: HC-SR04 VCC -> 5V, GND -> GND
+constexpr uint8_t TRIG_PIN = 7;             // Trig: any pin
+constexpr uint8_t ECHO_PIN = 8;             // Echo: any pin (pin-change interrupt); D8 keeps D2 free for the
+                                            // infrared receiver (one interrupt per group: D0 ~ D7, D8 ~ D13, A0 ~ A5)
+constexpr int16_t AIR_TENTHS_C = 250;       // the room's temperature, 0.1 °C: the speed of sound
+constexpr uint32_t BAUD = 1000000;          // USB serial: the same as monitor_speed in platformio.ini
+
+constexpr uint16_t MEASURE_MS = 200;        // 60 ~ : how often (slower than the 60 ms minimum, to read the lines)
+constexpr uint16_t BAR_CM = 100;            // the bar ends here
+constexpr uint8_t BAR_CM_PER_CHAR = 2;
+
+// ---------- parts ----------
+
+using Trigger = Uno::UnoOutputPin<TRIG_PIN>;
+using Echo = Uno::UnoInterruptPin<ECHO_PIN>;
+using Ranger = ultrasonic::HCSR04<Trigger, Echo>;
+using Link = Uno::UnoSerial<BAUD>;
+
+// ---------- test ----------
+
+void printDistance() {
+    uint16_t mm = Ranger::distanceMm();
+    Link::printNumber(mm / 10, 3);
+    Link::printText(".");
+    Link::printNumber(mm % 10);
+    Link::printText(" cm  echo ");
+    Link::printNumber(Ranger::echoUs(), 5);
+    Link::printText(" us  |");
+    uint16_t cm = mm / 10 > BAR_CM ? BAR_CM : mm / 10;
+    for (uint16_t n = 0; n < cm / BAR_CM_PER_CHAR; n++) {
+        Link::printText("#");
+    }
+    Link::printText(mm / 10 > BAR_CM ? ">\r\n" : "\r\n");
+}
+
+// ---------- main ----------
+
+void setup() {
+    Link::init();
+    Ranger::init();
+    Ranger::setIntervalMs(MEASURE_MS);
+    Ranger::setTemperature(AIR_TENTHS_C);
+    Link::printText("\r\nHC-SR04: ");
+    Link::printText("Trig ");
+    Link::printPin(TRIG_PIN);
+    Link::printText(", Echo ");
+    Link::printPin(ECHO_PIN);
+    Link::printText("; sound at ");
+    Link::printNumber(Ranger::soundSpeed() / 10);
+    Link::printText(".");
+    Link::printNumber(Ranger::soundSpeed() % 10);
+    Link::printText(" m/s\r\n");
+    Link::printText(Echo::read() ? "Echo idle: HIGH (should be LOW: Trig / Echo swapped?)\r\n" : "Echo idle: LOW (ok)\r\n");
+}
+
+void loop() {
+    if (!Ranger::update()) {
+        return;
+    }
+    switch (Ranger::result()) {
+        case ultrasonic::RESULT_OK:
+            printDistance();
+            break;
+        case ultrasonic::RESULT_TOO_NEAR:
+            Link::printText("too near (< 2 cm)\r\n");
+            break;
+        case ultrasonic::RESULT_TOO_FAR:
+            Link::printText("too far / nothing (> 400 cm), or a soft / slanted surface\r\n");
+            break;
+        case ultrasonic::RESULT_NO_ECHO:
+            Link::printText("no echo: check VCC / GND, ");
+            Link::printText("Trig ");
+            Link::printPin(TRIG_PIN);
+            Link::printText(", Echo ");
+            Link::printPin(ECHO_PIN);
+            Link::printText(" (not swapped)\r\n");
+            break;
+        case ultrasonic::RESULT_BUSY:
+            Link::printText("busy: Echo still HIGH from the last one\r\n");
+            break;
+        default:
+            break;
+    }
+}

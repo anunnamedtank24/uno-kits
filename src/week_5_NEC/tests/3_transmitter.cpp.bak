@@ -1,0 +1,107 @@
+#include <Arduino.h>
+#include "Uno_serial.h"
+#include "Uno_interrupt_pin.h"
+#include "Uno_ir_carrier.h"
+#include "NEC.h"
+
+// UNO + infrared LED (send) + infrared receiver (receive): the UNO acts as the 17-key remote, keys typed on the
+// USB serial; the receiver hears it too (point the LED at it, or let it bounce off a wall), so it checks itself
+//   pio device monitor        (platformio.ini: monitor_speed = BAUD), then press (no Enter):
+//     0 ~ 9, * , #      those keys         w a s d   up left down right      k   OK
+//     h                 OK held for HOLD_MS (a press, then repeats every 108 ms)
+
+// ---------- settings ----------
+
+// wiring: IR LED (or KY-005) short leg (-) -> GND
+constexpr uint8_t IR_LED_PIN = 3;           // long leg (S) through 220 Ω: D3 or D11 (Timer2 makes the carrier;
+                                            // then no PWM on D3 / D11, nor UnoPcmOut)
+constexpr uint8_t CARRIER_KHZ = NEC::timing::CARRIER_KHZ;   // 38: what the receivers listen for (20 ~ 60)
+// wiring: receiver (HX1838 / KY-022) GND -> GND, VCC -> 5V   (optional: to see what was sent)
+constexpr uint8_t IR_PIN = 2;               // OUT: any pin (pin-change interrupt)
+constexpr bool IR_INTERNAL_PULLUP = true;   // HIGH when no receiver is there: silence, not noise
+constexpr uint8_t IR_QUEUE = 4;             // codes kept while the program is busy
+constexpr uint32_t BAUD = 1000000;          // USB serial: the same as monitor_speed in platformio.ini
+
+using Remote = NEC::Remote17KeyNumbersTop;  // the layout sent (and read back)
+constexpr uint16_t HOLD_MS = 1000;          // 'h': how long OK is held
+
+// ---------- parts ----------
+
+using Carrier = Uno::UnoIrCarrier<IR_LED_PIN, CARRIER_KHZ>;
+using Sender = NEC::IRLED<Carrier>;
+using Receiver = NEC::HX1838<Uno::UnoInterruptPin<IR_PIN, IR_INTERNAL_PULLUP>, IR_QUEUE>;
+using Link = Uno::UnoSerial<BAUD>;
+
+// ---------- keys ----------
+
+NEC::Key keyOf(uint8_t c) {
+    if (c >= '0' && c <= '9') {
+        return (NEC::Key)(NEC::KEY_0 + (c - '0'));
+    }
+    switch (c) {
+        case '*': return NEC::KEY_STAR;
+        case '#': return NEC::KEY_HASH;
+        case 'w': return NEC::KEY_UP;
+        case 'a': return NEC::KEY_LEFT;
+        case 's': return NEC::KEY_DOWN;
+        case 'd': return NEC::KEY_RIGHT;
+        case 'k': return NEC::KEY_OK;
+        default: return NEC::KEY_NONE;
+    }
+}
+
+void sendKey(uint8_t c) {
+    bool held = c == 'h';
+    NEC::Key key = held ? NEC::KEY_OK : keyOf(c);
+    uint8_t command;
+    if (key == NEC::KEY_NONE || !Remote::toCommand(key, command)) {
+        return;
+    }
+    Link::printText("sent ");
+    Link::printText(NEC::keyName(key));
+    Link::printText(" (command ");
+    Link::printHex(command);
+    Link::printText(held ? ") held 1 s\r\n" : ")\r\n");
+    if (held) {
+        Sender::hold(Remote::ADDRESS, command, HOLD_MS);
+    } else {
+        Sender::send(Remote::ADDRESS, command);
+    }
+}
+
+// ---------- main ----------
+
+void setup() {
+    Link::init();
+    Sender::init();
+    Receiver::init();
+    Link::printText("\r\nIR send on ");
+    Link::printPin(IR_LED_PIN);
+    Link::printText(" (");
+    Link::printNumber(CARRIER_KHZ);
+    Link::printText(" kHz), receive on ");
+    Link::printPin(IR_PIN);
+    Link::printText(": press 0 ~ 9 * # w a s d k h\r\n");
+}
+
+void loop() {
+    while (Link::available()) {
+        uint8_t c;
+        Link::read8(c, 0);
+        sendKey(c);
+    }
+    NEC::Code code;
+    while (Receiver::read(code)) {
+        Link::printText("  heard ");
+        Link::printText(NEC::keyName(Remote::toKey(code)));
+        Link::printText(" (address ");
+        Link::printNumber(code.address);
+        Link::printText(", command ");
+        Link::printHex(code.command);
+        if (code.repeats > 0) {
+            Link::printText(", repeat ");
+            Link::printNumber(code.repeats);
+        }
+        Link::printText(")\r\n");
+    }
+}

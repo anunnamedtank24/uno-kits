@@ -1,0 +1,181 @@
+#include <Arduino.h>
+#include <stdlib.h>
+#include "Uno_serial.h"
+#include "Uno_pin.h"
+#include "L298N.h"
+
+// UNO + L298N board + DC motors: set the voltage a motor gets, typed on the USB serial
+//   OUT1, OUT2 -> motor A          OUT3, OUT4 -> motor B (optional)
+//   pio device monitor        (platformio.ini: monitor_speed = BAUD), then type a line + Enter:
+//     a 4.5     motor A at 4.5 V forward          a -3     A at 3 V backward
+//     b 6       motor B at 6 V                    x 5      both at 5 V
+//     a 0       A coast                           s        both brake
+//     ?         the settings
+//
+// the L298N cannot make a lower voltage: it switches the supply on and off (PWM, ~976 Hz), and the motor
+// (its coil and its weight) averages it:   average = duty / 255 × (SUPPLY_V - DROP_V)
+//   SUPPLY_V: the supply on +12V (measure it: a "9 V" battery under load is ~ 7 V)
+//   DROP_V:   lost in the L298N's transistors, ~ 1.5 V at 0.3 A ~ 2.5 V at 1 A (it heats the chip)
+// so a 6 V motor on a 12 V supply: at most duty 255 × 6 / (12 - 2) = 153; MOTOR_MAX_V keeps it there
+// a multimeter (DC V) on OUT1 / OUT2 shows about the average (the PWM confuses some meters a little)
+
+// ---------- settings ----------
+
+// wiring: L298N with both EN jumpers removed
+//   +12V -> supply +   GND -> supply - AND the UNO's GND
+constexpr uint8_t ENA_PIN = 5;              // ENA: a PWM pin (3, 5, 6, 9, 10, 11): the speed of channel A
+constexpr uint8_t IN1_PIN = A0;             // IN1: any pin
+constexpr uint8_t IN2_PIN = A1;             // IN2
+constexpr uint8_t IN3_PIN = A2;             // IN3
+constexpr uint8_t IN4_PIN = A3;             // IN4
+constexpr uint8_t ENB_PIN = 6;              // ENB: a PWM pin: the speed of channel B
+constexpr uint32_t BAUD = 1000000;          // USB serial: the same as monitor_speed in platformio.ini
+
+constexpr float SUPPLY_V = 12.0f;           // the supply on +12V
+constexpr float DROP_V = 2.0f;              // lost in the L298N
+constexpr float MOTOR_MAX_V = 6.0f;         // the motors' rated voltage: never more than this
+constexpr uint16_t RAMP_MS = 300;           // 0 -> 255 takes this long
+
+// ---------- parts ----------
+
+using Board = L298N::L298NBoard<Uno::UnoPwmPin<ENA_PIN>,
+                                Uno::UnoOutputPin<IN1_PIN>, Uno::UnoOutputPin<IN2_PIN>,
+                                Uno::UnoOutputPin<IN3_PIN>, Uno::UnoOutputPin<IN4_PIN>,
+                                Uno::UnoPwmPin<ENB_PIN>>;
+// both EN jumpers on instead (ENA, ENB not connected), full speed only:
+//   L298N::L298NBoard<L298N::EnableJumper, ..., L298N::EnableJumper>
+using Link = Uno::UnoSerial<BAUD>;
+
+L298N::DCMotor<Board::A> motorA;
+L298N::DCMotor<Board::B> motorB;
+
+char line[24];
+uint8_t lineLength = 0;
+
+// ---------- text over the serial link ----------
+
+// 2 decimals
+void printVolts(float volts) {
+    Link::printDecimal((int32_t)(volts * 100.0f + (volts < 0 ? -0.5f : 0.5f)), 2);
+    Link::printText(" V");
+}
+
+// ---------- volts <-> duty ----------
+
+float fullVolts() {
+    return SUPPLY_V - DROP_V;
+}
+
+// -255 ~ 255 for -volts ~ volts, limited to MOTOR_MAX_V
+int16_t dutyFor(float volts) {
+    float limit = MOTOR_MAX_V < fullVolts() ? MOTOR_MAX_V : fullVolts();
+    if (volts > limit) {
+        volts = limit;
+    } else if (volts < -limit) {
+        volts = -limit;
+    }
+    return (int16_t)(volts / fullVolts() * 255.0f + (volts < 0 ? -0.5f : 0.5f));
+}
+
+float voltsFor(int16_t duty) {
+    return (float)duty / 255.0f * fullVolts();
+}
+
+// ---------- commands ----------
+
+template <class Motor>
+void setVolts(Motor &motor, const char *name, float volts) {
+    int16_t duty = dutyFor(volts);
+    motor.setSpeed(duty);
+    Link::printText(name);
+    Link::printText(": duty ");
+    Link::printNumber(duty);
+    Link::printText(" / 255 (");
+    Link::printNumber((int32_t)(duty < 0 ? -duty : duty) * 100 / 255);
+    Link::printText(" %) -> about ");
+    printVolts(voltsFor(duty));
+    if (volts > MOTOR_MAX_V || volts < -MOTOR_MAX_V) {
+        Link::printText("  (limited to MOTOR_MAX_V)");
+    }
+    Link::printText(duty == 0 ? "  coast\r\n" : "\r\n");
+}
+
+void printSettings() {
+    Link::printText("supply ");
+    printVolts(SUPPLY_V);
+    Link::printText(" - L298N drop ");
+    printVolts(DROP_V);
+    Link::printText(" = ");
+    printVolts(fullVolts());
+    Link::printText(" at duty 255; motors at most ");
+    printVolts(MOTOR_MAX_V);
+    Link::printText(" (duty ");
+    Link::printNumber(dutyFor(MOTOR_MAX_V));
+    Link::printText(")\r\ntype: a 4.5 / b -3 / x 5 / a 0 / s / ?\r\n");
+}
+
+void runLine() {
+    line[lineLength] = '\0';
+    Link::printText("> ");
+    Link::printText(line);
+    Link::printText("\r\n");
+    char command = line[0];
+    float volts = (float)atof(line + 1);
+    if (command == 'a') {
+        setVolts(motorA, "A", volts);
+    } else if (command == 'b') {
+        setVolts(motorB, "B", volts);
+    } else if (command == 'x') {
+        setVolts(motorA, "A", volts);
+        setVolts(motorB, "B", volts);
+    } else if (command == 's') {
+        motorA.brake();
+        motorB.brake();
+        Link::printText("both brake\r\n");
+    } else if (command == '?') {
+        printSettings();
+    } else if (lineLength > 0) {
+        Link::printText("? a / b / x <volts>, s, ?\r\n");
+    }
+}
+
+// ---------- main ----------
+
+void setup() {
+    Link::init();
+    motorA.init();
+    motorB.init();
+    motorA.setRampMs(RAMP_MS);
+    motorB.setRampMs(RAMP_MS);
+    Link::printText("\r\nL298N voltage: ENA ");
+    Link::printPin(ENA_PIN);
+    Link::printText(", IN1 ");
+    Link::printPin(IN1_PIN);
+    Link::printText(", IN2 ");
+    Link::printPin(IN2_PIN);
+    Link::printText(", IN3 ");
+    Link::printPin(IN3_PIN);
+    Link::printText(", IN4 ");
+    Link::printPin(IN4_PIN);
+    Link::printText(", ENB ");
+    Link::printPin(ENB_PIN);
+    Link::printText("\r\n");
+    printSettings();
+}
+
+void loop() {
+    motorA.update();
+    motorB.update();
+    while (Link::available()) {
+        uint8_t byte;
+        Link::read8(byte, 0);
+        if (byte == '\r' || byte == '\n') {
+            if (lineLength > 0) {
+                runLine();
+            }
+            lineLength = 0;
+        } else if (lineLength < sizeof(line) - 1) {
+            line[lineLength++] = (char)byte;
+        }
+    }
+}

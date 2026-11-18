@@ -18,18 +18,18 @@ namespace Uno {
     // writes do not wait for the byte to be sent: the next write (or a DC / CS change) waits first,
     // so the CPU prepares the next byte while SPI is still sending the current one
     template <uint8_t DC, uint8_t RES = NONE, uint8_t CS = NONE, uint8_t BLK = NONE, uint8_t MODE = 3>
-    struct UnoST7789 {
+    struct UnoST7789 : UnoBoard {
         // ---------- illegal: error ----------
-        static_assert(exists(DC), "UnoST7789: DC is required and must be 0 ~ 19");
-        static_assert(optional(RES), "UnoST7789: RES must be 0 ~ 19 or NONE");
-        static_assert(optional(CS), "UnoST7789: CS must be 0 ~ 19 or NONE");
-        static_assert(optional(BLK), "UnoST7789: BLK must be 0 ~ 19 or NONE");
-        static_assert(!has(DC, function::SPI), "UnoST7789: DC cannot be D11 / D12 / D13 (hardware SPI)");
-        static_assert(!has(RES, function::SPI), "UnoST7789: RES cannot be D11 / D12 / D13 (hardware SPI)");
-        static_assert(!has(CS, function::SPI), "UnoST7789: CS cannot be D11 / D12 / D13 (hardware SPI)");
-        static_assert(!has(BLK, function::SPI), "UnoST7789: BLK cannot be D11 / D12 / D13 (hardware SPI)");
-        static_assert(MODE <= 3, "UnoST7789: SPI MODE must be 0 ~ 3");
-        static_assert(CS != NONE || MODE == 3, "UnoST7789: without CS the screen needs SPI mode 3");
+        static_assert(exists(DC), "Uno::UnoST7789: DC is required and must be 0 ~ 19");
+        static_assert(optional(RES), "Uno::UnoST7789: RES must be 0 ~ 19 or NONE");
+        static_assert(optional(CS), "Uno::UnoST7789: CS must be 0 ~ 19 or NONE");
+        static_assert(optional(BLK), "Uno::UnoST7789: BLK must be 0 ~ 19 or NONE");
+        static_assert(!has(DC, function::SPI), "Uno::UnoST7789: DC cannot be D11 / D12 / D13 (hardware SPI)");
+        static_assert(!has(RES, function::SPI), "Uno::UnoST7789: RES cannot be D11 / D12 / D13 (hardware SPI)");
+        static_assert(!has(CS, function::SPI), "Uno::UnoST7789: CS cannot be D11 / D12 / D13 (hardware SPI)");
+        static_assert(!has(BLK, function::SPI), "Uno::UnoST7789: BLK cannot be D11 / D12 / D13 (hardware SPI)");
+        static_assert(MODE <= 3, "Uno::UnoST7789: SPI MODE must be 0 ~ 3");
+        static_assert(CS != NONE || MODE == 3, "Uno::UnoST7789: without CS the screen needs SPI mode 3");
 
         // ---------- suspicious: warning ----------
         static_assert(warn::DuplicatePin<
@@ -68,23 +68,7 @@ namespace Uno {
             pwmSet<BLK>(blk);
         }
 
-        static inline void delayMs(uint16_t ms) {
-            Uno::delayMs(ms);
-        }
-
-        // ms since power on, used by video players for frame timing
-        static inline uint32_t nowMs() {
-            return Uno::nowMs();
-        }
-
-        // data stored with PROGMEM (e.g. fonts), used by graphics::Text
-        static inline uint8_t readFlash8(const uint8_t *address) {
-            return Uno::readFlash8(address);
-        }
-
-        static inline uint16_t readFlash16(const uint16_t *address) {
-            return Uno::readFlash16(address);
-        }
+        // nowMs, nowUs, delayMs, delayUs, readFlash8 / 16, stopInterrupts, restoreInterrupts: from UnoBoard
 
         // DC must not change while a byte is being sent
         static inline void cmdMode() {

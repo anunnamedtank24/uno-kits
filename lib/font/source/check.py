@@ -5,6 +5,7 @@ import argparse
 import hashlib
 import os
 import re
+import shlex
 from pathlib import Path
 
 
@@ -22,7 +23,8 @@ Rules (errors):
 Warnings:
     the source font of an included file is gone (cannot tell if it changed)
     a .h in the output dir is not selected (fine, it is just not compiled)
-selected.h is edited by hand (remove what you do not use), convert.py adds what it makes.
+selected.h lists every .h of output/ (unused ones are not compiled in): tools/assets.py writes it before every
+build, convert.py adds what it makes; nothing to edit by hand. convert.py runs this check after every conversion.
 """
 
 
@@ -57,12 +59,110 @@ def get_format_str() -> str:
     return f"// format: {FORMAT_VERSION}\n"
 
 
+# ---------- names and options (also used by tools/assets.py, through the header lines) ----------
+
+PROJECT_DIR_PATH = LIB_DIR_PATH.parent.parent
+ASSETS_DIR_PATH = LIB_DIR_PATH/"assets"
+OPTIONS_PATTERN = re.compile(r"^// options: (.*)$", re.MULTILINE)
+IGNORED_OPTIONS = ("--name", "--preview") # each with a value
+
+
+def get_file_name(source_path: Path) -> str:
+    # the start of an output name, a C++ name (ASCII letters, digits, _):
+    #   a file in assets/: its name                        assets/sunset.jpg -> sunset
+    #   anywhere else: its folders first, relative to the project, else to the home folder, else the whole path,
+    #   so two files with the same name never share an output
+    #                                                       src/photos/cat.jpg -> src_photos_cat
+    #                                                       ~/Music/Game/01 Title.mp3 -> music_game_01_title
+    #   letters that are not ASCII (e.g. Japanese) are left out, and a short hash of the path is added instead
+    path = source_path.expanduser().resolve()
+    if path.is_relative_to(ASSETS_DIR_PATH):
+        relative = path.relative_to(ASSETS_DIR_PATH)
+    elif path.is_relative_to(PROJECT_DIR_PATH):
+        relative = path.relative_to(PROJECT_DIR_PATH)
+    elif path.is_relative_to(Path.home()):
+        relative = path.relative_to(Path.home())
+    else:
+        relative = path.relative_to(path.anchor)
+    text = relative.with_suffix("").as_posix()
+    name = re.sub(r"_+", "_", "".join(c if c.isascii() and c.isalnum() else "_" for c in text.lower())).strip("_")
+    if any(not c.isascii() for c in text):
+        name = (name + "_" if name else "") + hashlib.sha256(text.encode()).hexdigest()[:6]
+    if not name or name[0].isdigit():
+        name = "_" + name
+    return name
+
+
+def get_options(argv: list[str], positionals: list[str]) -> list[str]:
+    # the options as given, without the positional arguments and what does not change the output
+    # (--name, --preview): what tools/assets.py compares with the options of FONT / PICTURE / ANIMATION / MELODY
+    options = list(argv)
+    for value in positionals:
+        if value in options:
+            options.remove(value)
+    kept = []
+    skip = False
+    for option in options:
+        if skip:
+            skip = False
+        elif option in IGNORED_OPTIONS:
+            skip = True
+        elif option.split("=", 1)[0] not in IGNORED_OPTIONS:
+            kept.append(option)
+    return kept
+
+
+def get_options_str(options: list[str]) -> str:
+    return f"// options: {shlex.join(options)}\n"
+
+
+def get_free_name(output_dir_path: Path, name: str, source_path: Path, options_str: str) -> str:
+    # name, or name_2, name_3 ... when output/name.h was made from another file or with other options (the name
+    # does not hold every option, e.g. --keyframe): an output is never replaced by a different one;
+    # the same file with the same options: the same name (made again in place)
+    source_line = get_source_str(source_path).rsplit(" sha256 ", 1)[0] + " sha256 "
+    wanted = get_normalized_options(OPTIONS_PATTERN.search(options_str).group(1))
+    number = 1
+    while True:
+        candidate = name if number == 1 else f"{name}_{number}"
+        path = Path(output_dir_path)/(candidate + ".h")
+        if not path.exists():
+            return candidate
+        with open(path, "rb") as f:
+            head = f.read(4096).decode(errors="replace")
+        options_match = OPTIONS_PATTERN.search(head)
+        if source_line in head and options_match and get_normalized_options(options_match.group(1)) == wanted:
+            return candidate
+        number += 1
+
+
+def get_normalized_options(options_text: str) -> tuple:
+    # the same options in any order or form: "--fit=64x64 --palette 2" is "--palette 2 --fit 64x64"
+    # (tools/assets.py compares them the same way)
+    try:
+        args = shlex.split(options_text)
+    except ValueError:
+        return (options_text,)
+    groups = []
+    for arg in get_options(args, []):
+        if arg.startswith("--"):
+            groups.append(arg.split("=", 1))
+        elif groups:
+            groups[-1].append(arg)
+        else:
+            groups.append([arg])
+    for group in groups:
+        if group[0] == "--target":
+            group[1:] = sorted(group[1:])
+    return tuple(sorted(tuple(group) for group in groups))
+
+
 def get_new_selected_str() -> str:
     selected_str = ""
     selected_str += f"#ifndef {SELECTED_GUARD}\n"
     selected_str += f"#define {SELECTED_GUARD}\n\n"
     selected_str += "// fonts compiled into the program, included by font.h\n"
-    selected_str += "// edit by hand (remove what you do not use), convert.py adds what it makes,\n"
+    selected_str += "// every .h of output/ (unused ones are not compiled in): tools/assets.py and convert.py keep it\n"
     selected_str += "// python source/check.py checks every include\n"
     selected_str += "\n#endif\n"
     return selected_str
@@ -156,22 +256,22 @@ def check_selected(output_dir_path: Path) -> tuple[list[str], list[str], list[st
         warnings += header_warnings
 
     for header_path in sorted(output_dir_path.glob("*.h")):
-        if header_path.name != SELECTED_NAME and header_path.name not in selected_names:
+        if header_path.name not in (SELECTED_NAME, "registry.h") and header_path.name not in selected_names:
             warnings.append(f"{header_path.name}: not selected")
     return errors, warnings, selected_names
 
 
 def print_check(output_dir_path: Path) -> bool:
     errors, warnings, selected_names = check_selected(output_dir_path)
-    print(f"[Info] {SELECTED_NAME}: {len(selected_names)} selected")
+    print(f"[INFO] {SELECTED_NAME}: {len(selected_names)} selected")
     for name in selected_names:
         print(" "*4 + name)
     for warning in warnings:
-        print(f"[Warning] {warning}")
+        print(f"[WARNING] {warning}")
     for error in errors:
-        print(f"[Error] {error}")
+        print(f"[ERROR] {error}")
     if not errors:
-        print(f"[Success] {SELECTED_NAME} is fine")
+        print(f"[SUCCESS] {SELECTED_NAME} is fine")
     return not errors
 
 

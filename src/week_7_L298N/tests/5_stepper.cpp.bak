@@ -1,0 +1,124 @@
+#include <Arduino.h>
+#include "Uno_serial.h"
+#include "Uno_pin.h"
+#include "L298N.h"
+
+// UNO + L298N board + a bipolar stepper motor (4 wires): the 3 step modes and the speed limit, on the USB serial
+//   OUT1, OUT2 -> coil A           OUT3, OUT4 -> coil B
+//   pio device monitor        (platformio.ini: monitor_speed = BAUD)
+//
+// the coils: the 2 wires of a coil have a few Ω between them (a multimeter), wires of different coils
+// have none (open); a coil the wrong way round only makes it turn backward or shake: swap OUT3 / OUT4
+//
+// the steps: a turn forward and back in FULL, HALF and WAVE, then faster and faster until it stalls
+// (buzzes without turning): the last speed that still turned is its limit with this supply
+
+// ---------- settings ----------
+
+// wiring: L298N with both EN jumpers removed
+//   +12V -> supply + (the motor's voltage)   GND -> supply - AND the UNO's GND
+constexpr uint8_t ENA_PIN = 5;              // ENA: a PWM pin (3, 5, 6, 9, 10, 11): the speed of channel A
+constexpr uint8_t IN1_PIN = A0;             // IN1: any pin
+constexpr uint8_t IN2_PIN = A1;             // IN2
+constexpr uint8_t IN3_PIN = A2;             // IN3
+constexpr uint8_t IN4_PIN = A3;             // IN4
+constexpr uint8_t ENB_PIN = 6;              // ENB: a PWM pin: the speed of channel B
+constexpr uint32_t BAUD = 1000000;          // USB serial: the same as monitor_speed in platformio.ini
+
+constexpr int32_t STEPS_PER_TURN = 200;     // FULL / WAVE steps of a turn: 1.8° motors 200 (HALF: twice)
+constexpr uint8_t RUN_DUTY = 255;           // lower it if the motor or the L298N gets hot (see the README)
+constexpr uint8_t HOLD_DUTY = 0;            // standing: 0 = coils off
+constexpr uint16_t MODE_SPEED = 100;        // steps / s of the turns in FULL and WAVE (HALF: twice)
+constexpr uint16_t PAUSE_MS = 1000;         // after each turn
+constexpr uint16_t LADDER_MS = 2000;        // each speed of the ladder this long
+const uint16_t LADDER[] = {50, 100, 200, 300, 400, 600, 800, 1000};   // steps / s
+constexpr uint8_t LADDER_COUNT = sizeof(LADDER) / sizeof(LADDER[0]);
+constexpr uint16_t AGAIN_MS = 3000;         // released, then everything again
+
+// ---------- parts ----------
+
+using Board = L298N::L298NBoard<Uno::UnoPwmPin<ENA_PIN>,
+                                Uno::UnoOutputPin<IN1_PIN>, Uno::UnoOutputPin<IN2_PIN>,
+                                Uno::UnoOutputPin<IN3_PIN>, Uno::UnoOutputPin<IN4_PIN>,
+                                Uno::UnoPwmPin<ENB_PIN>>;
+// both EN jumpers on instead (ENA, ENB not connected), full speed only:
+//   L298N::L298NBoard<L298N::EnableJumper, ..., L298N::EnableJumper>
+using Motor = L298N::Stepper<Board::A, Board::B>;
+using Link = Uno::UnoSerial<BAUD>;
+
+Motor motor;
+
+// ---------- test ----------
+
+// steps there and back, waiting (update() keeps it stepping)
+void turn(int32_t steps) {
+    motor.move(steps);
+    while (motor.isMoving()) {
+        motor.update();
+    }
+    Link::printText("  at ");
+    Link::printNumber(motor.position());
+    Link::printText("\r\n");
+    delay(PAUSE_MS);
+}
+
+void tryMode(Motor::Mode mode, const char *name, int32_t steps, uint16_t speed) {
+    motor.setMode(mode);
+    motor.setSpeed(speed);
+    Link::printText(name);
+    Link::printText(": a turn forward, then back (");
+    Link::printNumber(steps);
+    Link::printText(" steps at ");
+    Link::printNumber(speed);
+    Link::printText(" steps/s)\r\n");
+    turn(steps);
+    turn(-steps);
+}
+
+// ---------- main ----------
+
+void setup() {
+    Link::init();
+    motor.init();
+    motor.setRunDuty(RUN_DUTY);
+    motor.setHoldDuty(HOLD_DUTY);
+    Link::printText("\r\nL298N stepper: ENA ");
+    Link::printPin(ENA_PIN);
+    Link::printText(", IN1 ");
+    Link::printPin(IN1_PIN);
+    Link::printText(", IN2 ");
+    Link::printPin(IN2_PIN);
+    Link::printText(", IN3 ");
+    Link::printPin(IN3_PIN);
+    Link::printText(", IN4 ");
+    Link::printPin(IN4_PIN);
+    Link::printText(", ENB ");
+    Link::printPin(ENB_PIN);
+    Link::printText("\r\n");
+}
+
+void loop() {
+    tryMode(Motor::FULL, "FULL (2 coils, most torque)", STEPS_PER_TURN, MODE_SPEED);
+    tryMode(Motor::HALF, "HALF (smoother, twice the steps)", 2 * STEPS_PER_TURN, 2 * MODE_SPEED);
+    tryMode(Motor::WAVE, "WAVE (1 coil, least current)", STEPS_PER_TURN, MODE_SPEED);
+
+    motor.setMode(Motor::FULL);
+    Link::printText("speed ladder (FULL): the last speed that turns is the limit\r\n");
+    motor.run(1);
+    for (uint8_t i = 0; i < LADDER_COUNT; i++) {
+        motor.setSpeed(LADDER[i]);
+        Link::printText("  ");
+        Link::printNumber(LADDER[i]);
+        Link::printText(" steps/s = ");
+        Link::printNumber((int32_t)LADDER[i] * 60 / STEPS_PER_TURN);
+        Link::printText(" rpm\r\n");
+        uint32_t start = millis();
+        while (millis() - start < LADDER_MS) {
+            motor.update();
+        }
+    }
+    motor.stop();
+    motor.release();
+    Link::printText("released (turns freely); again in a moment\r\n\r\n");
+    delay(AGAIN_MS);
+}

@@ -13,7 +13,7 @@ namespace switches {
     //   uint32_t nowMs()
     //
     // ACTIVE_HIGH: true if OUT is HIGH while the switch is on (touch modules, most button modules);
-    //              false if it is LOW while on (a bare button to GND, some modules): see src/week_4/test_2.cpp
+    //              false if it is LOW while on (a bare button to GND, some modules): see src/week_4_SSD1306_switch_buzzer_audio/tests/2_switch.cpp
     //
     // debounce: a contact bounces for a few ms when it moves; a new level counts only after it
     // stayed the same for DEBOUNCE_MS (so a change is seen DEBOUNCE_MS late)
@@ -46,6 +46,11 @@ namespace switches {
 
         // how long the last state lasted, ms (e.g. how long the last press was, after a release)
         inline uint32_t lastStateMs() const;
+
+        // the time of the Pin (for tools such as Clicks)
+        static inline uint32_t nowMs() {
+            return Pin::nowMs();
+        }
 
     private:
         bool _state = false;

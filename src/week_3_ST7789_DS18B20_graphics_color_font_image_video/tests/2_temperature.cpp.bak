@@ -1,0 +1,97 @@
+#include <Arduino.h>
+#include "Uno_serial.h"
+#include "Uno_one_wire.h"
+#include "DS18B20.h"
+
+// UNO + DS18B20 temperature sensor (VCC, DQ, GND): the temperature on the USB serial once a second
+//   pio device monitor        (platformio.ini: monitor_speed = BAUD)
+
+// ---------- settings ----------
+
+// wiring: DS18B20 VCC -> 5V, GND -> GND
+constexpr uint8_t DQ_PIN = 2;               // DQ: needs a 4.7 kΩ pull-up to VCC (most modules have one)
+constexpr bool DQ_INTERNAL_PULLUP = true;   // the UNO's own ~35 kΩ pull-up as well (enough for short wires only)
+constexpr uint32_t BAUD = 1000000;          // USB serial: the same as monitor_speed in platformio.ini
+
+constexpr uint8_t RESOLUTION_BITS = 12;     // 9 ~ 12: 0.5 ~ 0.0625 °C, 94 ~ 750 ms a conversion
+constexpr uint16_t PERIOD_MS = 1000;        // one line per PERIOD_MS
+constexpr uint16_t TIMEOUT_MARGIN_MS = 50;  // "timeout" when not done after conversionMs() + this
+
+// ---------- parts ----------
+
+using Link = Uno::UnoSerial<BAUD>;
+using Sensor = DS18B20::KY001<Uno::UnoOneWire<DQ_PIN, DQ_INTERNAL_PULLUP>>;   // bare part: DS18B20::TO92, probe: DS18B20::WaterproofProbe
+Sensor sensor;
+
+// ---------- text over the serial link ----------
+
+void printResult(uint8_t result) {
+    if (result == Sensor::ERROR_NO_SENSOR) {
+        Link::printText("[ERROR] no sensor (check DQ on ");
+        Link::printPin(DQ_PIN);
+        Link::printText(", the pull-up, VCC / GND)");
+    } else if (result == Sensor::ERROR_CRC) {
+        Link::printText("[ERROR] CRC (noise, long wire or weak pull-up)");
+    } else if (result == Sensor::ERROR_TIMEOUT) {
+        Link::printText("[ERROR] timeout (parasite power is not supported: connect VCC)");
+    } else if (result == Sensor::ERROR_RESOLUTION) {
+        Link::printText("[ERROR] resolution must be 9 ~ 12 bits");
+    } else {
+        Link::printText("[ERROR] code ");
+        Link::printNumber(result);
+    }
+}
+
+// ---------- main ----------
+
+void setup() {
+    Link::init();
+    Link::printText("\r\nDS18B20 on ");
+    Link::printPin(DQ_PIN);
+    Link::printText("\r\n");
+    uint8_t result = sensor.init(RESOLUTION_BITS);
+    if (result != Sensor::OK) {
+        printResult(result);
+        Link::printText("\r\n");
+        return;
+    }
+    Link::printText("resolution ");
+    Link::printNumber(sensor.resolution());
+    Link::printText(" bits, conversion ");
+    Link::printNumber(sensor.conversionMs());
+    Link::printText(" ms\r\n");
+}
+
+void loop() {
+    uint32_t startMs = millis();
+
+    int16_t raw = 0;
+    uint8_t result = sensor.startConversion();
+    if (result == Sensor::OK) {
+        // the sensor answers 0 while converting
+        bool done = false;
+        while (!done && millis() - startMs < (uint32_t)sensor.conversionMs() + TIMEOUT_MARGIN_MS) {
+            done = sensor.isConversionDone();
+        }
+        result = done ? sensor.readRaw(raw) : Sensor::ERROR_TIMEOUT;
+    }
+
+    if (result == Sensor::OK) {
+        Link::printDecimal(Sensor::toCentiCelsius(raw), 2);   // 2350 -> 23.50
+        Link::printText(" C (raw ");
+        Link::printNumber(raw);
+        Link::printText(", ");
+        Link::printNumber(millis() - startMs);
+        Link::printText(" ms)");
+        if (raw == DS18B20::POWER_ON_RAW) {
+            Link::printText("  85.00 is also the power-on value: the conversion may not have run");
+        }
+    } else {
+        printResult(result);
+    }
+    Link::printText("\r\n");
+
+    // one line per PERIOD_MS
+    while (millis() - startMs < PERIOD_MS) {
+    }
+}

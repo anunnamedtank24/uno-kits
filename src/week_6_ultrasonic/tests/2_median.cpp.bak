@@ -1,0 +1,88 @@
+#include <Arduino.h>
+#include "Uno_serial.h"
+#include "Uno_pin.h"
+#include "Uno_interrupt_pin.h"
+#include "ultrasonic.h"
+
+// UNO + HC-SR04: every measurement next to the median of the last MEDIAN_COUNT (ultrasonic::Median), on the USB serial
+//   pio device monitor        (platformio.ini: monitor_speed = BAUD)
+//
+// one wrong echo (a stray reflection, a missed one) jumps in the raw column but not in the median;
+// the median lags about MEDIAN_COUNT / 2 measurements behind a real move
+
+// ---------- settings ----------
+
+// wiring: HC-SR04 VCC -> 5V, GND -> GND
+constexpr uint8_t TRIG_PIN = 7;             // Trig: any pin
+constexpr uint8_t ECHO_PIN = 8;             // Echo: any pin (pin-change interrupt)
+constexpr uint32_t BAUD = 1000000;          // USB serial: the same as monitor_speed in platformio.ini
+
+constexpr int16_t AIR_TENTHS_C = 250;       // the room's temperature, 0.1 °C: the speed of sound
+constexpr uint16_t INTERVAL_MS = 60;        // between two measurements (HC-SR04: at least 60)
+constexpr uint8_t MEDIAN_COUNT = 5;         // measurements in the median: odd, 3 ~ 15
+constexpr bool ONLY_CHANGES = false;        // true: a line only when the median changes by a cm or more
+
+// ---------- parts ----------
+
+using Ranger = ultrasonic::HCSR04<Uno::UnoOutputPin<TRIG_PIN>, Uno::UnoInterruptPin<ECHO_PIN>>;
+using Link = Uno::UnoSerial<BAUD>;
+
+ultrasonic::Median<Ranger, MEDIAN_COUNT> distance;
+uint16_t lastCm = 0xFFFF;
+
+// ---------- text over the serial link ----------
+
+// "raw  123 mm   median  120 mm  (5/5 good)"
+void printLine() {
+    Link::printText("raw ");
+    if (Ranger::result() == ultrasonic::RESULT_OK) {
+        Link::printNumber(Ranger::distanceMm(), 5);
+        Link::printText(" mm");
+    } else {
+        Link::printText(Ranger::result() == ultrasonic::RESULT_TOO_NEAR ? "too near"
+                        : Ranger::result() == ultrasonic::RESULT_TOO_FAR ? " too far"
+                                                                         : " no echo");
+    }
+    Link::printText("   median ");
+    if (distance.isValid()) {
+        Link::printNumber(distance.distanceMm(), 5);
+        Link::printText(" mm");
+    } else {
+        Link::printText("    -   ");
+    }
+    Link::printText("  (");
+    Link::printNumber(distance.goodCount());
+    Link::printText("/");
+    Link::printNumber(MEDIAN_COUNT);
+    Link::printText(" good)\r\n");
+}
+
+// ---------- main ----------
+
+void setup() {
+    Link::init();
+    distance.init();
+    Ranger::setTemperature(AIR_TENTHS_C);
+    Ranger::setIntervalMs(INTERVAL_MS);
+    Link::printText("\r\nHC-SR04 Trig ");
+    Link::printPin(TRIG_PIN);
+    Link::printText(", Echo ");
+    Link::printPin(ECHO_PIN);
+    Link::printText(", median of ");
+    Link::printNumber(MEDIAN_COUNT);
+    Link::printText("\r\n");
+}
+
+void loop() {
+    if (!distance.update()) {
+        return;
+    }
+    if (ONLY_CHANGES) {
+        uint16_t cm = distance.isValid() ? (uint16_t)(distance.distanceMm() / 10) : 0;
+        if (cm == lastCm) {
+            return;
+        }
+        lastCm = cm;
+    }
+    printLine();
+}

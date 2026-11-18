@@ -1,21 +1,22 @@
 # video/output
 
-`source/convert.py` 產生的動畫，`namespace animation`。除了 `selected.h` 可以手動改，其他檔案都不要手動編輯，要改就重新轉換。
+`source/convert.py` 和程式裡的巨集產生的動畫，`namespace animation`。這裡的檔案都不要手動編輯，要改就重新轉換。
 
 ## 檔案
 
 ```
 output/
-├── selected.h     程式裡能用的動畫，video.h 會 include 它
-├── *.h            給板子的檔案：uno 有幀資料，mac 只有尺寸和路徑
-└── mac/*.h        mac 的幀資料，只有 stream.py 會讀，永遠不會被 include
+├── selected.h    自動寫：列出這裡全部的 .h，video.h 會 include 它
+├── registry.h    自動寫：目前程式裡 ANIMATION("路徑", "選項") 對應的型態
+└── *.h           轉好的動畫：手動跑 convert.py 或 ANIMATION(...) 轉的都在這裡，格式一樣
 ```
 
-## selected.h
+## selected.h、registry.h
 
-- `convert.py` 每次只把剛產生的那個加進來，其他的保持原樣。
-- 不用的動畫刪掉那行 `#include` 就好；就算留著，程式沒用到也不佔 Flash。
-- `python -B source/check.py` 檢查每個 include 都是目前格式、原始檔沒變過（規則見 [source/README.md](../source/README.md#checkpy)）。
+- 都是 `tools/assets.py` 每次編譯前寫的（`convert.py` 也會把新轉的加進 `selected.h`），不用手動編輯。
+- `selected.h` 列出**全部**：沒用到的不佔 Flash（資料在 `inline` 函式裡的 `PROGMEM` 陣列，沒呼叫就不會產生，實測 Flash 一樣）。
+- `registry.h` 只有目前程式裡的 `ANIMATION(...)`。
+- `python source/check.py` 檢查每個檔案都是目前的格式、原始檔沒變過；`convert.py` 每次轉完會自動檢查一次。
 
 ## 目前的動畫
 
@@ -23,17 +24,18 @@ output/
 
 | 檔案 | 指令 | 資料 | 每幀（估計） |
 |---|---|---|---|
-| `orbit_uno_120x120_palette_16.h` | `--target uno --width 120 --scale 2 --palette 16 --colors 8 --keyframe 8` | 1992 B | 1.4 ～ 40.2 ms |
-| `orbit_uno_64x64_palette_16_mono.h` | `--target uno --fit 64x64 --mono --keyframe 8`（OLED） | 882 B | 0.4 ～ 11.4 ms |
-| `orbit_uno_mac_120x120_palette_16.h` | `--target mac uno --width 120 --scale 2` | 2352 B | 1.8 ～ 40.4 ms |
-| `orbit_mac_120x120_palette_565.h` | `--target mac --fit 120x120 --palette 565` | 4658 B（在 `mac/`） | 2.4 ～ 54.0 ms（含傳送） |
+| `orbit_flash_120x120_palette_16.h` | `--target flash --width 120 --scale 2 --palette 16 --colors 8 --keyframe 8` | 1992 B | 1.4 ～ 40.2 ms |
+| `orbit_flash_64x64_palette_16_mono.h` | `--target flash --fit 64x64 --mono --keyframe 8`（OLED） | 882 B | 0.4 ～ 11.4 ms |
+| `orbit_flash_stream_120x120_palette_16.h` | `--target stream flash --width 120 --scale 2` | 2352 B | 1.8 ～ 40.4 ms |
+| `orbit_stream_120x120_palette_565.h` | `--target stream --fit 120x120 --palette 565` | 4658 B（在 `#if 0` 裡） | 2.4 ～ 54.0 ms（含傳送） |
+| `orbit_flash_64x64_palette_16_mono_2.h` | `ANIMATION("orbit.gif", "--width 64 --mono")`（`src/week_4_SSD1306_switch_buzzer_audio/tests/5_files.cpp`）；跟上面的 mono 只差 `--keyframe`，所以加 `_2` | 753 B | 0.4 ～ 11.4 ms |
 
 ## 產生的 struct
 
 ```cpp
 namespace animation {
-    struct orbit_uno_120x120_palette_16 {
-        static constexpr uint8_t target;       // 位元旗標：video::TARGET_UNO = 1、TARGET_MAC = 2，兩者都有就是 3
+    struct orbit_flash_120x120_palette_16 {
+        static constexpr uint8_t target;       // 位元旗標：video::TARGET_FLASH = 1、TARGET_STREAM = 2，兩者都有就是 3
         static constexpr uint8_t width, height; // 存的大小（放大前）
         static constexpr uint8_t scaleX, scaleY;
         static constexpr uint8_t colorMode;    // video::COLORS_16 = 0 / COLORS_256 = 1 / COLORS_565 = 2
@@ -42,17 +44,15 @@ namespace animation {
         static constexpr uint32_t durationMs;  // 一輪的總長
         static inline const char *getPath();   // 幀資料檔的路徑（相對於 lib/video），StreamPlayer 傳給 stream.py
 
-        // 有幀資料的檔案（--target uno、uno mac，以及 mac/ 裡的檔案）才有：
+        // 有幀資料的檔案（--target flash、flash stream）才編譯；--target stream 的在 #if 0 裡：
         static inline const uint16_t *getPalette();   // colorCount 個 RGB565
-        static inline const uint16_t *getOffsets();   // 每一幀在 getFrames() 裡的起點（mac 超過 64 KB 時是 uint32_t）
+        static inline const uint16_t *getOffsets();   // 每一幀在 getFrames() 裡的起點（stream 超過 64 KB 時是 uint32_t）
         static inline const uint8_t *getFrames();     // 所有幀，格式見下
     };
 }
 ```
 
-- **`--target mac`** 產生兩個同名的 struct：
-  - `output/x.h`：只有上半部，加進 `selected.h`。
-  - `output/mac/x.h`：完整的，`getPath()` 指向它。
+- **`--target stream`** 也只有一個檔案 `output/x.h`：前面是板子編譯的上半部（大小、`getPath()`），後面的幀資料放在 `#if 0` 裡（太大，燒不進 Flash，所以永遠不編譯），`stream.py` 從同一個檔案讀。檔名的 `stream` 和 struct 的 `target` 都寫著它是串流用的。
 - **檔案開頭**：
   - `// format: 3`：格式版本。改格式時要調高 `check.py` 的 `FORMAT_VERSION`，舊檔案才會被抓出來。
   - `// source: … sha256 …`：原始檔 和它的 hash。
@@ -78,3 +78,24 @@ run：    依顏色模式不同
 - **P 幀**：只有變化的窗口，螢幕上其他地方保留上一幀。
 - **空幀**：延遲 0、類型 P、窗口數 0。
 - **放大**：每個點畫成 scaleX×scaleY。有放大時，板子先把一行解成顏色存起來（最多 120 個），再重複送出。
+
+## 名稱和來源
+
+每個 .h 的開頭都寫著它從哪個檔案、用什麼選項轉出來：
+
+```
+// options: --fit 120x80 --palette 16
+// source: assets/sunset.jpg sha256 1413…
+```
+
+程式裡的 `ANIMATION("路徑", "選項")` 就是靠這兩行找到已經轉好的檔案：同一個檔案、同樣的選項（順序、`--fit=…` 的寫法不影響）就直接用，沒有才轉。所以不管是手動轉的還是巨集轉的，同一份只轉一次。
+
+| 規則 | 說明 |
+|---|---|
+| 名稱 | `convert.py` 的規則：`{檔名}_{設定}`，struct 同名（`animation::名稱`） |
+| `assets/` 外面的檔案 | 檔名前面加上資料夾（相對於專案；不在專案裡就相對於家目錄），例如 `~/Music/Game/title.mp3` → `music_game_title_…`，不同資料夾的同名檔案不會混在一起 |
+| 不是英數字的字（例如日文） | 拿掉，改加 6 碼雜湊，例如 `16 戦い：ウォロ.aiff` → `…_16_7b5dc7_…` |
+| 名稱撞到（名稱沒包含每個選項，或來源不同） | 加 `_2`、`_3`…，不會蓋掉別的檔案 |
+| 原始檔改過 | 編譯時會警告；`python tools/assets.py --force` 重轉（同名的蓋掉） |
+| 原始檔移走、刪掉 | 輸出還在就照樣能編譯（程式裡的舊路徑一樣找得到它） |
+| 不要的 | `python tools/assets.py --unused` 列出沒有程式（包括 `.bak`）用的，自己刪 |

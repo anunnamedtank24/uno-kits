@@ -8,7 +8,7 @@ namespace switches {
     // the module drives OUT itself: the Pin needs no pull-up (Uno::UnoPin<PIN>)
     //
     // ACTIVE_HIGH: true if OUT is HIGH while on (touch modules, most button modules), the default;
-    //              false if LOW while on (some button, tilt and Hall modules): see src/week_4/test_2.cpp
+    //              false if LOW while on (some button, tilt and Hall modules): see src/week_4_SSD1306_switch_buzzer_audio/tests/2_switch.cpp
     template <class Pin, bool ACTIVE_HIGH = true, uint8_t DEBOUNCE_MS = 20>
     using Switch3Pins = DebouncedSwitch<Pin, ACTIVE_HIGH, DEBOUNCE_MS>;
 }
