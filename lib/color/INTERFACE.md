@@ -6,7 +6,7 @@
 | （不需要） | 每個格式都有一樣的東西：常用顏色（`RED`、`BLACK`…）、`color(r, g, b)`、`red(c)` / `green(c)` / `blue(c)`、互相換算 |
 | （不需要） | 每個格式都能當螢幕的 `ColorFormat`：`ST7789::M130T<Bus, color::RGB565>`，graphics、font、image、video 就都用它畫 |
 
-給要寫新套件、新螢幕、新顏色格式的人。用法見 [README.md](README.md)。`namespace color`。
+給要寫新套件、新螢幕、新顏色格式的人。用法見 [讀我.md](讀我.md)。`namespace color`。
 
 ## 前提條件
 

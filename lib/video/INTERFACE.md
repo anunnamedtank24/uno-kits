@@ -6,7 +6,7 @@
 | 串流：再加一個 `Stream`（`stream::Puller<Uno::UnoSerial<BAUD>, CHUNK>`） | `video::StreamPlayer`：幀留在電腦，播的時候才送過來（播放、暫停、跳轉、速度、循環） |
 | 動態圖或影片（gif、webp、mp4、mov…） | `animation::*`：`ANIMATION("檔案")` 或 `source/convert.py` 轉出來的動畫 |
 
-給要寫新套件、換主板或換零件的人；用法、接線、注意事項見 [README.md](README.md)。
+給要寫新套件、換主板或換零件的人；用法、接線、注意事項見 [讀我.md](讀我.md)。
 
 ## 前提條件
 
@@ -25,13 +25,13 @@
 ```
 lib/video/
 ├── video.h            入口：播放器 + asset.h + output/selected.h
-├── asset.h            ANIMATION(路徑, 選項) 巨集：編譯前自動轉換（tools/assets.py）
+├── asset.h            ANIMATION(路徑, 選項) 巨集：編譯前自動轉換（src/tools/assets.py）
 ├── decoder.h          Decoder<Screen>：幀格式，畫一幀；HeapPalette：執行時配置的調色盤
 ├── flash_player.h     FlashPlayer<Screen>：播放 Flash 裡的幀（--target flash）
 ├── stream_player.h    StreamPlayer<Screen, Stream>：播放電腦傳來的幀（--target stream）
 ├── assets/            原始動畫（orbit.gif）
-├── source/            config.json、convert.py、check.py、stream_handler.py（lib/stream 的 stream.py 用它讀動畫、計時），見 source/README.md
-└── output/            產生的動畫和 selected.h，見 output/README.md
+├── source/            config.json、convert.py、check.py、stream_handler.py（lib/stream 的 stream.py 用它讀動畫、計時），見 source/讀我.md
+└── output/            產生的動畫和 selected.h，見 output/讀我.md
 ```
 
 ## 介面需求
@@ -39,8 +39,8 @@ lib/video/
 | 參數 | 需要的函式 | 現成的實作 |
 |---|---|---|
 | `Screen` | 型別 `ColorFormat`；`width()`、`height()`、`setWindow(x0, y0, x1, y1)`、`writePixel(ColorFormat::Value)`、`endWrite()`；型別 `BusType`，它有 `readFlash8/16`、`nowMs` | `ST7789::M130T`、`SSD1306::OLED128x64` |
-| `Stream`（`StreamPlayer`） | `CHUNK_SIZE`（≥ 16）、`OK`、`ERROR_*`、`begin()`、`write8/16/32()`、`writePath()`、`available()`、`waitAnswer()`，和 `Answer` 類別 | `stream::Puller<Uno::UnoSerial<BAUD>, CHUNK>`（[lib/stream](../stream/README.md)） |
-| `Animation` | `output/selected.h` 裡的 struct（見 [output/README.md](output/README.md#產生的-struct)） | `animation::*` |
+| `Stream`（`StreamPlayer`） | `CHUNK_SIZE`（≥ 16）、`OK`、`ERROR_*`、`begin()`、`write8/16/32()`、`writePath()`、`available()`、`waitAnswer()`，和 `Answer` 類別 | `stream::Puller<Uno::UnoSerial<BAUD>, CHUNK>`（[lib/stream](../stream/讀我.md)） |
+| `Animation` | `output/selected.h` 裡的 struct（見 [output/讀我.md](output/讀我.md#產生的-struct)） | `animation::*` |
 
 ## 函式
 

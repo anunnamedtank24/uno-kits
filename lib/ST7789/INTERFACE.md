@@ -4,7 +4,7 @@
 |---|---|
 | 一個 `Bus`（SPI）：`init(blk)`、`cmdMode()`、`dataMode()`、`write8()`、`write16()`…（`Uno::UnoST7789<DC, RES, CS, BLK>`）；一個 `ColorFormat`（`color::RGB565`、`RGB888`、`RGB444`…） | `ST7789::M130T`：一個 Screen（`graphics`、`image`、`video` 都能畫），12 / 16 / 18 bit 顏色，`fillWindow`、`writeWindow`、背光 |
 
-給要寫新套件、換主板或換零件的人；用法、接線、注意事項見 [README.md](README.md)。
+給要寫新套件、換主板或換零件的人；用法、接線、注意事項見 [讀我.md](讀我.md)。
 
 ## 前提條件
 

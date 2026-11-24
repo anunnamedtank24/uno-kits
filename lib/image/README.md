@@ -1,19 +1,21 @@
 # image
 
-| 需要 | 得到 |
+English | [中文](讀我.md)
+
+| Needs | Gives |
 |---|---|
-| 一個 `Screen`：`writeWindow(…)` 和它的顏色格式 `ColorFormat`（`ST7789::M130T<Bus, color::RGB565>`、`SSD1306::OLED128x64<Bus, color::BW<>>`） | `image::FlashImage`：畫燒進 Flash 的圖片 |
-| 串流：再加一個 `Stream`（`stream::Puller<Uno::UnoSerial<BAUD>, CHUNK>`） | `image::StreamImage`：圖片留在電腦，畫的時候才送過來 |
-| 圖片檔（png、jpg、webp、heic…） | `picture::*`：`PICTURE("檔案")` 或 `source/convert.py` 轉出來的圖片 |
+| a `Screen`: `writeWindow(…)` and its color format `ColorFormat` (`ST7789::M130T<Bus, color::RGB565>`, `SSD1306::OLED128x64<Bus, color::BW<>>`) | `image::FlashImage`: draws pictures burned into Flash |
+| streaming: also a `Stream` (`stream::Puller<Uno::UnoSerial<BAUD>, CHUNK>`) | `image::StreamImage`: the picture stays on the computer and is sent only when drawn |
+| picture files (png, jpg, webp, heic…) | `picture::*`: pictures made by `PICTURE("file")` or `source/convert.py` |
 
-「需要」是介面（duck typing），括號裡是這個專案現成的實作，換主板只要換它們。開發者看的細節（前提條件、介面需求、每個函式、參數、資源）在 [INTERFACE.md](INTERFACE.md)。
+"Needs" are interfaces (duck typing); in parentheses the ready implementations of this project, and another board only replaces them. The details for developers (prerequisites, interface requirements, every function, parameters, resources) are in [INTERFACE.md](INTERFACE.md).
 
-在螢幕上畫靜態圖片，`namespace image`（畫圖的程式）和 `namespace picture`（產生的圖片）。跟 [video](../video/README.md) 一樣有兩種來源，參數也幾乎一樣（尺寸、`--scale`、調色盤或全彩）：
+Still pictures on a screen, `namespace image` (the drawing code) and `namespace picture` (the pictures made). Like [video](../video/README.md) there are two sources, with almost the same parameters (size, `--scale`, palette or full color):
 
-- **預先編譯**：圖片燒進 Flash（`FlashImage`）。
-- **跟電腦拿**：圖片留在電腦，經過 USB 串口送過來（`StreamImage`）。
+- **Compiled in**: the picture is burned into Flash (`FlashImage`).
+- **From the computer**: the picture stays on the computer and comes over the USB serial (`StreamImage`).
 
-## 用法
+## Usage
 
 ### FlashImage
 
@@ -26,14 +28,14 @@ python source/convert.py assets/sunset.jpg output --target flash --fit 120x80 --
 #include "color.h"
 #include "image.h"
 image::FlashImage<Screen> pictures(screen);                        // Screen = graphics::Canvas<ST7789::M130T<Bus, color::RGB565>>
-pictures.draw<picture::sunset_flash_120x80_palette_16>(60, 40);   // 左上角 (60, 40)
+pictures.draw<picture::sunset_flash_120x80_palette_16>(60, 40);   // top left corner (60, 40)
 ```
 
-- **顏色**：檔案裡的顏色一律是 RGB565，畫的時候換成螢幕的顏色格式（`Screen::ColorFormat`）：M130T 用 RGB565 時原樣、不花時間；RGB888 等也自動換；OLED（`color::BW<門檻>`）依亮度決定亮不亮。見 [lib/color](../color/README.md)。
+- **Colors**: the colors in the files are always RGB565, changed into the screen's color format (`Screen::ColorFormat`) when drawn: the M130T with RGB565 takes them as they are, at no cost; RGB888 and others are converted automatically; the OLED (`color::BW<threshold>`) lights each point by its brightness. See [lib/color](../color/README.md).
 
 ### StreamImage
 
-**電腦**：執行一次就好，不用參數。它會自動找板子，燒錄時也會自動放開串口；圖片、動畫、聲音都是同一個程式（[lib/stream](../stream/README.md)）。
+**The computer**: run it once, no arguments. It finds the board by itself and lets go of the port while uploading; pictures, animations and sounds all use this one program ([lib/stream](../stream/README.md)).
 
 ```bash
 cd lib/image
@@ -42,25 +44,25 @@ cd ../..
 python lib/stream/source/stream.py
 ```
 
-**UNO**：
+**The UNO**:
 
 ```cpp
 #include "Uno_serial.h"
 #include "stream.h"
-constexpr uint32_t BAUD = 1000000;          // 跟 stream.py 的 --baud 一樣
-constexpr uint8_t STREAM_CHUNK = 64;        // 一次收幾個 byte（RAM）
+constexpr uint32_t BAUD = 1000000;          // the same as --baud of stream.py
+constexpr uint8_t STREAM_CHUNK = 64;        // bytes received at a time (RAM)
 using Link = Uno::UnoSerial<BAUD>;
 using StreamLink = stream::Puller<Link, STREAM_CHUNK>;
 image::StreamImage<Screen, StreamLink> pictures(screen);
 uint8_t result = pictures.draw<picture::sunset_stream_240x240_palette_565>(0, 0);
 if (result != pictures.OK) {
-    // 錯誤代碼見 INTERFACE.md（OK、ERROR_NO_ANSWER、ERROR_NO_MEMORY…）
+    // the error codes are in INTERFACE.md (OK, ERROR_NO_ANSWER, ERROR_NO_MEMORY…)
 }
 ```
 
-### 在 OLED 上畫
+### Drawing on the OLED
 
-`Decoder` 只透過 `writeWindow` 畫，所以 OLED（[SSD1306](../SSD1306/README.md)）也能用：
+`Decoder` draws only through `writeWindow`, so the OLED ([SSD1306](../SSD1306/README.md)) works too:
 
 ```bash
 python source/convert.py assets/logo.png output --target flash stream --fit 128x64 --palette 2
@@ -69,17 +71,17 @@ python source/convert.py assets/logo.png output --target flash stream --fit 128x
 ```cpp
 image::FlashImage<Screen> pictures(screen);   // Screen = graphics::Canvas<SSD1306::OLED128x64<Bus, color::BW<128>>>
 pictures.draw<picture::logo_flash_stream_128x64_palette_2>(0, 0);
-screen.display();                                      // OLED：畫完要送出
+screen.display();                                      // OLED: send it when drawn
 ```
 
-- **用 `--palette 2`**：轉換時就決定好黑白（可以 `--dither`），不用再判斷；彩色的圖也能畫，由螢幕的 `color::BW<門檻>` 依亮度決定每一點亮不亮，但沒有抖動，暗部容易變成一整片黑。
-- **照片加 `--dither`**：用點的密度表現灰階；`--threshold` 決定多亮算白，`--invert` 把黑白反過來。
+- **Use `--palette 2`**: black and white is decided when converting (`--dither` possible), nothing left to decide; colored pictures draw too, with the screen's `color::BW<threshold>` lighting each point by its brightness, but without dithering the dark parts easily turn all black.
+- **Photos with `--dither`**: shades of gray by the density of points; `--threshold` decides how bright counts as white, `--invert` swaps black and white.
 
-完整的例子：`src/week_3_ST7789_DS18B20_graphics_color_font_image_video/tests/3_pictures.cpp`（彩色）、`src/week_4_SSD1306_switch_buzzer_audio/tests/1_oled.cpp` 的 `tests[14]`、`tests[15]`（OLED）、`src/week_4_SSD1306_switch_buzzer_audio/assignments/1_photo_switch.cpp`。
+Complete examples: `src/week_3_ST7789_DS18B20_graphics_color_font_image_video/tests/3_pictures.cpp` (colors), `tests[14]`, `tests[15]` of `src/week_4_SSD1306_switch_buzzer_audio/tests/1_oled.cpp` (OLED), `src/week_4_SSD1306_switch_buzzer_audio/assignments/1_photo_switch.cpp`.
 
-## 直接用檔案（推薦）
+## Using the files directly (recommended)
 
-程式裡寫 `PICTURE("路徑", "選項")`，編譯前自動轉換，不用先跑 `convert.py`，檔案也不用放在 `assets/`：
+A program writes `PICTURE("path", "options")` and it is converted before compiling: no need to run `convert.py` first, and the file need not be in `assets/`:
 
 ```cpp
 #include "image.h"
@@ -87,73 +89,73 @@ using Cat = PICTURE("photos/cat.jpg", "--fit 128x64 --palette 2 --dither");
 pictures.draw<Cat>(0, 0);
 ```
 
-| 項目 | 說明 |
+| Item | Explanation |
 |---|---|
-| 路徑 | 絕對路徑、`~/…`、相對於寫它的 .cpp；找不到時再試專案資料夾、`lib/image/assets/` |
-| 選項 | 一個字串，就是 `source/convert.py` 的選項：`--target`、`--fit` / `--fill` / `--width`…、`--palette`、`--dither`…；省略 `--target` 時是 `flash`（跟 `convert.py` 一樣） |
-| 轉到哪 | `lib/image/output/`，跟手動跑 `convert.py` 的一樣（`tools/assets.py` 每次編譯前找：同一個檔案、同樣的選項已經轉過就直接用，沒有才轉） |
-| 型態 | `PICTURE(...)` 就是那個 `picture::` struct，跟手動轉換的一樣用 |
-| 限制 | 兩個參數都要是字串常數（不能是變數） |
+| Path | absolute, `~/…`, relative to the .cpp that writes it; if not found, the project folder, then `lib/image/assets/` |
+| Options | one string, the options of `source/convert.py`: `--target`, `--fit` / `--fill` / `--width`…, `--palette`, `--dither`…; without `--target` it is `flash` (as for `convert.py`) |
+| Where it goes | `lib/image/output/`, the same as running `convert.py` by hand (`src/tools/assets.py` looks before every build: the same file with the same options already converted is used, only otherwise is it converted) |
+| Type | `PICTURE(...)` is that `picture::` struct, used like one converted by hand |
+| Limits | both arguments must be string constants (no variables) |
 
-完整的說明：[lib/README.md](../README.md#字型圖片影片聲音直接用檔案)；例子：`src/week_4_SSD1306_switch_buzzer_audio/tests/5_files.cpp`（四種都有）。上面「用法」是手動轉換的方式，一樣能用。
+The full explanation: [lib/README.md](../README.md#fonts-pictures-videos-sounds-use-the-files-directly); example: `src/week_4_SSD1306_switch_buzzer_audio/tests/5_files.cpp` (all four kinds). "Usage" above is the way of converting by hand, which works just as well.
 
-## 顏色和來源
+## Colors and sources
 
-| `--palette` | 每個像素 | 適合 | Flash（flash） | 串流（stream） |
+| `--palette` | A pixel | Good for | Flash (flash) | Streamed (stream) |
 |---|---|---|---|---|
-| `2` | 1 bit：黑或白 | OLED、線條圖；照片加 `--dither` | ✅ | ✅ |
-| `16` | 4 bits，調色盤最多 16 色 | 扁平色塊、插圖 | ✅（預設） | ✅ |
-| `256` | 1 byte，調色盤最多 256 色 | 照片，比 565 省一半 | ✅ | ⚠️ 可以，但會警告（見下面） |
-| `565` | 2 bytes，每個像素自己的顏色 | 照片、漸層 | ✅（很大，會警告） | ✅（預設） |
+| `2` | 1 bit: black or white | OLED, line drawings; photos with `--dither` | ✅ | ✅ |
+| `16` | 4 bits, a palette of up to 16 colors | flat color areas, illustrations | ✅ (default) | ✅ |
+| `256` | 1 byte, a palette of up to 256 colors | photos, half the size of 565 | ✅ | ⚠️ works, with a warning (see below) |
+| `565` | 2 bytes, each pixel its own color | photos, gradients | ✅ (big, with a warning) | ✅ (default) |
 
-編碼由 `convert.py` 自動挑比較小的：**raw**（每個像素照原樣，適合照片和抖色圖）或 **runs**（連續同色的一段存成一筆，適合色塊和圖示）。
+`convert.py` picks the smaller encoding by itself: **raw** (each pixel as it is, good for photos and dithered pictures) or **runs** (a stretch of the same color stored as one entry, good for color areas and icons).
 
 | | `--target flash` | `--target stream` | `--target flash stream` |
 |---|---|---|---|
-| 像素在哪 | `output/x.h`，燒進 Flash | `output/x.h` 的 `#if 0` 裡，留在電腦 | `output/x.h` |
-| 能用的類別 | `FlashImage`（`StreamImage` 也行，會警告） | `StreamImage` | 兩個都可以 |
-| 適合 | 小、色少、不需要電腦 | 大、全彩（240×240 全彩約 115 KB，Flash 只有 32 KB） | 兩種都想用 |
+| where the pixels are | `output/x.h`, burned into Flash | in the `#if 0` of `output/x.h`, staying on the computer | `output/x.h` |
+| the classes that work | `FlashImage` (`StreamImage` too, with a warning) | `StreamImage` | both |
+| good for | small, few colors, no computer needed | big, full color (240×240 in full color is about 115 KB; Flash has only 32 KB) | wanting both |
 
-| 用錯時 | 結果 | 原因 |
+| Used wrong | Result | Why |
 |---|---|---|
-| `FlashImage` 拿到只有 stream 的檔案 | 編譯錯誤 | 檔案裡沒有像素 |
-| `StreamImage` 拿到只有 flash 的檔案 | 編譯警告 | 能畫，但沒用 stream 的範圍檢查過 |
-| `StreamImage` 拿到 256 色的檔案 | 編譯警告 | 調色盤要先傳、執行時才配置 RAM（見下面） |
+| `FlashImage` given a stream-only file | compile error | the file has no pixels |
+| `StreamImage` given a flash-only file | compile warning | it draws, but was not checked against the stream's ranges |
+| `StreamImage` given a 256-color file | compile warning | the palette is sent first and the RAM taken at run time (see below) |
 
-### 串流 256 色：調色盤先傳，放在執行時配置的 RAM
+### Streaming 256 colors: the palette first, in RAM taken at run time
 
-256 色的圖每個像素存的是「第幾號顏色」（0 ～ 255），畫的時候要查調色盤才知道真正的顏色。調色盤有最多 256 個顏色：
+Each pixel of a 256-color picture stores "which color number" (0 ~ 255); drawing looks it up in the palette to know the real color. The palette has up to 256 colors:
 
-| | 調色盤在哪 | 板子要多少 RAM |
+| | Where the palette is | RAM the board needs |
 |---|---|---|
-| Flash | 跟圖一起燒在 Flash，每個像素直接到 Flash 查（`readFlash16`） | 0 |
-| 串流 | 從電腦傳過來；Flash 燒好之後就不能寫，只能放 RAM | 色數 × 螢幕顏色的大小：RGB565 最多 512 bytes，RGB888 最多 1 KB |
+| Flash | burned into Flash with the picture; each pixel looks it up in Flash directly (`readFlash16`) | 0 |
+| stream | sent from the computer; Flash cannot be written once burned, so it can only go into RAM | colors × the size of a screen color: at most 512 bytes for RGB565, 1 KB for RGB888 |
 
-串流時板子的做法：
+What the board does when streaming:
 
-1. **先收調色盤**：標頭之後先傳完整的調色盤（最多 512 bytes），第一個像素要多等這段時間。
-2. **執行時才配置 RAM**（`malloc`）：色數要收到標頭才知道，所以編譯器算的 RAM 用量（`RAM: used …`）**不包含它**。
-3. **確認放得下**：avr-libc 的 `malloc` 會留 128 bytes 給堆疊，放不下就回傳 `ERROR_NO_MEMORY`，什麼都不畫。
-4. **用完就還**：`draw()` 回來之前一定釋放（`HeapPalette` 離開函式時自動 `free`），不會漏掉。
+1. **The palette first**: after the header the whole palette comes first (at most 512 bytes), so the first pixel waits that much longer.
+2. **RAM taken at run time** (`malloc`): the number of colors is known only from the header, so the RAM the compiler counts (`RAM: used …`) **does not include it**.
+3. **Making sure it fits**: avr-libc's `malloc` keeps 128 bytes for the stack; if it does not fit, `ERROR_NO_MEMORY` is returned and nothing is drawn.
+4. **Given back when done**: always freed before `draw()` returns (`HeapPalette` `free`s it when leaving the function), never leaked.
 
-所以編譯時會**警告**（`PaletteInRam`），`convert.py --target stream --palette 256` 也會警告。UNO 只有 2048 bytes RAM（OLED 的畫面就佔 1 KB），OLED 程式通常放不下；要省事就用 2、16 色（調色盤固定放在物件裡，最多 16 色）或不用調色盤的 565。
+So there is a compile **warning** (`PaletteInRam`), and `convert.py --target stream --palette 256` warns too. The UNO has only 2048 bytes of RAM (the OLED's screen alone takes 1 KB), so OLED programs usually do not have room; for an easy life use 2 or 16 colors (the palette is fixed in the object, at most 16 colors) or 565, which has no palette.
 
-## 輸入限制
+## Input limits
 
-| 項目 | 範圍 | 超出時 |
+| Item | Range | Beyond it |
 |---|---|---|
-| `draw` 的 x、y | 任意 | 裁切 |
-| `Picture` | `output/selected.h` 裡的 struct | 編譯錯誤 |
-| 存的寬、高 | 1 ～ 240 | `convert.py` 報錯 |
-| scale | 1 ～ 8 | `convert.py` 報錯 |
-| 調色盤顏色數 | 2：2 色；16：≤ 16；256：≤ 256 | `convert.py` 保證；Flash 版超過時編譯錯誤 |
-| `SEGMENT`、`Stream` 的 `CHUNK` | 1 ～ 255 | 0：編譯錯誤 |
+| x, y of `draw` | anything | clipped |
+| `Picture` | a struct in `output/selected.h` | compile error |
+| stored width, height | 1 ~ 240 | `convert.py` error |
+| scale | 1 ~ 8 | `convert.py` error |
+| colors of the palette | 2: 2 colors; 16: ≤ 16; 256: ≤ 256 | ensured by `convert.py`; a compile error in the Flash version if over |
+| `SEGMENT`, `CHUNK` of `Stream` | 1 ~ 255 | 0: compile error |
 
-## 注意事項
+## Caveats
 
-| 情況 | 結果 | 做法 |
+| Situation | Result | What to do |
 |---|---|---|
-| `StreamImage::draw` 很久 | 等到整張畫完才回來 | 大圖用 `--scale` 或 palette 降低資料量 |
-| 同時開 `pio device monitor` | 兩個都要用同一個串口 | 串流時關掉監看視窗；`stream.py` 本身同時處理圖片、動畫、聲音 |
-| 同時用 Arduino 的 `Serial` | `UnoSerial` 也用 D0 / D1 | 不能同時用 |
-| 想放動畫 | 這裡只有一張圖 | 用 [video](../video/README.md) |
+| `StreamImage::draw` takes long | it returns only when the whole picture is drawn | for big pictures, less data with `--scale` or a palette |
+| `pio device monitor` open at the same time | both need the same serial port | close the monitor while streaming; `stream.py` itself handles pictures, animations and sounds together |
+| Arduino's `Serial` at the same time | `UnoSerial` uses D0 / D1 too | they cannot be used together |
+| wanting animations | this is only one picture | use [video](../video/README.md) |

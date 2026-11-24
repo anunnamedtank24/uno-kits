@@ -1,32 +1,34 @@
 # week_2_LED
 
-LED（[lib/LED](../../lib/LED/README.md)）的測試：亮度怎麼換算、每一種效果（閃爍、呼吸、漸變、心跳）。
+English | [中文](讀我.md)
 
-全部的檔案現在都是 `.bak`，要跑哪個就留下哪個：
+Tests of LEDs ([lib/LED](../../lib/LED/README.md)): how brightness is converted, every effect (blinking, breathing, fading, heartbeat).
+
+Every file is `.bak` now; keep the one to run:
 
 ```bash
-python src/hide.py week_2_LED/tests/1_effects     # 只留下這個（拿掉 .bak），其他改成 .bak
+python src/hide.py week_2_LED/tests/1_effects     # keep only this one (drop its .bak), the others become .bak
 pio run -t upload
-pio device monitor                      # 1 Mbaud
+pio device monitor                      # at BAUD (= monitor_speed of platformio.ini)
 ```
 
-| 檔案 | 內容 | 需要的硬體 |
+| File | Contents | Hardware needed |
 |---|---|---|
-| `tests/1_effects.cpp` | 一顆 LED：亮度分段、閃爍、呼吸、漸變、心跳，一項一項跑 | LED + 220 Ω |
+| `tests/1_effects.cpp` | one LED: brightness steps, blinking, breathing, fading, heartbeat, one after another | LED + 220 Ω |
 
-其他用到 LED 的程式：`week_4_SSD1306_switch_buzzer_audio/tests/6_clicks`（按鈕手勢換效果）、`week_5_NEC/assignments/1_rgb_remote`（遙控器調紅、綠、藍）。
+Other programs using LEDs: `week_4_SSD1306_switch_buzzer_audio/tests/6_clicks` (button gestures change the effect), `week_5_NEC/assignments/1_rgb_remote` (a remote sets red, green, blue).
 
-## 接線
+## Wiring
 
 | LED | UNO |
 |---|---|
-| 長腳（+） | 220 Ω → **D6** |
-| 短腳（-） | GND |
+| long leg (+) | 220 Ω → **`LED_PIN`** |
+| short leg (-) | GND |
 
-- **一定要串電阻**：LED 自己不限流，直接接腳位會燒掉 LED 或腳位。
-- **要 PWM 腳**（3、5、6、9、10、11）才能調亮度；換腳改 `LED_PIN`。
+- **Always a resistor in series**: an LED does not limit its current, and straight on a pin it burns the LED or the pin.
+- **`LED_PIN` must be a PWM pin** (3, 5, 6, 9, 10, 11) for brightness.
 
-# tests/1_effects.cpp：LED 的每種效果
+# tests/1_effects.cpp: every effect of an LED
 
 ```
 LED on D6
@@ -41,14 +43,14 @@ test 3: fade
 test 4: heartbeat
 ```
 
-| 測試 | 應該看到 |
+| Test | What you should see |
 |---|---|
-| 0 亮度分段 | 0 ～ 255 分 `STEPS` 段，每段看起來都比前一段亮一點、而且平均 |
-| 1 閃爍 | 閃 `BLINK_TIMES` 下後熄滅 |
-| 2 呼吸 | 平順地變亮變暗，一次 `BREATHE_MS` |
-| 3 漸變 | `FADE_MS` 內從暗到最亮，再回到暗 |
-| 4 心跳 | 兩下短跳、休息，重複 |
+| 0 brightness steps | 0 ~ 255 in `STEPS` steps, each looking a bit brighter than the one before, and evenly |
+| 1 blinking | blinks `BLINK_TIMES` times, then off |
+| 2 breathing | brighter and dimmer smoothly, one breath per `BREATHE_MS` |
+| 3 fading | from dark to brightest within `FADE_MS`, then back to dark |
+| 4 heartbeat | two short beats, a rest, repeated |
 
-- **亮度是眼睛看的**：0 ～ 255 看起來均勻變亮，所以 128 看起來「一半亮」，PWM 的工作週期其實只有 25 %（duty = brightness² ÷ 255 = 64）。
-- **效果不會等**：`effect.blink(...)` 馬上回來，要一直呼叫 `effect.update()`（這裡的 `run(ms)` 就是在做這件事）。
-- **只跑某幾個**：`ONLY_TESTS`，例如 `(1UL << 2)` 只跑呼吸。
+- **The brightness is as the eye sees it**: 0 ~ 255 looks evenly brighter, so 128 looks "half as bright", while the PWM duty cycle is really only 25 % (duty = brightness² ÷ 255 = 64).
+- **Effects never wait**: `effect.blink(...)` returns at once, and `effect.update()` must be called all the time (which is what `run(ms)` does here).
+- **Running only some**: `ONLY_TESTS`, e.g. `(1UL << 2)` runs only breathing.

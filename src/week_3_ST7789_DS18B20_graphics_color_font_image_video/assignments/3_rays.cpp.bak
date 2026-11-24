@@ -109,9 +109,10 @@ struct Ray {
     Color color;
 };
 
+// the rest is set by startRay()
 Ray rays[2] = {
-    { M, 1, WARM_COLORS },
-    { N, -1, COOL_COLORS },
+    { M, 1, WARM_COLORS, 0, 0, 0, 0, 0, 0, 0.0f, 0.0f, 0, false, 0, 0 },
+    { N, -1, COOL_COLORS, 0, 0, 0, 0, 0, 0, 0.0f, 0.0f, 0, false, 0, 0 },
 };
 
 // ---------- parameter space ----------
@@ -174,12 +175,13 @@ int32_t divRound(int32_t a, int32_t b) {
 }
 
 // pixel k of the ray (0 = start, steps = end): one step along the longer axis, the other rounded
+// steps 0: a start on the edge, heading out (the ray is just its start point)
 int16_t rayX(const Ray &ray, int16_t k) {
-    return ray.x0 + (int16_t)divRound((int32_t)k * (ray.x1 - ray.x0), ray.steps);
+    return ray.steps == 0 ? ray.x0 : ray.x0 + (int16_t)divRound((int32_t)k * (ray.x1 - ray.x0), ray.steps);
 }
 
 int16_t rayY(const Ray &ray, int16_t k) {
-    return ray.y0 + (int16_t)divRound((int32_t)k * (ray.y1 - ray.y0), ray.steps);
+    return ray.steps == 0 ? ray.y0 : ray.y0 + (int16_t)divRound((int32_t)k * (ray.y1 - ray.y0), ray.steps);
 }
 
 // pixels from ~ to of the ray, in one color

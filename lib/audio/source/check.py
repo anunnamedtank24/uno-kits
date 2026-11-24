@@ -3,6 +3,7 @@ sys.dont_write_bytecode = True # importing must not leave __pycache__
 
 import argparse
 import hashlib
+import json
 import os
 import re
 import shlex
@@ -21,10 +22,12 @@ Rules (errors):
     every included file defines struct melody::{file name}, getPath() and its data: getNotes() (notes, rhythm)
     or getSamples() (pcm); --target stream: the data is in the "#if 0" part of the same file
     the source audio of an included file (recorded path + sha256) is unchanged, if it still exists
+    every included file was made for the board of platformio.ini (custom_board): the hash of its
+    "// board:" line
 Warnings:
     the source audio of an included file is gone (cannot tell if it changed)
     a .h in the output dir is not selected (fine, it just cannot be used)
-selected.h lists every .h of output/ (unused ones are not compiled in): tools/assets.py writes it before every
+selected.h lists every .h of output/ (unused ones are not compiled in): src/tools/assets.py writes it before every
 build, convert.py adds what it makes; nothing to edit by hand. convert.py runs this check after every conversion.
 """
 
@@ -60,12 +63,13 @@ def get_format_str() -> str:
     return f"// format: {FORMAT_VERSION}\n"
 
 
-# ---------- names and options (also used by tools/assets.py, through the header lines) ----------
+# ---------- names and options (also used by src/tools/assets.py, through the header lines) ----------
 
 PROJECT_DIR_PATH = LIB_DIR_PATH.parent.parent
 ASSETS_DIR_PATH = LIB_DIR_PATH/"assets"
 OPTIONS_PATTERN = re.compile(r"^// options: (.*)$", re.MULTILINE)
-IGNORED_OPTIONS = ("--name", "--preview") # each with a value
+IGNORED_OPTIONS = ("--name", "--preview", "--board") # each with a value;
+# --board: not in "// options:" but in "// board:" (the project's, not the file's)
 
 
 def get_file_name(source_path: Path) -> str:
@@ -96,7 +100,7 @@ def get_file_name(source_path: Path) -> str:
 
 def get_options(argv: list[str], positionals: list[str]) -> list[str]:
     # the options as given, without the positional arguments and what does not change the output
-    # (--name, --preview): what tools/assets.py compares with the options of FONT / PICTURE / ANIMATION / MELODY
+    # (--name, --preview): what src/tools/assets.py compares with the options of FONT / PICTURE / ANIMATION / MELODY
     options = list(argv)
     for value in positionals:
         if value in options:
@@ -139,7 +143,7 @@ def get_free_name(output_dir_path: Path, name: str, source_path: Path, options_s
 
 def get_normalized_options(options_text: str) -> tuple:
     # the same options in any order or form: "--fit=64x64 --palette 2" is "--palette 2 --fit 64x64"
-    # (tools/assets.py compares them the same way)
+    # (src/tools/assets.py compares them the same way)
     try:
         args = shlex.split(options_text)
     except ValueError:
@@ -158,12 +162,109 @@ def get_normalized_options(options_text: str) -> tuple:
     return tuple(sorted(tuple(group) for group in groups))
 
 
+
+# ---------- the board: every number of it the converter uses (the project's parameter, not convert.py's) ----------
+
+INI_PATH = PROJECT_DIR_PATH/"platformio.ini"
+BOARD_PATTERN = re.compile(r"^// board: (.+) sha256 ([0-9a-f]{64})$", re.MULTILINE)
+# the board of this run: set once by load_board (convert.py, stream_handler.py), read by board_value ...
+board = None
+board_path = None
+
+
+def get_project_board_path() -> Path | None:
+    # platformio.ini of the project: custom_board = lib/Uno/board.json (relative to the project); None if not there
+    if not INI_PATH.exists():
+        return None
+    match = re.search(r"^custom_board[ \t]*=[ \t]*(.*?)[ \t]*(?:[ \t];.*)?$", INI_PATH.read_text(), re.MULTILINE)
+    if match is None or not match.group(1):
+        return None
+    path = Path(match.group(1)).expanduser()
+    return path if path.is_absolute() else PROJECT_DIR_PATH/path
+
+
+def get_board_values(data):
+    # the values without the "note"s: what an output depends on
+    if isinstance(data, dict):
+        return {key: get_board_values(value) for key, value in data.items() if key != "note"}
+    if isinstance(data, list):
+        return [get_board_values(value) for value in data]
+    return data
+
+
+def get_board_hash(data: dict) -> str:
+    return hashlib.sha256(json.dumps(get_board_values(data), sort_keys=True).encode()).hexdigest()
+
+
+def read_board(path: Path) -> dict:
+    try:
+        data = json.loads(Path(path).read_text())
+    except (OSError, ValueError) as e:
+        raise ValueError(f"board file {path} cannot be read: {e}")
+    if not isinstance(data, dict) or "name" not in data:
+        raise ValueError(f"board file {path}: not a board (no \"name\")")
+    return data
+
+
+def add_board_argument(parser: argparse.ArgumentParser):
+    parser.add_argument("--board", metavar="FILE",
+                        help="the board's numbers (flash size and attribute, clock, drawing cycles ...), e.g. lib/Uno/board.json "
+                             "(default: custom_board of platformio.ini)")
+
+
+def load_board(path: str | Path | None = None):
+    # the board of this run: path, else platformio.ini; ValueError if neither
+    global board, board_path
+    if path is None:
+        path = get_project_board_path()
+        if path is None:
+            raise ValueError(f"no board: give --board, or custom_board in {INI_PATH.name} (e.g. lib/Uno/board.json)")
+    board_path = Path(path).expanduser().resolve()
+    board = read_board(board_path)
+
+
+def board_value(*keys):
+    # board_value("flash", "bytes"); ValueError naming the missing key
+    value = board
+    for key in keys:
+        if not isinstance(value, dict) or key not in value:
+            raise ValueError(f"board file {board_path} has no {'.'.join(keys)}")
+        value = value[key]
+    return value
+
+
+def get_stream_byte_cycles() -> float:
+    # one byte over the serial: 10 bits on the line, in CPU cycles, + 10 % for the chunk requests
+    return board_value("cpuHz")*10/board_value("serial", "baud")*1.1
+
+
+def get_board_str() -> str:
+    # the line that says which board the output was made for (check_header, src/tools/assets.py compare the hash)
+    return f"// board: {board_value('name')} sha256 {get_board_hash(board)}\n"
+
+
+def get_flash_include_str() -> str:
+    header = board_value("flash", "header")
+    return f"#include <{header}>\n" if header else ""
+
+
+def get_array_start_str(type_: str, name: str) -> str:
+    # "static const uint8_t name[] PROGMEM = "
+    attribute = board_value("flash", "attribute")
+    return f"static const {type_} {name}[]" + (f" {attribute}" if attribute else "") + " = "
+
+
+def get_recorded_board_hash(header_str: str) -> str | None:
+    match = BOARD_PATTERN.search(header_str)
+    return match.group(2) if match else None
+
+
 def get_new_selected_str() -> str:
     selected_str = ""
     selected_str += f"#ifndef {SELECTED_GUARD}\n"
     selected_str += f"#define {SELECTED_GUARD}\n\n"
     selected_str += "// melodies compiled into the program, included by audio.h\n"
-    selected_str += "// every .h of output/ (unused ones are not compiled in): tools/assets.py and convert.py keep it\n"
+    selected_str += "// every .h of output/ (unused ones are not compiled in): src/tools/assets.py and convert.py keep it\n"
     selected_str += "// python source/check.py checks every include\n"
     selected_str += "\n#endif\n"
     return selected_str
@@ -208,6 +309,16 @@ def check_header(header_path: Path) -> tuple[list[str], list[str]]:
         errors.append(f"{header_path.name}: no namespace {NAMESPACE}")
     if not re.search(rf"^\s*struct {re.escape(name)} \{{", header_str, re.MULTILINE):
         errors.append(f"{header_path.name}: no struct {NAMESPACE}::{name} (file renamed?)")
+
+    recorded_hash = get_recorded_board_hash(header_str)
+    project_board_path = get_project_board_path()
+    if recorded_hash is None:
+        errors.append(f"{header_path.name}: no board line (made by an old convert.py), regenerate it")
+    elif project_board_path is not None and project_board_path.exists():
+        project_hash = get_board_hash(read_board(project_board_path))
+        if recorded_hash != project_hash:
+            errors.append(f"{header_path.name}: made for another board (or {project_board_path.name} changed since): "
+                          f"python src/clean.py --rebuild")
 
     source_match = SOURCE_PATTERN.search(header_str)
     if not source_match:

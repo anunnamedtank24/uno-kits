@@ -1,67 +1,71 @@
 # Uno
 
-| 需要 | 得到 |
+English | [中文](讀我.md)
+
+| Needs | Gives |
 |---|---|
-| Arduino 的 `millis()`、`micros()`（Arduino UNO，ATmega328P） | 其他函式庫要的介面的 UNO 版本：Bus（`UnoST7789`、`UnoI2C`）、Link（`UnoSerial`）、Wire（`UnoOneWire`）、Pin、Pwm、InterruptPin、AnalogPin（`UnoInputPin`、`UnoPwmPin`、`UnoInterruptPin`、`UnoAnalogPin`）、Tone（`UnoTone`）、Carrier（`UnoIrCarrier`）、SampleOut（`UnoPcmOut`）、背景執行（`UnoBackground`）；接錯腳在編譯時就擋下 |
+| Arduino's `millis()`, `micros()` (Arduino UNO, ATmega328P) | the UNO version of the interfaces other libraries need: Bus (`UnoST7789`, `UnoI2C`), Link (`UnoSerial`), Wire (`UnoOneWire`), Pin, Pwm, InterruptPin, AnalogPin (`UnoInputPin`, `UnoPwmPin`, `UnoInterruptPin`, `UnoAnalogPin`), Tone (`UnoTone`), Carrier (`UnoIrCarrier`), SampleOut (`UnoPcmOut`), background tasks (`UnoBackground`); a wrong pin is stopped when compiling |
 
-「需要」是介面（duck typing），括號裡是這個專案現成的實作，換主板只要換它們。開發者看的細節（前提條件、介面需求、每個函式、參數、資源）在 [INTERFACE.md](INTERFACE.md)。
+"Needs" are interfaces (duck typing); in parentheses the ready implementations of this project, and another board only replaces them. The details for developers (prerequisites, interface requirements, every function, parameters, resources) are in [INTERFACE.md](INTERFACE.md).
 
-Arduino UNO（ATmega328P）的暫存器層，`namespace Uno`，四大類裡的「主板」。這是最底層：別的函式庫要的介面（「需要」那一欄）在這裡有 UNO 的版本，每個的函式見[提供的介面](INTERFACE.md#提供的介面)。換主板時，照同樣的函式為新的主板寫一份。
+The register layer of the Arduino UNO (ATmega328P), `namespace Uno`, the "board" of the four categories. This is the lowest level: the interfaces other libraries need (the "Needs" column) have their UNO versions here; the functions of each are in [the interfaces provided](INTERFACE.md#提供的介面). For another board, write the same functions for that board.
 
-## 用法
+## Usage
 
-用到哪個介面就 include 哪個檔案，`Uno.h` 不會反過來 include 介面：
+Include the file of each interface you use; `Uno.h` never includes the interfaces the other way round:
 
 ```cpp
-#include "Uno_ST7789.h"   // ST7789 螢幕
-#include "Uno_I2C.h"      // I2C 裝置（OLED）
-#include "Uno_serial.h"   // 從電腦串流圖片、影片
-#include "Uno_one_wire.h" // 1-Wire 感測器
-#include "Uno_pin.h"      // 開關、有源蜂鳴器、LED、馬達驅動
-#include "Uno_analog_pin.h"  // 類比感測器（ADC）
-#include "Uno_interrupt_pin.h" // 紅外線接收器、超音波（只能在一個 .cpp 裡 include）
-#include "Uno_background.h"    // 背景執行 update()（只能在一個 .cpp 裡 include）
-#include "Uno_tone.h"     // 無源蜂鳴器（只能在一個 .cpp 裡 include）
-#include "Uno_pcm_out.h"  // 取樣（PCM）：人聲、真正的波形（只能在一個 .cpp 裡 include）
+#include "Uno_ST7789.h"   // ST7789 screens
+#include "Uno_I2C.h"      // I2C devices (OLED)
+#include "Uno_serial.h"   // streaming pictures, videos from the computer
+// #include "Uno_serial_buffer.h"  // or instead of Uno_serial.h: UnoSerial<BAUD, RX_SIZE, TX_SIZE> with buffers, e.g. Bluetooth (one .cpp only)
+// #include "Uno_soft_serial.h"    // a UART on any two pins (software), e.g. Bluetooth while D0 / D1 stay USB (one .cpp only)
+#include "Uno_one_wire.h" // 1-Wire sensors
+#include "Uno_pin.h"      // switches, active buzzers, LEDs, motor drivers
+#include "Uno_analog_pin.h"  // analog sensors (ADC)
+#include "Uno_interrupt_pin.h" // infrared receivers, ultrasonic (include it in one .cpp only)
+#include "Uno_background.h"    // update() in the background (include it in one .cpp only)
+#include "Uno_tone.h"     // passive buzzers (include it in one .cpp only)
+#include "Uno_pcm_out.h"  // samples (PCM): voices, real waveforms (include it in one .cpp only)
 
 constexpr uint8_t DC_PIN = 8;
 constexpr uint8_t RES_PIN = 10;
 constexpr uint8_t BLK_PIN = 9;
-using Bus = Uno::UnoST7789<DC_PIN, RES_PIN, Uno::NONE, BLK_PIN>;    // 沒有 CS
+using Bus = Uno::UnoST7789<DC_PIN, RES_PIN, Uno::NONE, BLK_PIN>;    // no CS
 ```
 
-完整的例子：`src/` 的每個程式（parts 段落）；`src/week_7_L298N/tests/7_background_remote.cpp`（`UnoBackground`）、`src/week_1_analog/tests/1_sensors.cpp`（`UnoAnalogPin`、`UnoChip`）。
+Complete examples: every program in `src/` (the parts section); `src/week_7_L298N/tests/7_background_remote.cpp` (`UnoBackground`), `src/week_1_analog/tests/1_sensors.cpp` (`UnoAnalogPin`, `UnoChip`).
 
-## 輸入限制
+## Input limits
 
-| 項目 | 範圍 | 超出時 |
+| Item | Range | Beyond it |
 |---|---|---|
-| 腳位（template） | 0 ～ 19，或 `Uno::NONE`（只有選填的腳） | 編譯錯誤；D0 / D1 編譯警告 |
-| `UnoPwmPin` 的腳位 | 3、5、6、9、10、11 | 編譯錯誤 |
-| `UnoAnalogPin` 的腳位 | 14 ～ 19（A0 ～ A5） | 編譯錯誤 |
-| `UnoPcmOut` 的腳位 | 9、10 | 編譯錯誤 |
-| `UnoIrCarrier` 的腳位 | 3、11 | 編譯錯誤 |
-| `MODE` | 0 ～ 3 | 編譯錯誤 |
-| `BAUD` | 2000 ～ 2000000，誤差 ≤ 5% | 編譯錯誤；誤差 > 2% 編譯警告 |
-| `UnoI2C` 的 `KHZ` | 1 ～ 400 | 編譯錯誤 |
-| `init(blk)`、`setBacklight(blk)` | 0 ～ 255；BLK 不是 PWM 腳時只有 0 = 關、其他 = 開 | — |
-| `read8(byte, timeoutMs)` | 0 ～ 65535 ms | — |
-| `UnoTone::start(hz)` | 16 ～ 20000，0 = 停止 | 夾到範圍內 |
-| `UnoPcmOut::start(rate, next)` | 1954 ～ 32000 Hz | 夾到範圍內 |
-| `readAnalogAverage(count)` | 1 ～ 64 | 夾到範圍內 |
-| `UnoBackground::add` | 最多 6 個函式 | 回傳 false |
-| `readFlash8/16(p)` | 必須指向 `PROGMEM` 的資料 | 不檢查：讀到錯的資料 |
-| `delayMs(ms)` | 0 ～ 65535 | — |
+| pins (template) | 0 ~ 19, or `Uno::NONE` (optional pins only) | compile error; D0 / D1 compile warning |
+| pins of `UnoPwmPin` | 3, 5, 6, 9, 10, 11 | compile error |
+| pins of `UnoAnalogPin` | 14 ~ 19 (A0 ~ A5) | compile error |
+| pins of `UnoPcmOut` | 9, 10 | compile error |
+| pins of `UnoIrCarrier` | 3, 11 | compile error |
+| `MODE` | 0 ~ 3 | compile error |
+| `BAUD` | 2000 ~ 2000000, off by ≤ 5% | compile error; off by > 2% compile warning |
+| `KHZ` of `UnoI2C` | 1 ~ 400 | compile error |
+| `init(blk)`, `setBacklight(blk)` | 0 ~ 255; when BLK is not a PWM pin only 0 = off, anything else = on | — |
+| `read8(byte, timeoutMs)` | 0 ~ 65535 ms | — |
+| `UnoTone::start(hz)` | 16 ~ 20000, 0 = stop | clamped |
+| `UnoPcmOut::start(rate, next)` | 1954 ~ 32000 Hz | clamped |
+| `readAnalogAverage(count)` | 1 ~ 64 | clamped |
+| `UnoBackground::add` | at most 6 functions | returns false |
+| `readFlash8/16(p)` | must point to `PROGMEM` data | not checked: wrong data is read |
+| `delayMs(ms)` | 0 ~ 65535 | — |
 
-## 注意事項
+## Caveats
 
-| 情況 | 結果 | 做法 |
+| Situation | Result | What to do |
 |---|---|---|
-| 電腦打開串口 | 板子重置（DTR），bootloader 約等 1 秒 | 先開電腦上的程式，再燒錄 |
-| `Uno_tone.h`、`Uno_interrupt_pin.h`、`Uno_pcm_out.h`、`Uno_background.h` 被兩個 .cpp include | 中斷函式重複定義，連結錯誤 | 只在一個 .cpp 裡 include（這個專案一次只有一個 .cpp） |
-| 同一組腳位（D0 ～ D7、D8 ～ D13、A0 ～ A5）有兩個 `UnoInterruptPin` | 後 `init` 的蓋掉前一個 | 放在不同組 |
-| `UnoTone` 和 D9 / D10 的 `pwmSet` 同時用（例如 `UnoST7789` 的 BLK 接 D9） | 兩邊互改 Timer1，頻率和亮度都錯 | BLK 改接 D3、D5、D6、D11，或 `Uno::NONE` |
-| `UnoTone` 在 D9 / D10 以外的腳，同時用 `UnoOneWire` | 關中斷時方波暫停，聲音抖一下 | 蜂鳴器接 D9 或 D10（不用中斷） |
-| `REFERENCE_EXTERNAL` 以外的參考電壓，但 AREF 腳接了電壓 | 內部參考和外部電壓短路，可能燒壞 | AREF 有接東西時，全部用 `REFERENCE_EXTERNAL` |
-| 背景函式太慢（超過 1 ms） | 下一輪被跳過（`skipped()` 會增加） | 背景只放 `update()` 這類不會等的函式 |
-| 一隻腳接耗電的東西 | 一隻腳建議 ≤ 20 mA（絕對上限 40 mA），整顆晶片 ≤ 200 mA | 透過電晶體推 |
+| the computer opens the serial port | the board resets (DTR), the bootloader waits about 1 second | start the program on the computer first, then upload |
+| `Uno_tone.h`, `Uno_interrupt_pin.h`, `Uno_pcm_out.h`, `Uno_background.h` included by two .cpp | the interrupt functions are defined twice, a link error | include them in one .cpp only (this project has one .cpp at a time) |
+| two `UnoInterruptPin` in the same group of pins (D0 ~ D7, D8 ~ D13, A0 ~ A5) | the one `init`ed later replaces the other | put them in different groups |
+| `UnoTone` together with `pwmSet` on D9 / D10 (e.g. the BLK of `UnoST7789` on D9) | both change Timer1: frequency and brightness both wrong | move BLK to D3, D5, D6, D11, or `Uno::NONE` |
+| `UnoTone` on a pin other than D9 / D10, together with `UnoOneWire` | the square wave pauses while interrupts are off, the sound wobbles | put the buzzer on D9 or D10 (no interrupts) |
+| a reference voltage other than `REFERENCE_EXTERNAL`, with a voltage on the AREF pin | the internal reference and the external voltage are shorted, may burn out | when AREF has something connected, always use `REFERENCE_EXTERNAL` |
+| a background function too slow (over 1 ms) | the next round is skipped (`skipped()` goes up) | put only non-waiting functions like `update()` in the background |
+| a pin driving something power-hungry | ≤ 20 mA a pin recommended (40 mA absolute maximum), ≤ 200 mA for the whole chip | drive it through a transistor |

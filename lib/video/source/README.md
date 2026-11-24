@@ -1,200 +1,204 @@
 # video/source
 
-在電腦上跑的工具。需要 Python 3、`pip install pillow`（串流另外要 `pyserial`）；影片（.mp4、.mov、.webm…）另外要 `brew install ffmpeg`。都在 `lib/video` 裡執行。
+English | [中文](讀我.md)
 
-## 檔案
+Tools that run on the computer. Needs Python 3, `pip install pillow` (streaming also needs `pyserial`); videos (.mp4, .mov, .webm…) also need `brew install ffmpeg`. All run inside `lib/video`.
 
-| 檔案 | 作用 |
+## Files
+
+| File | What it does |
 |---|---|
-| `config.json` | 兩個目標（flash、stream）的參數範圍、預設值，以及畫圖時間的估計值 |
-| `convert.py` | 動畫、影片 → `output/*.h`，並把新產生的那個加進 `output/selected.h` |
-| `check.py` | 檢查 `output/` 的每個檔案：目前的格式、原始檔沒變（`convert.py` 每次轉完會自動跑） |
-| `stream_handler.py` | [lib/stream](../../stream/README.md) 的 `stream.py` 用它讀動畫、計時、送幀（指令 `'O'`、`'N'`、`'P'`、`'S'`、`'J'`、`'V'`、`'L'`）；不單獨執行 |
+| `config.json` | the parameter ranges and defaults of the two targets (flash, stream); the board's numbers (clock, flash, drawing cycles) are in its `board.json` (`--board`) |
+| `convert.py` | animations, videos → `output/*.h`, and adds the new one to `output/selected.h` |
+| `check.py` | checks every file of `output/`: the current format, an unchanged source (`convert.py` runs it after every conversion) |
+| `stream_handler.py` | used by `stream.py` of [lib/stream](../../stream/README.md) to read animations, keep the time and send frames (commands `'O'`, `'N'`, `'P'`, `'S'`, `'J'`, `'V'`, `'L'`); not run on its own |
 
-## 用法
+## Usage
 
 ```bash
 cd lib/video
 python source/convert.py assets/orbit.gif output --target flash --width 120 --scale 2 --palette 16 --colors 8 --keyframe 8
 python source/convert.py ~/Movies/clip.mp4 output --target flash --fit 64x64 --mono --start 3 --duration 2 --max-fps 10
 python source/check.py
-cd ../.. && python lib/stream/source/stream.py     # 串流：圖片、動畫、聲音都是它
+cd ../.. && python lib/stream/source/stream.py     # streaming: it serves pictures, animations and sounds
 ```
 
 ## convert.py
 
-### 支援的檔案
+### Files supported
 
-| 副檔名 | 怎麼讀 | 每一幀的時間 |
+| Extension | Read by | Time of each frame |
 |---|---|---|
-| `.gif`、`.webp`（動態）、`.png` / `.apng`（動態） | Pillow，已經處理好疊加和清除規則 | 檔案裡每一幀自己的時間（小於 20 ms 的當成 100 ms，跟瀏覽器一樣） |
-| `.mp4`、`.mov`、`.m4v`、`.webm`、`.mkv`、`.avi` | ffmpeg（只取畫面，聲音丟掉） | 影片的 fps，最多 30（或 `--max-fps`） |
+| `.gif`, `.webp` (animated), `.png` / `.apng` (animated) | Pillow, with the blending and disposal rules already handled | each frame's own time in the file (under 20 ms is taken as 100 ms, as browsers do) |
+| `.mp4`, `.mov`, `.m4v`, `.webm`, `.mkv`, `.avi` | ffmpeg (only the picture, the sound is dropped) | the video's fps, at most 30 (or `--max-fps`) |
 
-- **影片先縮小**：長邊超過 480 px 的先縮到 480（螢幕只有 240），長影片才放得進記憶體。
-- **一張靜態圖**也可以（一幀），會一直顯示。
-- **實測**：同一段動畫存成 gif、webp、apng、mp4、mov、m4v、mkv、avi、webm，轉成 64×64 黑白都是 24 幀、876 ～ 888 bytes；1920×1080、60 fps 的影片會縮成 480×270、抽成 30 fps。
+- **Videos are shrunk first**: a long side over 480 px is first shrunk to 480 (the screen is only 240), so long videos fit in memory.
+- **A single still picture** works too (one frame), shown all the time.
+- **Measured**: the same animation saved as gif, webp, apng, mp4, mov, m4v, mkv, avi, webm, converted to 64×64 black and white, always gives 24 frames, 876 ~ 888 bytes; a 1920×1080, 60 fps video is shrunk to 480×270 and thinned to 30 fps.
 
-### 目標
+### Targets
 
-`--target` 可以給一個或兩個，省略時是 `flash`：
+`--target` takes one or two; left out it is `flash`:
 
 | | `--target flash` | `--target stream` | `--target flash stream` |
 |---|---|---|---|
-| 幀資料在哪 | `output/x.h`，燒進 Flash | `output/x.h` 的 `#if 0` 裡，留在電腦 | `output/x.h` |
-| `output/x.h` 裡有什麼 | 幀資料 + 路徑 | 只有尺寸、時間、路徑 | 幀資料 + 路徑 |
-| 顏色（`--palette`） | 16（預設）、256、565（警告） | 16、256（警告：調色盤先傳、板子執行時配置 RAM）、565（預設） | 16（預設）、256、565（警告） |
-| 範圍 | flash 的 | stream 的 | 兩者都允許的（交集） |
+| where the frame data is | `output/x.h`, burned into Flash | in the `#if 0` of `output/x.h`, staying on the computer | `output/x.h` |
+| what `output/x.h` has | frame data + path | only size, times, path | frame data + path |
+| colors (`--palette`) | 16 (default), 256, 565 (warning) | 16, 256 (warning: the palette is sent first, the board takes RAM at run time), 565 (default) | 16 (default), 256, 565 (warning) |
+| ranges | flash's | stream's | what both allow (the intersection) |
 
-### 時間
+### Time
 
-| 參數 | 預設 | 說明 |
+| Parameter | Default | Explanation |
 |---|---|---|
-| `--start S` | 0 | 從第幾秒開始 |
-| `--duration S` | 到結尾 | 取幾秒。UNO 的 Flash 只放得下幾秒，影片通常要剪 |
-| `--max-fps F` | — | 間隔小於 1/F 的幀丟掉，時間加給前一幀，總長不變；影片直接用這個 fps 抽幀 |
-| `--min-fps F` | — | `--max-bytes` 降幀率時的下限；估計板子達不到這個 fps 時也會警告 |
+| `--start S` | 0 | starts at second S |
+| `--duration S` | to the end | takes S seconds. The UNO's Flash holds only a few seconds: videos usually need cutting |
+| `--max-fps F` | — | frames less than 1/F apart are dropped, their time added to the frame before, the total length unchanged; videos are thinned straight to this fps |
+| `--min-fps F` | — | the lower limit when `--max-bytes` lowers the frame rate; also a warning when the board is estimated not to reach this fps |
 
-### 尺寸
+### Size
 
-所有尺寸都是指「螢幕上」的大小，也就是放大之後：
+Every size means the size "on the screen", that is, after scaling up:
 
-| 參數 | 說明 |
+| Parameter | Explanation |
 |---|---|
-| （都不給） | 原本的大小 |
-| `--width W` 或 `--height H` | 只給一個：維持比例 |
-| `--width W --height H` | 兩個都給：剛好這個大小（會拉伸） |
-| `--resize F` / `--resize FXxFY` | 原尺寸的倍數，可以是小數，x 和 y 可以不同，例如 `0.75` 或 `1.5x1` |
-| `--fit WxH` | 維持比例，塞進 W×H 的框裡，盡量大 |
-| `--fill WxH` | 維持比例，蓋滿 W×H，超出的部分從中間裁掉 |
-| `--scale N` / `--scale NXxNY` | 板子把每個點重複畫 NX×NY 次，只能是整數。資料只存「螢幕大小 ÷ scale」 |
-| `--resample` | 縮放的算法：`nearest`（像素風）、`bilinear`、`bicubic`、`lanczos`（預設） |
+| (none given) | the original size |
+| `--width W` or `--height H` | only one: the aspect ratio is kept |
+| `--width W --height H` | both: exactly this size (stretched) |
+| `--resize F` / `--resize FXxFY` | a multiple of the original size, decimals allowed, x and y may differ, e.g. `0.75` or `1.5x1` |
+| `--fit WxH` | keeps the aspect ratio, as big as fits in a W×H box |
+| `--fill WxH` | keeps the aspect ratio, covers W×H, cutting off the excess from the middle |
+| `--scale N` / `--scale NXxNY` | the board draws each point NX×NY times, whole numbers only. The data stores only "screen size ÷ scale" |
+| `--resample` | the scaling method: `nearest` (pixel art), `bilinear`, `bicubic`, `lanczos` (default) |
 
-- 非整數倍的放大用 `--resize` 或 `--width`；`--scale` 只負責整數倍、省資料。
-- 尺寸不是 scale 的整數倍時會四捨五入，並印警告說實際大小。
+- For scaling by a fraction use `--resize` or `--width`; `--scale` is only for whole multiples, to save data.
+- A size that is not a whole multiple of scale is rounded, with a warning giving the real size.
 
-### 顏色
+### Colors
 
-| 參數 | 說明 |
+| Parameter | Explanation |
 |---|---|
-| `--palette 16` | 共用調色盤，最多 16 色，每個 run 1 byte。適合扁平色塊、像素風 |
-| `--palette 256` | 共用調色盤，最多 256 色，每個 run 2 bytes。flash：調色盤直接從 Flash 讀；stream：跟著標頭先傳，板子放在執行時配置的 RAM（警告） |
-| `--palette 565` | 每個像素自己的 RGB565 顏色，每個 run 3 bytes。適合照片、漸層 |
-| `--colors N` | 調色盤只用 N 色（16 / 256） |
-| `--dither` | 抖色：漸層比較平滑，但 run 變短、資料變大 |
-| `--background` | 透明的地方填什麼顏色，預設 000000 |
-| `--mono` | 只有黑白（16 色模式，調色盤 0x0000、0xFFFF），給 OLED 用。檔名多一個 `_mono` |
-| `--threshold N` | `--mono` 沒有 `--dither` 時，灰階 ≥ N 是白（預設 128） |
-| `--invert` | `--mono`：黑白反過來 |
+| `--palette 16` | a shared palette of up to 16 colors, 1 byte a run. Good for flat color areas, pixel art |
+| `--palette 256` | a shared palette of up to 256 colors, 2 bytes a run. flash: the palette is read straight from Flash; stream: it comes first with the header and the board keeps it in RAM taken at run time (warning) |
+| `--palette 565` | each pixel its own RGB565 color, 3 bytes a run. Good for photos, gradients |
+| `--colors N` | the palette uses only N colors (16 / 256) |
+| `--dither` | dithering: smoother gradients, but shorter runs and more data |
+| `--background` | the color transparent parts are filled with, default 000000 |
+| `--mono` | black and white only (16-color mode, palette 0x0000, 0xFFFF), for the OLED. The file name gets an extra `_mono` |
+| `--threshold N` | `--mono` without `--dither`: gray ≥ N is white (default 128) |
+| `--invert` | `--mono`: black and white swapped |
 
-### 資料量
+### Data size
 
-| 參數 | 說明 |
+| Parameter | Explanation |
 |---|---|
-| `--max-bytes N` | 資料超過 N 就自動降，直到放得下為止；降不下來就報錯 |
-| `--reduce fps` / `size` | `--max-bytes` 先降幀率還是先降尺寸（預設 size），一邊到下限就換另一邊 |
-| `--keyframe N` | flash：每 N 幀一個 I 幀（只有 stream 時忽略：電腦直接送差異） |
-| `--tile N` | 找變化區域用的小方塊大小，預設 8 |
-| `--name` | 自訂檔名和 struct 名稱 |
+| `--max-bytes N` | when the data is over N it is lowered automatically until it fits; an error if it cannot get there |
+| `--reduce fps` / `size` | whether `--max-bytes` lowers the frame rate or the size first (default size); when one side reaches its limit, it switches to the other |
+| `--keyframe N` | flash: an I-frame every N frames (ignored for stream only: the computer sends differences directly) |
+| `--tile N` | the size of the small squares used to find changed areas, default 8 |
+| `--name` | your own file and struct name |
+| `--board FILE` | the board's numbers: flash size and how constants are kept there (UNO: `PROGMEM`, `avr/pgmspace.h`), clock, drawing cycles…; by default `custom_board` of `platformio.ini` (UNO: `lib/Uno/board.json`). Not counted in `// options:`, recorded in `// board:` |
 
-- **檔名**：`{檔名}_{flash|stream|flash_stream}_{寬}x{高}_palette_{16|256|565}[_mono].h`（`--mono` 時加 `_mono`），struct 同名。`assets/` 外面的檔案前面加上資料夾；撞名（例如只差 `--keyframe`）加 `_2`、`_3`，不蓋掉別的（見 [output/README.md](../output/README.md#名稱和來源)）。
+- **File names**: `{file name}_{flash|stream|flash_stream}_{width}x{height}_palette_{16|256|565}[_mono].h` (`_mono` with `--mono`), the struct named the same. Files outside `assets/` get their folders in front; equal names (e.g. differing only by `--keyframe`) get `_2`, `_3`, never replacing another (see [output/README.md](../output/README.md#names-and-sources)).
 
-### 流程
+### Steps
 
-1. **讀檔**：動態圖用 Pillow 讀出每一幀；影片用 ffmpeg 依 fps 抽幀、先縮小。再依 `--start`、`--duration` 剪。
-2. **降幀率**（`--max-fps`）：丟掉間隔太短的幀，時間加給前一幀。
-3. **尺寸**：
-   - 算出螢幕上的大小；`--fill` 先從中間裁掉多出的部分。
-   - 除以 `--scale` 得到要存的大小，用 `--resample` 縮放，透明的地方填背景色。
-4. **顏色**：
-   - 565：每個像素直接轉 RGB565。
-   - 16 / 256：所有幀合起來用 octree 法做一個共用調色盤；`--dither` 用 Floyd–Steinberg 抖色，否則取最接近的顏色。
-5. **編碼每一幀**：第 0 幀和 `--keyframe` 指定的幀是 I 幀，其他幀比較三種畫法，選成本最低的：
-   - **變化窗口**：畫面切成 `--tile` 大小的小方塊，有變化的方塊合併成矩形，再縮小到實際變化的範圍。
-   - **單一窗口**：包住所有變化的最小矩形。
-   - **整張重畫**：標成 I 幀，`FlashPlayer` 落後時也可以跳到這裡。
-6. **成本**：畫圖時間 + 資料量 × 每 byte 成本，數值都在 `config.json`：
-   - 每個窗口約 480 週期，每個螢幕像素約 44 週期，每個 run 約 30 週期。
-   - 每 byte：flash 讀 Flash 約 6 週期；stream 經串口約 176 週期（1 Mbaud）。所以串流會偏向資料量少的畫法。
-7. **`--max-bytes`**：資料太大時，依 `--reduce` 把幀率或尺寸乘以 0.85 再重做。幀率不低於 `--min-fps`，尺寸不小於 4 px。
+1. **Reading**: animated pictures give every frame through Pillow; videos are thinned by fps with ffmpeg and shrunk first. Then cut by `--start`, `--duration`.
+2. **Lowering the frame rate** (`--max-fps`): frames too close together are dropped, their time added to the frame before.
+3. **Size**:
+   - computes the size on the screen; `--fill` first cuts the excess off the middle.
+   - divided by `--scale` gives the size to store, scaled with `--resample`, transparent parts filled with the background color.
+4. **Colors**:
+   - 565: each pixel straight to RGB565.
+   - 16 / 256: one shared palette for all frames together by the octree method; `--dither` uses Floyd–Steinberg dithering, otherwise the nearest color.
+5. **Encoding each frame**: frame 0 and the frames `--keyframe` picks are I-frames; the other frames compare three ways of drawing and take the cheapest:
+   - **Changed windows**: the picture is cut into small squares of `--tile`, the changed squares are merged into rectangles, then shrunk to the area that really changed.
+   - **One window**: the smallest rectangle around all changes.
+   - **Redrawing the whole picture**: marked as an I-frame, so `FlashPlayer` can jump here when behind.
+6. **Cost**: drawing time + data size × the cost of a byte, the values all in the board's `board.json` (the UNO's below):
+   - about 480 cycles a window, about 44 cycles a screen pixel, about 30 cycles a run.
+   - a byte: about 6 cycles reading Flash for flash; about 176 cycles over the serial for stream (1 Mbaud). So streaming leans towards ways with less data.
+7. **`--max-bytes`**: when the data is too big, the frame rate or the size is multiplied by 0.85 according to `--reduce` and it is done again. The frame rate never goes below `--min-fps`, the size never below 4 px.
 
-產生的檔案格式見 [output/README.md](../output/README.md)。
+The format of the files made: see [output/README.md](../output/README.md).
 
-### 錯誤和警告
+### Errors and warnings
 
-| 情況 | 處理 |
+| Situation | Handling |
 |---|---|
-| 檔案不存在、副檔名不支援、讀不出來 | 錯誤，不產生檔案 |
-| 影片但沒有 ffmpeg / ffprobe | 錯誤：`brew install ffmpeg` |
-| 剪的範圍裡沒有幀 | 錯誤 |
-| 超過 3000 幀 | 錯誤：用 `--start` / `--duration` 剪短，或降低 `--max-fps` |
-| `--target flash` 時超過 UNO 的 Flash（32256 bytes） | 錯誤：`--max-bytes`、剪短、降低幀率或尺寸，或 `--target stream` |
-| 超過格式或板子的硬限制（螢幕上最大 240×240；有放大時存的寬度 ≤ 120；幀資料位移超過 64 KB） | 錯誤，並提示可以調哪個參數 |
-| 超出 `config.json` 的建議範圍 | 警告 |
-| 估計板子達不到動畫的 fps，或低於 `--min-fps` | 警告 |
+| the file does not exist, the extension is not supported, it cannot be read | error, no file made |
+| a video without ffmpeg / ffprobe | error: `brew install ffmpeg` |
+| no frames in the cut range | error |
+| over 3000 frames | error: cut it shorter with `--start` / `--duration`, or lower `--max-fps` |
+| over the board's flash (`flash.bytes`, UNO: 32256 bytes) with `--target flash` | error: `--max-bytes`, cut it shorter, a lower frame rate or size, or `--target stream` |
+| beyond the hard limits of the format or the board (at most 240×240 on the screen; with scaling, a stored width ≤ 120; frame data offsets beyond 64 KB) | error, with a hint on which parameter to change |
+| beyond the recommended ranges of `config.json` (data size as a share of the board's flash: `recommendedMaxFlashShare`) | warning |
+| the board estimated not to reach the animation's fps, or below `--min-fps` | warning |
 
 ## check.py
 
-| 類型 | 項目 |
+| Kind | Item |
 |---|---|
-| 錯誤 | `selected.h` 不存在或沒有 include guard |
-| 錯誤 | include 的檔案不存在、不在 `output/` 裡、include 自己、重複 include |
-| 錯誤 | 檔案的 `// format:` 不是目前的 `FORMAT_VERSION` |
-| 錯誤 | 檔案裡沒有 `struct animation::{檔名}` |
-| 錯誤 | 原始檔跟產生時不一樣（比對 sha256） |
-| 錯誤 | 檔案裡沒有幀資料（`--target stream` 的在 `#if 0` 裡） |
-| 警告 | 原始檔找不到 |
-| 警告 | `output/` 裡有沒被選的 .h |
+| error | `selected.h` missing or without an include guard |
+| error | an included file missing, not in `output/`, including itself, included twice |
+| error | the file's `// format:` is not the current `FORMAT_VERSION` |
+| error | no `struct animation::{file name}` in the file |
+| error | the source file differs from when it was made (sha256 compared) |
+| error | no frame data in the file (those of `--target stream` are in `#if 0`) |
+| error | the `// board:` of a file is not the board of `custom_board` in `platformio.ini` (or its numbers changed): `python src/clean.py --rebuild` |
+| warning | the source file not found |
+| warning | a .h in `output/` that is not selected |
 
-檢查不通過時結束碼是 1。`convert.py` 產生完會自動跑一次。
+The exit code is 1 when the check fails. `convert.py` runs it once after making a file.
 
 ## stream_handler.py
 
-[lib/stream](../../stream/README.md) 的 `stream.py`（找板子、燒錄時放開串口、開串口會重置板子的注意事項、`'D'` / `'R'` 一塊一塊送）收到動畫的指令時交給它：
+`stream.py` of [lib/stream](../../stream/README.md) (finds the board, lets go of the port while uploading, the caveat that opening the port resets the board, sends piece by piece with `'D'` / `'R'`) hands it the animation commands:
 
-- **安全**：只開 `lib/video` 裡面的 `.h`；`--target stream`（幀在 `#if 0` 裡）和 `--target flash` 的檔案都可以；256 色的調色盤放在標頭裡（色數 0 = 256）。
-- **`--tile`**：`stream.py` 的選項，找變化區域的格子大小（預設 8）。
-- **每 5 秒印一次**：每秒畫了幾幀、為了跟上時間跳過幾幀。
+- **Safe**: opens only `.h` files inside `lib/video`; files of `--target stream` (frames in `#if 0`) and `--target flash` both work; the palette of 256 colors is in the header (color count 0 = 256).
+- **`--tile`**: an option of `stream.py`, the grid size for finding changed areas (default 8).
+- **Prints every 5 seconds**: how many frames a second were drawn, how many were skipped to keep up.
 
-### 動畫的指令和回答
+### The commands and answers of animations
 
-板子決定要播哪個檔案、怎麼播，電腦負責計時和送幀。傳法（`'D'` 通知、`'R'` 拉一塊、電腦主動送的永遠不超過 1 byte）見 [lib/stream 的協定](../../stream/INTERFACE.md#協定)。
+The board decides which file to play and how; the computer keeps the time and sends the frames. How things are passed (`'D'` to notify, `'R'` to pull a piece, never more than 1 byte unasked from the computer): see [the protocol of lib/stream](../../stream/INTERFACE.md#協定).
 
-**板子 → 電腦：指令**
+**Board → computer: commands**
 
-| 指令 | 參數 | 電腦的回答 |
+| Command | Arguments | The computer's answer |
 |---|---|---|
-| `'O'` 開啟 | CHUNK、旗標（bit 0 播放、bit 1 循環）、速度（uint16 %）、起始位置（uint32 ms）、路徑長度、路徑 | `'G'` 或 `'E'` |
-| `'N'` 要下一幀 | — | `'F'`（有新幀時）或 `'K'`（沒有新幀） |
-| `'P'` 播放 / `'S'` 暫停 | — | `'A'` |
-| `'J'` 跳轉 | 位置（uint32 ms） | `'A'` |
-| `'V'` 速度 | 百分比（uint16，1～1000） | `'A'` |
-| `'L'` 循環 | 0 / 1 | `'A'` |
+| `'O'` open | CHUNK, flags (bit 0 play, bit 1 loop), speed (uint16 %), start position (uint32 ms), path length, path | `'G'` or `'E'` |
+| `'N'` next frame please | — | `'F'` (when there is a new frame) or `'K'` (no new frame) |
+| `'P'` play / `'S'` pause | — | `'A'` |
+| `'J'` seek | position (uint32 ms) | `'A'` |
+| `'V'` speed | percent (uint16, 1 ~ 1000) | `'A'` |
+| `'L'` loop | 0 / 1 | `'A'` |
 
-回答的第一個 byte 是種類：
+The first byte of an answer is its kind:
 
-| 回答 | 內容 |
+| Answer | Content |
 |---|---|
-| `'G'` 標頭 | 狀態、寬、高、scaleX、scaleY、顏色模式、色數、幀數（uint16）、總長（uint32 ms）、調色盤（只有 16 色模式） |
-| `'F'` 幀 | 狀態 + 一幀（格式見 [output/README.md](../output/README.md#格式format-3)） |
-| `'K'` 沒有新幀 | 狀態。暫停、播完、或下一幀還很久時，最多每秒一次；狀態改變時（例如播完）立刻送。板子收到後再送 `'N'` |
-| `'A'` 指令完成 | 狀態 |
-| `'E'` 錯誤 | 代碼（1 找不到、2 讀不懂、3 不能串流）、訊息長度、訊息 |
+| `'G'` header | state, width, height, scaleX, scaleY, color mode, color count, frame count (uint16), total length (uint32 ms), palette (16-color mode only) |
+| `'F'` frame | state + one frame (format: see [output/README.md](../output/README.md#format-format-3)) |
+| `'K'` no new frame | state. When paused, finished, or the next frame is still far off, at most once a second; sent at once when the state changes (e.g. finished). The board sends `'N'` again after it |
+| `'A'` command done | state |
+| `'E'` error | code (1 not found, 2 unreadable, 3 not streamable), message length, message |
 
-**狀態**（7 bytes）：旗標（bit 0 播放中、bit 1 已結束）、位置（uint32 ms）、幀號（uint16）。
+**State** (7 bytes): flags (bit 0 playing, bit 1 finished), position (uint32 ms), frame number (uint16).
 
-### 計時（電腦）
+### Timing (the computer)
 
-- **位置** = 起點 + （現在 − 開始時間）× 速度。暫停時位置不動。循環時超過總長就從頭；不循環時停在結尾，狀態變成已結束。
-- **送哪一幀**：收到 `'N'` 後，只要「現在位置該顯示的幀」跟螢幕上的不同，就送那一幀跟螢幕上那幀的差異。落後的幀直接跳過，不需要 I 幀。
-- **跳轉、改速度**：只改時鐘，下一個 `'N'` 自然會送新位置的那一幀。
+- **Position** = the start + (now − the time started) × speed. Paused, the position stays. Looping, it starts over past the total length; not looping, it stops at the end and the state becomes finished.
+- **Which frame to send**: after an `'N'`, whenever "the frame due at the current position" differs from the one on the screen, it sends the difference between that frame and the one on the screen. Frames fallen behind are simply skipped, no I-frame needed.
+- **Seeking, changing the speed**: only changes the clock; the next `'N'` naturally gets the frame of the new position.
 
-### 錯誤處理（板子）
+### Error handling (the board)
 
-- **重連**：下面這些情況板子會重新送 `'O'`，帶著目前的位置、播放狀態、速度和循環設定，所以會從原本的地方接著播：
-  - 3 秒內沒收到任何回答。
-  - 一塊資料在 200 ms 內沒收完。
-  - 指令 1 秒內沒有回答。
-  - 回答的種類不對。
-  - 窗口超出動畫範圍。
-- **`'E'`**：記下錯誤代碼，等 3 秒再重試，因為檔案可能晚一點才產生。
-- **競爭**：板子送控制指令時，電腦可能剛好在送幀。板子會先把那一幀畫完、再要下一幀，然後繼續等指令的 `'A'`；電腦也會等那一幀被拉完，才回答指令。
+- **Reconnecting**: in these cases the board sends `'O'` again, with the current position, play state, speed and loop setting, so it goes on where it was:
+  - no answer at all within 3 seconds.
+  - a piece of data not complete within 200 ms.
+  - a command not answered within 1 second.
+  - an answer of the wrong kind.
+  - a window beyond the animation's area.
+- **`'E'`**: remembers the error code and tries again after 3 seconds, as the file may be made a little later.
+- **Races**: while the board sends a control command, the computer may just be sending a frame. The board finishes drawing that frame first, asks for the next frame, then keeps waiting for the command's `'A'`; the computer also waits until that frame has been pulled before answering the command.

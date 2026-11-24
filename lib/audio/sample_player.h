@@ -26,8 +26,10 @@ namespace audio {
         template <class Clip>
         static inline void play(bool repeat = false);
 
-        // the same from a pointer: count samples of an encoding (PCM_U8 / PCM_U4 / PCM_ADPCM) at rate
-        static inline void play(const uint8_t *samples, uint32_t count, uint8_t encoding, uint16_t rate, bool repeat);
+        // the same from a pointer: count samples of an encoding (PCM_U8 / PCM_U4 / PCM_ADPCM) at rate;
+        // steps: the step table of PCM_ADPCM (the sound's getSteps()), silent without it
+        static inline void play(const uint8_t *samples, uint32_t count, uint8_t encoding, uint16_t rate, bool repeat,
+                                const uint16_t *steps = nullptr);
 
         // stops the output when the sound has ended (the interrupt only marks it); call every loop
         static inline void update();
@@ -87,14 +89,15 @@ namespace audio {
                       "audio::SamplePlayer: not a PCM sound (--sound pcm): notes and rhythms are played by audio::Player");
         static_assert(Clip::target & TARGET_FLASH,
                       "audio::SamplePlayer: made with --target stream only (no samples on the board): use audio::StreamSamplePlayer");
-        play(Clip::getSamples(), Clip::count, Clip::encoding, Clip::rate, repeat);
+        play(Clip::getSamples(), Clip::count, Clip::encoding, Clip::rate, repeat, stepsOf<Clip>());
     }
 
     template <class SampleOut>
     inline void SamplePlayer<SampleOut>::play(const uint8_t *samples, uint32_t count, uint8_t encoding,
-                                              uint16_t rate, bool repeat) {
+                                              uint16_t rate, bool repeat, const uint16_t *steps) {
         stop();
-        if (samples == nullptr || count == 0 || encoding < PCM_U8 || encoding > PCM_ADPCM) {
+        if (samples == nullptr || count == 0 || encoding < PCM_U8 || encoding > PCM_ADPCM
+            || (encoding == PCM_ADPCM && steps == nullptr)) {
             return;
         }
         _samples = samples;
@@ -103,7 +106,7 @@ namespace audio {
         _repeat = repeat;
         _position = 0;
         _ended = false;
-        _adpcm.reset();
+        _adpcm.reset(steps);
         _running = true;
         SampleOut::start(rate, &next);
     }
@@ -147,7 +150,7 @@ namespace audio {
                 return PCM_SILENCE;
             }
             position = 0;
-            _adpcm.reset();
+            _adpcm.restart();
         }
         uint8_t sample;
         if (_encoding == PCM_U8) {

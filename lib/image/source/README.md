@@ -1,159 +1,163 @@
 # image/source
 
-在電腦上跑的工具。需要 Python 3、`pip install pillow`（串流另外要 `pyserial`）。HEIC 可以另外裝 `pillow-heif`，沒裝的話 macOS 會用內建的 `sips`。都在 `lib/image` 裡執行。
+English | [中文](讀我.md)
 
-## 檔案
+Tools that run on the computer. Needs Python 3, `pip install pillow` (streaming also needs `pyserial`). For HEIC, `pillow-heif` can be installed too; without it, macOS uses its built-in `sips`. All run inside `lib/image`.
 
-| 檔案 | 作用 |
+## Files
+
+| File | What it does |
 |---|---|
-| `config.json` | 兩個目標（flash、stream）的參數範圍、預設值，以及畫圖時間的估計值 |
-| `convert.py` | 圖片 → `output/*.h`，並把新產生的那個加進 `output/selected.h` |
-| `check.py` | 檢查 `output/` 的每個檔案：目前的格式、原始檔沒變（`convert.py` 每次轉完會自動跑） |
-| `stream_handler.py` | [lib/stream](../../stream/README.md) 的 `stream.py` 用它讀圖片、回答板子的 `'I'`；不單獨執行 |
+| `config.json` | the parameter ranges and defaults of the two targets (flash, stream); the board's numbers (clock, flash, drawing cycles) are in its `board.json` (`--board`) |
+| `convert.py` | picture → `output/*.h`, and adds the new one to `output/selected.h` |
+| `check.py` | checks every file of `output/`: the current format, an unchanged source (`convert.py` runs it after every conversion) |
+| `stream_handler.py` | used by `stream.py` of [lib/stream](../../stream/README.md) to read pictures and answer the board's `'I'`; not run on its own |
 
-## 用法
+## Usage
 
 ```bash
 cd lib/image
 python source/convert.py assets/sunset.jpg output --target flash --fit 120x80 --scale 2 --palette 16
 python source/check.py
-cd ../.. && python lib/stream/source/stream.py     # 串流：圖片、動畫、聲音都是它
+cd ../.. && python lib/stream/source/stream.py     # streaming: it serves pictures, animations and sounds
 ```
 
 ## convert.py
 
-### 支援的檔案
+### Files supported
 
-| 副檔名 | 怎麼讀 |
+| Extension | Read by |
 |---|---|
-| `.jpg`、`.jpeg`、`.png`、`.webp` | Pillow |
-| `.heic`、`.heif` | `pillow-heif`（有裝的話）；沒有就用 macOS `sips` 先轉成暫存的 png，轉完刪掉 |
+| `.jpg`, `.jpeg`, `.png`, `.webp` | Pillow |
+| `.heic`, `.heif` | `pillow-heif` (if installed); otherwise macOS `sips` first turns it into a temporary png, deleted afterwards |
 
-- **EXIF orientation**：照片會先轉正，跟相簿裡看到的方向一樣。
-- **透明**：用 alpha 混合到 `--background` 上（預設 000000），半透明的邊緣也會混合，不是直接切掉。
-- **其他副檔名**：報錯。
+- **EXIF orientation**: photos are turned upright first, the same way as in the photo album.
+- **Transparency**: alpha-blended onto `--background` (default 000000); half-transparent edges are blended too, not just cut.
+- **Other extensions**: an error.
 
-### 目標
+### Targets
 
-`--target` 可以給一個或兩個，省略時是 `flash`：
+`--target` takes one or two; left out it is `flash`:
 
 | | `--target flash` | `--target stream` | `--target flash stream` |
 |---|---|---|---|
-| 像素在哪 | `output/x.h`，燒進 Flash | `output/x.h` 的 `#if 0` 裡，留在電腦 | `output/x.h` |
-| `output/x.h` 裡有什麼 | 像素 + 路徑 | 只有尺寸、顏色、路徑 | 像素 + 路徑 |
-| 顏色（`--palette`） | 2、16（預設）、256、565（警告） | 2、16、256（警告：調色盤先傳、板子執行時配置 RAM）、565（預設） | 2、16（預設）、256、565（警告） |
-| 範圍 | flash 的 | stream 的 | 兩者都允許的（交集） |
+| where the pixels are | `output/x.h`, burned into Flash | in the `#if 0` of `output/x.h`, staying on the computer | `output/x.h` |
+| what `output/x.h` has | pixels + path | only size, colors, path | pixels + path |
+| colors (`--palette`) | 2, 16 (default), 256, 565 (warning) | 2, 16, 256 (warning: the palette is sent first, the board takes RAM at run time), 565 (default) | 2, 16 (default), 256, 565 (warning) |
+| ranges | flash's | stream's | what both allow (the intersection) |
 
-### 尺寸（解析度）
+### Size (resolution)
 
-所有尺寸都是指「螢幕上」的大小，也就是放大之後。跟 `lib/video/source/convert.py` 一樣：
+Every size means the size "on the screen", that is, after scaling up. The same as `lib/video/source/convert.py`:
 
-| 參數 | 說明 |
+| Parameter | Explanation |
 |---|---|
-| （都不給） | 圖片原本的大小（存的寬高都必須 ≤ 240，照片通常要給尺寸） |
-| `--width W` 或 `--height H` | 只給一個：維持比例 |
-| `--width W --height H` | 兩個都給：剛好這個大小（會拉伸） |
-| `--resize F` / `--resize FXxFY` | 原尺寸的倍數，可以是小數，例如 `0.1` |
-| `--fit WxH` | 維持比例，塞進 W×H 的框裡，盡量大 |
-| `--fill WxH` | 維持比例，蓋滿 W×H，超出的部分從中間裁掉 |
-| `--scale N` / `--scale NXxNY` | 板子把每個點重複畫 NX×NY 次（1 ～ 8）。資料只存「螢幕大小 ÷ scale」，也就是降低解析度換資料量 |
-| `--resample` | 縮放的算法：`nearest`（像素風）、`bilinear`、`bicubic`、`lanczos`（預設） |
+| (none given) | the picture's own size (the stored width and height must both be ≤ 240; photos usually need a size) |
+| `--width W` or `--height H` | only one: the aspect ratio is kept |
+| `--width W --height H` | both: exactly this size (stretched) |
+| `--resize F` / `--resize FXxFY` | a multiple of the original size, decimals allowed, e.g. `0.1` |
+| `--fit WxH` | keeps the aspect ratio, as big as fits in a W×H box |
+| `--fill WxH` | keeps the aspect ratio, covers W×H, cutting off the excess from the middle |
+| `--scale N` / `--scale NXxNY` | the board draws each point NX×NY times (1 ~ 8). The data stores only "screen size ÷ scale": resolution traded for data size |
+| `--resample` | the scaling method: `nearest` (pixel art), `bilinear`, `bicubic`, `lanczos` (default) |
 
-- 螢幕上超過 240×240 只會警告：圖片會裁切，但多出來的資料是浪費的。
-- 尺寸不是 scale 的整數倍時會四捨五入，並印警告說實際大小。
+- Over 240×240 on the screen is only a warning: the picture is clipped, but the extra data is wasted.
+- A size that is not a whole multiple of scale is rounded, with a warning giving the real size.
 
-### 顏色
+### Colors
 
-| 參數 | 說明 |
+| Parameter | Explanation |
 |---|---|
-| `--palette 2` | 黑白，1 bit。灰階 ≥ `--threshold`（預設 128）是白；`--dither` 用 Floyd–Steinberg 抖色；`--invert` 黑白反過來 |
-| `--palette 16` | 調色盤最多 16 色（median cut），4 bits |
-| `--palette 256` | 調色盤最多 256 色，1 byte。flash：調色盤直接從 Flash 讀；stream：調色盤先傳，板子放在執行時配置的 RAM（警告） |
-| `--palette 565` | 每個像素自己的 RGB565 顏色，2 bytes |
-| `--colors N` | 調色盤只用 N 色（16 / 256） |
-| `--dither` | 抖色（2 / 16 / 256）：漸層比較平滑，但 runs 變短 |
-| `--background` | 透明的地方放在什麼顏色上，預設 000000 |
+| `--palette 2` | black and white, 1 bit. Gray ≥ `--threshold` (default 128) is white; `--dither` uses Floyd–Steinberg dithering; `--invert` swaps black and white |
+| `--palette 16` | a palette of up to 16 colors (median cut), 4 bits |
+| `--palette 256` | a palette of up to 256 colors, 1 byte. flash: the palette is read straight from Flash; stream: the palette is sent first and the board keeps it in RAM taken at run time (warning) |
+| `--palette 565` | each pixel its own RGB565 color, 2 bytes |
+| `--colors N` | the palette uses only N colors (16 / 256) |
+| `--dither` | dithering (2 / 16 / 256): smoother gradients, but shorter runs |
+| `--background` | the color transparent parts are put on, default 000000 |
 
-- 調色盤只留真的用到的顏色，重新編號成 0 ～ n − 1。
+- The palette keeps only the colors really used, renumbered 0 ~ n − 1.
 
-### 編碼和大小
+### Encoding and size
 
-| 參數 | 說明 |
+| Parameter | Explanation |
 |---|---|
-| `--encoding auto` | raw 和 runs 都算，用比較小的（預設；一樣大時用 raw） |
-| `--encoding raw` | 每個像素照原樣（1 / 4 / 8 / 16 bits） |
-| `--encoding runs` | 連續同色的一段存成一筆 |
-| `--max-bytes N` | 資料超過 N 就把尺寸乘 0.85 重做，直到放得下；小到 4 px 還放不下就報錯 |
-| `--name` | 自訂檔名和 struct 名稱 |
+| `--encoding auto` | computes both raw and runs and uses the smaller (default; raw when equal) |
+| `--encoding raw` | each pixel as it is (1 / 4 / 8 / 16 bits) |
+| `--encoding runs` | a stretch of the same color stored as one entry |
+| `--max-bytes N` | when the data is over N, the size is multiplied by 0.85 and it is done again until it fits; still too big at 4 px, an error |
+| `--name` | your own file and struct name |
+| `--board FILE` | the board's numbers: flash size and how constants are kept there (UNO: `PROGMEM`, `avr/pgmspace.h`), clock, drawing cycles…; by default `custom_board` of `platformio.ini` (UNO: `lib/Uno/board.json`). Not counted in `// options:`, recorded in `// board:` |
 
-- **檔名**：`{檔名}_{flash|stream|flash_stream}_{寬}x{高}_palette_{2|16|256|565}.h`，struct 同名。`assets/` 外面的檔案前面加上資料夾；撞名（例如只差 `--dither`）加 `_2`、`_3`，不蓋掉別的（見 [output/README.md](../output/README.md#名稱和來源)）。
+- **File names**: `{file name}_{flash|stream|flash_stream}_{width}x{height}_palette_{2|16|256|565}.h`, the struct named the same. Files outside `assets/` get their folders in front; equal names (e.g. differing only by `--dither`) get `_2`, `_3`, never replacing another (see [output/README.md](../output/README.md#names-and-sources)).
 
-### 流程
+### Steps
 
-1. **讀檔**：依副檔名讀進來，轉正（EXIF），變成 RGBA。
-2. **尺寸**：
-   - 算出螢幕上的大小；`--fill` 先從中間裁掉多出的部分。
-   - 除以 `--scale` 得到要存的大小，用 `--resample` 縮放，再混合到背景色上。
-3. **顏色**：
-   - 565：每個像素直接轉 RGB565。
-   - 2：轉灰階，再用門檻或抖色變成黑白。
-   - 16 / 256：median cut 做調色盤，可以加抖色。
-4. **編碼**：raw 和 runs，依 `--encoding` 選。
-5. **估計時間**：每段（`SEGMENT` = 32 個螢幕像素）約 900 週期，每個螢幕像素約 60 週期，每 byte 讀取 flash 6 週期、stream 176 週期（1 Mbaud），數值在 `config.json`。
+1. **Reading**: read by extension, turned upright (EXIF), made RGBA.
+2. **Size**:
+   - computes the size on the screen; `--fill` first cuts the excess off the middle.
+   - divided by `--scale` gives the size to store; scaled with `--resample`, then blended onto the background color.
+3. **Colors**:
+   - 565: each pixel straight to RGB565.
+   - 2: to gray, then black and white by the threshold or dithering.
+   - 16 / 256: a palette by median cut, with dithering if asked.
+4. **Encoding**: raw and runs, chosen by `--encoding`.
+5. **Estimated time**: about 900 cycles a segment (`SEGMENT` = 32 screen pixels), about 60 cycles a screen pixel, reading a byte takes 6 cycles from flash and 176 cycles from the stream (1 Mbaud); the values are in the board's `board.json` (the UNO's; stream computed from the clock and the baud rate).
 
-產生的檔案格式見 [output/README.md](../output/README.md)。
+The format of the files made: see [output/README.md](../output/README.md).
 
-### 錯誤和警告
+### Errors and warnings
 
-| 情況 | 處理 |
+| Situation | Handling |
 |---|---|
-| 檔案不存在、副檔名不支援、讀不出來 | 錯誤，不產生檔案 |
-| 超過格式或板子的硬限制（存的寬高 ≤ 240、scale ≤ 8） | 錯誤，並提示可以調哪個參數 |
-| 編碼後用 Python 版的解碼器解回來不一致 | 錯誤（程式的問題），不產生檔案 |
-| `--max-bytes` 小到 4 px 還放不下 | 錯誤 |
-| `--target flash` 時超過 UNO 的 Flash（32256 bytes） | 錯誤：`--max-bytes`、小一點的尺寸或調色盤，或 `--target stream` |
-| 螢幕上超過 240×240 | 警告：會裁切，多的資料是浪費 |
-| 超出 `config.json` 的建議範圍 | 警告 |
+| the file does not exist, the extension is not supported, it cannot be read | error, no file made |
+| beyond the hard limits of the format or the board (stored width and height ≤ 240, scale ≤ 8) | error, with a hint on which parameter to change |
+| decoding the encoded data with the Python decoder does not give it back | error (a bug of the program), no file made |
+| `--max-bytes` too small even at 4 px | error |
+| over the board's flash (`flash.bytes`, UNO: 32256 bytes) with `--target flash` | error: `--max-bytes`, a smaller size or palette, or `--target stream` |
+| over 240×240 on the screen | warning: it is clipped, the extra data is wasted |
+| beyond the recommended ranges of `config.json` (data size as a share of the board's flash: `recommendedMaxFlashShare`) | warning |
 
 ## check.py
 
-跟 `lib/video/source/check.py` 一樣的規則，只是 namespace 是 `picture`、看的是 `getPixels()`：
+The same rules as `lib/video/source/check.py`, only with the namespace `picture` and looking at `getPixels()`:
 
-| 類型 | 項目 |
+| Kind | Item |
 |---|---|
-| 錯誤 | `selected.h` 不存在或沒有 include guard |
-| 錯誤 | include 的檔案不存在、不在 `output/` 裡、include 自己、重複 include |
-| 錯誤 | 檔案的 `// format:` 不是目前的 `FORMAT_VERSION`（1） |
-| 錯誤 | 檔案裡沒有 `struct picture::{檔名}` |
-| 錯誤 | 原始圖片跟產生時不一樣了（比對 sha256） |
-| 錯誤 | 檔案裡沒有像素（`--target stream` 的在 `#if 0` 裡） |
-| 警告 | 原始圖片找不到 |
-| 警告 | `output/` 裡有沒被選到的 .h |
+| error | `selected.h` missing or without an include guard |
+| error | an included file missing, not in `output/`, including itself, included twice |
+| error | the file's `// format:` is not the current `FORMAT_VERSION` (1) |
+| error | no `struct picture::{file name}` in the file |
+| error | the source picture differs from when it was made (sha256 compared) |
+| error | no pixels in the file (those of `--target stream` are in `#if 0`) |
+| error | the `// board:` of a file is not the board of `custom_board` in `platformio.ini` (or its numbers changed): `python src/clean.py --rebuild` |
+| warning | the source picture not found |
+| warning | a .h in `output/` that is not selected |
 
 ## stream_handler.py
 
-[lib/stream](../../stream/README.md) 的 `stream.py`（找板子、燒錄時放開串口、`'D'` / `'R'` 一塊一塊送）收到 `'I'` 時交給它：
+`stream.py` of [lib/stream](../../stream/README.md) (finds the board, lets go of the port while uploading, sends piece by piece with `'D'` / `'R'`) hands it each `'I'`:
 
-- **安全**：只開 `lib/image` 裡面的 `.h`；`--target stream`（像素在 `#if 0` 裡）和 `--target flash` 的檔案都可以。
-- **檢查檔案**：讀進來時會把像素解碼一次，壞掉的檔案直接回答錯誤，不會送到一半。
-- **每張都印出來**：送了幾個 byte、花幾秒。
+- **Safe**: opens only `.h` files inside `lib/image`; files of `--target stream` (pixels in `#if 0`) and `--target flash` both work.
+- **Checks the file**: the pixels are decoded once when read, so a broken file is answered with an error, never sent halfway.
+- **Prints each picture**: how many bytes were sent, how many seconds it took.
 
-### 圖片的回答
+### The answer of a picture
 
-| 方向 | 內容 |
+| Direction | Content |
 |---|---|
-| 板子 → 電腦 | `'I'`、CHUNK、路徑長度、路徑 |
-| 電腦 → 板子 | `'D'`，之後板子用 `'R'` 一塊一塊拉（[lib/stream 的協定](../../stream/INTERFACE.md#協定)） |
+| board → computer | `'I'`, CHUNK, path length, path |
+| computer → board | `'D'`, then the board pulls piece by piece with `'R'` ([the protocol of lib/stream](../../stream/INTERFACE.md#協定)) |
 
-| 回答 | 內容 |
+| Answer | Content |
 |---|---|
-| `'H'` 圖片 | 寬、高、scaleX、scaleY、顏色模式、編碼、色數（0 = 256）、資料長度（uint32）、調色盤（色數 × RGB565；565 沒有）、像素 |
-| `'E'` 錯誤 | 代碼（1 找不到、2 讀不懂、3 不能串流）、訊息長度、訊息 |
+| `'H'` picture | width, height, scaleX, scaleY, color mode, encoding, color count (0 = 256), data length (uint32), palette (color count × RGB565; none for 565), pixels |
+| `'E'` error | code (1 not found, 2 unreadable, 3 not streamable), message length, message |
 
-板子邊收邊畫，所以只需要 CHUNK 大小的緩衝。
+The board draws while receiving, so it needs a buffer of only CHUNK.
 
-| 情況 | 板子的處理 |
+| Situation | What the board does |
 |---|---|
-| 3 秒沒等到 `'D'` | `ERROR_NO_ANSWER` |
-| 一塊 200 ms 沒收完 | 剩下的像素畫成黑色，`ERROR_BROKEN` |
-| 收到不合理的標頭 | `ERROR_BROKEN` |
+| no `'D'` within 3 seconds | `ERROR_NO_ANSWER` |
+| a piece not complete within 200 ms | the remaining pixels are drawn black, `ERROR_BROKEN` |
+| a header that makes no sense | `ERROR_BROKEN` |

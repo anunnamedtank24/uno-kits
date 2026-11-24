@@ -4,7 +4,7 @@
 |---|---|
 | Arduino 的 `millis()`、`micros()`（Arduino UNO，ATmega328P） | 其他函式庫要的介面的 UNO 版本：Bus（`UnoST7789`、`UnoI2C`）、Link（`UnoSerial`）、Wire（`UnoOneWire`）、Pin、Pwm、InterruptPin、AnalogPin（`UnoInputPin`、`UnoPwmPin`、`UnoInterruptPin`、`UnoAnalogPin`）、Tone（`UnoTone`）、Carrier（`UnoIrCarrier`）、SampleOut（`UnoPcmOut`）、背景執行（`UnoBackground`）；接錯腳在編譯時就擋下 |
 
-給要寫新套件、換主板或換零件的人；用法、接線、注意事項見 [README.md](README.md)。
+給要寫新套件、換主板或換零件的人；用法、接線、注意事項見 [讀我.md](讀我.md)。
 
 ## 前提條件
 
@@ -25,12 +25,16 @@ lib/Uno/
 ├── Uno_analog_pin.h    UnoAnalogPin<PIN, REFERENCE, MILLIVOLTS> AnalogPin：ADC 0 ～ 1023、mV；UnoChip：實際的 5V、晶片溫度
 ├── Uno_ST7789.h        UnoST7789<DC, RES, CS, BLK, MODE>         Bus：ST7789 螢幕（硬體 SPI）
 ├── Uno_I2C.h           UnoI2C<SCL, SDA, INTERNAL_PULLUP, KHZ>    Bus：I2C 裝置（軟體，任何腳）
-├── Uno_serial.h        UnoSerial<BAUD>                           Link：USB 串口
+├── Uno_serial.h        UnoSerial<BAUD, RX_SIZE, TX_SIZE>         Link：UART（USB 串口、藍牙模組），輪詢或緩衝區
+├── Uno_serial_buffer.h （UART 的兩個中斷）                        有緩衝區的 UnoSerial 要 include 它，取代 Uno_serial.h
+├── Uno_soft_serial.h   UnoSoftSerial<RX_PIN, TX_PIN, BAUD, RX_SIZE> Link：任兩隻腳的軟體 UART（D0 / D1 留給 USB）
 ├── Uno_one_wire.h      UnoOneWire<PIN, INTERNAL_PULLUP>          Wire：1-Wire 匯流排
 ├── Uno_tone.h          UnoTone<PIN, IDLE_HIGH>                   Tone：方波（Timer1）
 ├── Uno_pcm_out.h       UnoPcmOut<PIN, IDLE_HIGH>                 SampleOut：取樣（Timer1 PWM + Timer2 取樣時鐘）
 ├── Uno_ir_carrier.h    UnoIrCarrier<PIN, KHZ>                    Carrier：紅外線 LED 的 38 kHz（Timer2，D3 / D11）
-└── Uno_background.h    UnoBackground                             背景：每 ~1 ms 自動執行 update()（Timer0 比較中斷）
+├── Uno_background.h    UnoBackground                             背景：每 ~1 ms 自動執行 update()（Timer0 比較中斷）
+└── board.json          電腦上的工具用的數字：Flash（大小、PROGMEM）、時脈、畫圖的週期、UnoTone 的範圍、UnoPcmOut 的時脈、串口
+                        （platformio.ini 的 custom_board；convert.py、stream.py 的 --board）
 ```
 
 ## 提供的介面
@@ -98,10 +102,13 @@ using Bus = Uno::UnoI2C<13, 11, false, 100>;   // 只靠外接上拉，100 kHz
 - **等 SCL 真的變 HIGH**：放開 SCL 後一直讀到 HIGH 才繼續（最多約 200 次），所以上拉太弱、或裝置拉住 SCL（clock stretching）只會變慢。
 - **實際速度**：`KHZ = 400` 時約 160 kHz。延遲只佔每個位元的 43 個週期，呼叫腳位函式另外要約 56 個週期。
 
-### UnoSerial：USB 串口的 Link
+### UnoSerial：UART 的 Link
 
 ```cpp
-using Link = Uno::UnoSerial<1000000>;   // 1 Mbaud，D0 / D1
+using Link = Uno::UnoSerial<1000000>;   // 1 Mbaud，D0 / D1，輪詢（stream 用的）
+
+#include "Uno_serial_buffer.h"        // 取代 Uno_serial.h：有緩衝區時要它的中斷
+using Link = Uno::UnoSerial<9600, 64, 64>;   // 藍牙模組：收、送各 64 bytes 的緩衝區
 ```
 
 | 函式 | 說明 |
@@ -109,8 +116,11 @@ using Link = Uno::UnoSerial<1000000>;   // 1 Mbaud，D0 / D1
 | `init()` | 設定 UART（8N1、倍速模式） |
 | `available()` | 回傳有沒有收到 byte |
 | `read8(byte, timeoutMs)` | 等一個 byte，最多 `timeoutMs`；回傳有沒有收到 |
-| `write8(byte)` | 送一個 byte（等到能送為止） |
+| `write8(byte)` | 送一個 byte：`TX_SIZE` = 0 時等到能送為止；有緩衝區時放進去就回來（滿了才等） |
 | `clearInput()` | 丟掉已經收到的 byte |
+| `flush()` | 等到寫的 byte 全部送出板子（緩衝區空了、最後一個也移出去） |
+| `brokenCount()` | `init()` 後丟掉的壞 byte 數（frame error：RX 上的雜訊、鮑率不對） |
+| `lostCount()` | `init()` 後遺失的 byte 數：輪詢時太晚讀（硬體只存 2 個），或緩衝區滿了 |
 | `printText(text)` | 送一串文字（給 `pio device monitor` 看） |
 | `printNumber(value, width = 0)` | 送十進位的整數（任何整數型別，負數有 `-`）；width > 0 時前面補空白靠右對齊 |
 | `printDecimal(value, decimals, width = 0)` | 送定點數：value ÷ 10^decimals，小數點後 decimals 位（0 ～ 9），例如 `printDecimal(2350, 2)` → `23.50`、`printDecimal(-5, 1)` → `-0.5` |
@@ -118,8 +128,32 @@ using Link = Uno::UnoSerial<1000000>;   // 1 Mbaud，D0 / D1
 | `printPin(pin)` | 送腳位的名稱：0 ～ 13 → `D0` ～ `D13`，14 ～ 19 → `A0` ～ `A5`；程式印出設定的腳位，換腳後印的也跟著變 |
 
 - **print 不是 Link 的一部分**：串流（`audio`、`image`、`video`）只用上面五個；print 是給程式印文字用的，每個程式不用再各寫一份。
-- **輪詢，不用中斷**：所以不能同時用 Arduino 的 `Serial`。
+- **`RX_SIZE`、`TX_SIZE` = 0（預設）：輪詢，不用中斷**：硬體只存 2 個收到的 byte，程式至少每 2 個 byte 的時間要讀一次（`stream::Puller` 問完馬上讀，所以沒問題）；`write8` 每個 byte 都要等。
+- **4 ～ 256（2 的次方）：緩衝區**：USART_RX 中斷把收到的 byte 放進 `RX_SIZE` - 1 bytes 的環形緩衝區，`loop()` 忙的時候也不會漏；USART_UDRE 中斷把 `TX_SIZE` - 1 bytes 的緩衝區送出去，`write8` 不用等。中斷在 `Uno_serial_buffer.h`：有緩衝區時 include 它取代 `Uno_serial.h`（忘了是編譯錯誤），沒緩衝區的程式完全不用付中斷的 Flash（約 330 bytes）。
+- **抗雜訊**：每個收到的 byte 先看 frame error（停止位元不是 HIGH：雜訊或鮑率不對），壞的丟掉並記在 `brokenCount()`；硬體來不及讀（overrun）或緩衝區滿，記在 `lostCount()`。輪詢和緩衝區都一樣。
+- **不能同時用 Arduino 的 `Serial`**：同一個 USART；有緩衝區時連中斷也一樣。
+- **中斷時間**：每個 byte 約 3 µs；1000000 鮑時約佔三分之一的 CPU，所以 stream 用輪詢。
 - **鮑率**：16 MHz 下 1000000 和 2000000 剛好整除；115200 有 2.1% 誤差，會出警告。
+
+### UnoSoftSerial：任兩隻腳的軟體 UART
+
+```cpp
+#include "Uno_soft_serial.h"
+using BtLink = Uno::UnoSoftSerial<A0, A1, 9600, 64>;   // RX A0、TX A1、9600 鮑、收 64 bytes 的緩衝區
+```
+
+D0 / D1 是唯一的硬體 UART，也接著板子上的 USB 晶片；藍牙模組之類的東西改接別的腳，上傳和 `pio device monitor` 就能照常用。函式和 `UnoSerial` 的 Link 一樣（`init`、`available`、`read8`、`write8`、`clearInput`、`flush`、`brokenCount`、`lostCount`），所以 `bluetooth`、`stream::Puller` 不用改，只換 `using`。
+
+| 方向 | 怎麼做 |
+|---|---|
+| 收（RX） | RX 腳的腳位改變中斷：每個邊緣記下 `nowUs()`，用兩個邊緣之間有幾個位元的時間算出位元（四捨五入），收完的 byte 放進 `RX_SIZE` - 1 bytes 的緩衝區。中斷每次只有幾 µs，**不會像 Arduino 的 SoftwareSerial 那樣關中斷一整個 byte**，所以紅外線接收、超音波 Echo、蜂鳴器、取樣照常 |
+| 收的結尾 | 最後幾個資料位元和停止位元可能都是 HIGH，沒有邊緣：`available()` / `read8()` 看時間過了就把它收完（所以要常呼叫） |
+| 送（TX） | 每個位元用 `nowUs()` 對時間（每個邊緣都從起始位元算，誤差不會累積），中斷開著：每個 byte 等約 10 個位元（9600 鮑約 1 ms），同時還在收（全雙工） |
+| 抗雜訊 | 跟上一個邊緣差不到半個位元的邊緣：連同上一個一起當突波撤銷（前後的 byte 照收）；起始位元不是 LOW 或停止位元不是 HIGH 的 byte 丟掉，記在 `brokenCount()`；RX 開內部上拉，線鬆了是閒置（HIGH）而不是亂碼 |
+
+- **鮑率**：1200 ～ 38400；超過 19200 有編譯警告。電腦上模擬（每個邊緣 0 ～ 10 µs 的中斷延遲、`micros()` 4 µs 一格、對方時脈 ±2 %）：9600、19200 鮑 2000 個 byte 全對；38400 鮑會錯。
+- **一組只能一個腳位改變中斷**：RX 腳那組（D0 ～ D7、D8 ～ D13、A0 ～ A5）不能再有 `UnoInterruptPin`（紅外線接收器、超音波 Echo）。
+- **中斷是 `Uno_interrupt_pin.h` 的**：只能在一個 .cpp 裡 include。
 
 ### UnoOneWire：1-Wire 的 Wire
 
@@ -335,7 +369,8 @@ UnoBoard                          時間、等待、Flash、關中斷（Uno.h）
 │   ├── UnoOutputPin<PIN>         Pin（輸出）：init、write、toggle、isHigh
 │   └── UnoPwmPin<PIN>            Pwm：init、write(duty)、duty
 ├── UnoST7789、UnoI2C             Bus：螢幕、I2C
-├── UnoSerial                     Link：USB 串口
+├── UnoSerial                     Link：UART（USB 串口、藍牙模組）
+├── UnoSoftSerial                 Link：任兩隻腳的軟體 UART
 ├── UnoOneWire                    Wire：1-Wire
 ├── UnoTone                       Tone：方波
 ├── UnoPcmOut                     SampleOut：取樣
@@ -353,7 +388,7 @@ UnoBoard                          時間、等待、Flash、關中斷（Uno.h）
 | | InterruptPin | `UnoInterruptPin` | NEC 接收器、ultrasonic Echo |
 | | AnalogPin | `UnoAnalogPin` | analog（旋鈕、光敏、搖桿、熱敏、聲音）、TCRT5000 四腳板 |
 | **匯流排** | Bus | `UnoST7789`（SPI 螢幕）、`UnoI2C` | ST7789、SSD1306 |
-| | Link | `UnoSerial` | `stream::Puller`（lib/stream）：串流圖片、影片、聲音 |
+| | Link | `UnoSerial`、`UnoSoftSerial` | `stream::Puller`（lib/stream）：串流圖片、影片、聲音；`bluetooth::Port`、`HC05`、`HC06`、`Packet`（lib/bluetooth） |
 | | Wire | `UnoOneWire` | DS18B20 |
 | **計時器** | Tone | `UnoTone` | 無源蜂鳴器 |
 | | SampleOut | `UnoPcmOut` | 取樣聲音 |
@@ -413,6 +448,8 @@ UnoBoard                          時間、等待、Flash、關中斷（Uno.h）
 | D12（MISO） | SPI 開著時強制當輸入 | 不能當輸出 |
 | D10（SS） | `spiSet` 設成輸出（SS 是輸入又被拉低時，SPI 會變成從機） | 可以當 RES / CS / BLK，不能當輸入 |
 | D0、D1 | `UnoSerial` | 不能同時用 Arduino 的 `Serial`；燒錄時也會用到 |
+| USART_RX、USART_UDRE 中斷 | `Uno_serial_buffer.h`（有緩衝區的 `UnoSerial`） | 和 Arduino 的 `Serial` 衝突；每個位元組約 3 µs |
+| `UnoSoftSerial` 的 RX 腳 | 它那組的腳位改變中斷 | 同一組（D0 ～ D7、D8 ～ D13、A0 ～ A5）不能再有別的 `UnoInterruptPin`；每個邊緣約 5 µs |
 | `UnoI2C` 的兩隻腳 | 軟體 I2C | 例如 D13 / D11 時不能同時接 SPI 螢幕；D13 的板載 LED 會跟著閃 |
 | Timer0 | Arduino 的 `millis()`（`nowMs()`） | BLK 接 D5 / D6 時只能用固定約 976 Hz 的 PWM |
 | Timer1（D9、D10）、Timer2（D3、D11） | `pwmSet`（例如 BLK、`UnoPwmPin`） | 跟 `Servo`、Arduino `tone()` 等用同一個計時器的函式庫衝突 |

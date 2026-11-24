@@ -1,99 +1,102 @@
 # audio/output
 
-`source/convert.py` 和程式裡的巨集產生的聲音，`namespace melody`。這裡的檔案都不要手動編輯，要改就重新轉換。
+English | [中文](讀我.md)
 
-## 檔案
+The sounds made by `source/convert.py` and by macros in programs, `namespace melody`. Never edit the files here by hand: to change one, convert it again.
+
+## Files
 
 ```
 output/
-├── selected.h    自動寫：列出這裡全部的 .h，audio.h 會 include 它
-├── registry.h    自動寫：目前程式裡 MELODY("路徑", "選項") 對應的型態
-└── *.h           轉好的聲音：手動跑 convert.py 或 MELODY(...) 轉的都在這裡，格式一樣
+├── selected.h    written automatically: lists every .h here, audio.h includes it
+├── registry.h    written automatically: the types of MELODY("path", "options") in the current program
+└── *.h           the converted sounds: made by convert.py by hand or by MELODY(...), all here, in the same format
 ```
 
-## selected.h、registry.h
+## selected.h, registry.h
 
-- 都是 `tools/assets.py` 每次編譯前寫的（`convert.py` 也會把新轉的加進 `selected.h`），不用手動編輯。
-- `selected.h` 列出**全部**：沒用到的不佔 Flash（資料在 `inline` 函式裡的 `PROGMEM` 陣列，沒呼叫就不會產生，實測 Flash 一樣）。
-- `registry.h` 只有目前程式裡的 `MELODY(...)`。
-- `python source/check.py` 檢查每個檔案都是目前的格式、原始檔沒變過；`convert.py` 每次轉完會自動檢查一次。
+- Both are written by `src/tools/assets.py` before every build (`convert.py` also adds a new one to `selected.h`); nothing to edit by hand.
+- `selected.h` lists **every** one: the unused ones take no Flash (the data is in arrays inside `inline` functions, with the board's flash attribute (`board.json`; UNO: `PROGMEM`); never called, never generated; measured: the same Flash).
+- `registry.h` has only the `MELODY(...)` of the current program.
+- `python source/check.py` checks that every file has the current format and an unchanged source; `convert.py` checks once after every conversion.
 
-## 目前的聲音
+## The current sounds
 
-| 檔案 | 來源 | 格式 | 內容 | 資料 |
+| File | Source | Format | Content | Data |
 |---|---|---|---|---|
-| `twinkle_star_flash_passive_medium.h` | twinkle_star.wav | 音符 Hz + ms | 小星星第一句（法國民謠，公有領域），14 個音，C5 ～ A5，6.4 s | 56 B |
-| `twinkle_star_flash_passive_low.h` | twinkle_star.wav | 音符 compact | 同上，一半大小 | 28 B |
-| `twinkle_star_flash_active_medium.h` | twinkle_star.wav | 節奏 | 同上的節奏（有源蜂鳴器），音之間留 30 ms | 54 B |
-| `twinkle_star_stream_passive_medium.h` | twinkle_star.wav | 音符 Hz + ms，電腦 | 串流用（資料在 `#if 0` 裡） | 56 B |
-| `ode_to_joy_flash_passive_medium.h` | ode_to_joy.flac | 音符 Hz + ms | 歡樂頌第一句（貝多芬，公有領域），14 個音，6.9 s | 56 B |
-| `ode_to_joy_stream_pcm_16000_u8.h` | ode_to_joy.flac | 取樣 16 kHz 8 bits，電腦 | 同一段的真正波形，7.5 s | 119 KB（在 `#if 0` 裡） |
-| `scale_flash_passive_medium.h` | scale.aiff | 音符 Hz + ms | C 大調音階 C5 → C6 → C5，檢查音準用 | 60 B |
-| `scale_flash_passive_high.h` | scale.aiff | 音符，量到的頻率 | 同上，頻率不對齊半音（例如 1048 Hz） | 60 B |
-| `startup_flash_passive_medium.h` | startup.mp3 | 音符 | 開機：C E G C 往上，0.5 s | 16 B |
-| `success_flash_passive_medium.h` | success.m4a | 音符 | 成功：往上四度，0.3 s | 8 B |
-| `error_flash_passive_medium.h` | error.ogg | 音符 | 錯誤：兩個往下的低音，0.6 s | 8 B |
-| `sos_flash_active_medium.h` | sos.webm | 節奏 | 摩斯碼 SOS（... --- ...），3.3 s | 34 B |
-| `hello_flash_pcm_8000_adpcm.h` | hello.aiff | 取樣 8 kHz ADPCM | macOS `say` 的人聲 "Hello! I am an Arduino."，2.5 s | 10 KB |
-| `mine_4_assets_audio_pokemon_8_2_la_disc_4_16_7b5dc7_flash_passive_medium.h` | `~/Mine/4_assets/audio/Pokemon/8-2 LA/Disc 4/16 戦い：ウォロ.aiff`（`MELODY(...)`，`src/week_4_SSD1306_switch_buzzer_audio/tests/7_play_file.cpp`） | 音符 Hz + ms | 279 秒的管弦樂抓出的旋律：283 個音、220 ～ 1760 Hz | 2 KB |
+| `twinkle_star_flash_passive_medium.h` | twinkle_star.wav | notes Hz + ms | the first line of Twinkle Twinkle Little Star (French folk song, public domain), 14 notes, C5 ~ A5, 6.4 s | 56 B |
+| `twinkle_star_flash_passive_low.h` | twinkle_star.wav | notes compact | the same, half the size | 28 B |
+| `twinkle_star_flash_active_medium.h` | twinkle_star.wav | rhythm | the rhythm of the same (active buzzer), 30 ms between the sounds | 54 B |
+| `twinkle_star_stream_passive_medium.h` | twinkle_star.wav | notes Hz + ms, computer | for streaming (the data in `#if 0`) | 56 B |
+| `ode_to_joy_flash_passive_medium.h` | ode_to_joy.flac | notes Hz + ms | the first line of Ode to Joy (Beethoven, public domain), 14 notes, 6.9 s | 56 B |
+| `ode_to_joy_stream_pcm_16000_u8.h` | ode_to_joy.flac | samples 16 kHz 8 bits, computer | the real waveform of the same, 7.5 s | 119 KB (in `#if 0`) |
+| `scale_flash_passive_medium.h` | scale.aiff | notes Hz + ms | the C major scale C5 → C6 → C5, for checking the tuning | 60 B |
+| `scale_flash_passive_high.h` | scale.aiff | notes, the frequencies measured | the same, frequencies not snapped to semitones (e.g. 1048 Hz) | 60 B |
+| `startup_flash_passive_medium.h` | startup.mp3 | notes | start-up: C E G C upward, 0.5 s | 16 B |
+| `success_flash_passive_medium.h` | success.m4a | notes | success: a fourth upward, 0.3 s | 8 B |
+| `error_flash_passive_medium.h` | error.ogg | notes | error: two low notes downward, 0.6 s | 8 B |
+| `sos_flash_active_medium.h` | sos.webm | rhythm | Morse code SOS (... --- ...), 3.3 s | 34 B |
+| `hello_flash_pcm_8000_adpcm.h` | hello.aiff | samples 8 kHz ADPCM | the voice of macOS `say`: "Hello! I am an Arduino.", 2.5 s | 10 KB |
+| `mine_4_assets_audio_pokemon_8_2_la_disc_4_16_7b5dc7_flash_passive_medium.h` | `~/Mine/4_assets/audio/Pokemon/8-2 LA/Disc 4/16 戦い：ウォロ.aiff` (`MELODY(...)`, `src/week_4_SSD1306_switch_buzzer_audio/tests/7_play_file.cpp`) | notes Hz + ms | the melody found in 279 seconds of orchestra: 283 notes, 220 ~ 1760 Hz | 2 KB |
 
-`assets/` 的音檔：前七個是用 numpy 合成的（基音加泛音、起音和衰減、一點雜音、立體聲），再用 ffmpeg 存成七種格式；hello.aiff 是 `say -o assets/hello.aiff "Hello! I am an Arduino."`。
+The sound files of `assets/`: the first seven were synthesized with numpy (fundamental plus overtones, attack and decay, a little noise, stereo), then saved by ffmpeg in seven formats; hello.aiff is `say -o assets/hello.aiff "Hello! I am an Arduino."`.
 
-## 產生的 struct
+## The generated struct
 
 ```cpp
 namespace melody {
     struct ode_to_joy_flash_passive_medium {
-        static constexpr uint8_t target;       // audio::TARGET_FLASH（1）、TARGET_STREAM（2），或兩個
-        static constexpr uint8_t kind;         // audio::KIND_NOTES、KIND_RHYTHM、KIND_PCM
-        static constexpr uint8_t encoding;     // audio::NOTES_HZ_MS … PCM_ADPCM（lib/audio/format.h）
-        static constexpr uint32_t count;       // 步數（音符、節奏）或取樣數
+        static constexpr uint8_t target;       // audio::TARGET_FLASH (1), TARGET_STREAM (2), or both
+        static constexpr uint8_t kind;         // audio::KIND_NOTES, KIND_RHYTHM, KIND_PCM
+        static constexpr uint8_t encoding;     // audio::NOTES_HZ_MS … PCM_ADPCM (lib/audio/format.h)
+        static constexpr uint32_t count;       // steps (notes, rhythms) or samples
         static constexpr uint32_t durationMs;
-        static constexpr uint16_t rate;        // 取樣率（只有取樣）
-        static constexpr uint16_t rhythmHz;    // 節奏在無源蜂鳴器上的音高
+        static constexpr uint16_t rate;        // the sample rate (samples only)
+        static constexpr uint16_t rhythmHz;    // the pitch of a rhythm on a passive buzzer
         static constexpr uint32_t dataSize;
-        static inline const char *getPath();          // stream.py 找資料的路徑，相對於 lib/audio
-        static inline const uint16_t *getNotes();     // 音符、節奏（--target flash）
-        static inline const uint8_t *getSamples();    // 取樣（--target flash）
+        static inline const char *getPath();          // the path where stream.py finds the data, relative to lib/audio
+        static inline const uint16_t *getNotes();     // notes, rhythms (--target flash)
+        static inline const uint8_t *getSamples();    // samples (--target flash)
+        static inline const uint16_t *getSteps();     // PCM_ADPCM only: the 89 steps of IMA ADPCM (the decoder's table, with --target stream too)
     };
 }
 ```
 
-**檔案開頭**：`// options: …`（轉換時的參數，`tools/assets.py` 靠它和 `source:` 找已經轉過的）、`// format: 2`（格式版本）、`// source: … sha256 …`（原始音檔和它的 hash）、`// settings:`（所有設定和結果：target、sound、quality、編碼、剪的範圍、偵測參數、取樣率、訊號 / 誤差、資料量）。
+**The start of a file**: `// options: …` (the arguments when converted; `src/tools/assets.py` finds converted ones by it and `source:`), `// format: 2` (the format version), `// board: … sha256 …` (the board it was converted for: `custom_board` of `platformio.ini`; when the hash of the numbers differs, `check.py` errors and `src/tools/assets.py` converts it again before compiling), `// source: … sha256 …` (the source sound and its hash), `// settings:` (every setting and result: target, sound, quality, encoding, the cut, detection parameters, sample rate, signal / error, data size).
 
-## 格式（format 2）
+## Format (format 2)
 
-每個編碼的位元組見 [lib/audio/format.h](../format.h) 的開頭：
+The bytes of each encoding are at the top of [lib/audio/format.h](../format.h):
 
-| 編碼 | 每步 / 取樣 | 內容 |
+| Encoding | A step / sample | Content |
 |---|---|---|
-| `NOTES_HZ_MS`（0） | 2 個 uint16 | Hz（0 = 休止）、ms；跟 `note.h` 手寫旋律的格式一樣 |
-| `NOTES_COMPACT`（1） | 1 個 uint16 | 高 8 位元 MIDI 音（0 = 休止、12 ～ 119），低 8 位元 10 ms 的格數（1 ～ 255） |
-| `RHYTHM_MS`（2） | 1 個 uint16 | 第 15 位元 = 響，第 0 ～ 14 位元 = ms（1 ～ 32767） |
-| `PCM_U8`（3） | 1 byte | 0 ～ 255，128 = 安靜 |
-| `PCM_U4`（4） | 半個 byte | 低 4 位元先；0 ～ 15 → 0 ～ 255（× 17） |
-| `PCM_ADPCM`（5） | 半個 byte | IMA ADPCM，低 4 位元先，從 0、index 0 開始 |
+| `NOTES_HZ_MS` (0) | 2 uint16 | Hz (0 = rest), ms; the same format as hand-written melodies of `note.h` |
+| `NOTES_COMPACT` (1) | 1 uint16 | high 8 bits a MIDI note (0 = rest, 12 ~ 119), low 8 bits a count of 10 ms (1 ~ 255) |
+| `RHYTHM_MS` (2) | 1 uint16 | bit 15 = on, bits 0 ~ 14 = ms (1 ~ 32767) |
+| `PCM_U8` (3) | 1 byte | 0 ~ 255, 128 = silence |
+| `PCM_U4` (4) | half a byte | the low 4 bits first; 0 ~ 15 → 0 ~ 255 (× 17) |
+| `PCM_ADPCM` (5) | half a byte | IMA ADPCM, the low 4 bits first, starting at 0, index 0 |
 
-- **太長的一步**拆成好幾步（同一個音再來一次）：Hz + ms 每步最多 65535 ms，compact 2550 ms，節奏 32767 ms。
-- **format 1**（只有 `{hz, ms}`、名稱是 `*_semitone`）已經不用了：`check.py` 會要求重新轉換。
+- **A step too long** is split into several steps (the same note again): Hz + ms at most 65535 ms a step, compact 2550 ms, rhythm 32767 ms.
+- **format 1** (only `{hz, ms}`, named `*_semitone`) is no longer used: `check.py` asks for converting again.
 
-## 名稱和來源
+## Names and sources
 
-每個 .h 的開頭都寫著它從哪個檔案、用什麼選項轉出來：
+The start of every .h says which file and which options it was converted from:
 
 ```
 // options: --fit 120x80 --palette 16
 // source: assets/sunset.jpg sha256 1413…
 ```
 
-程式裡的 `MELODY("路徑", "選項")` 就是靠這兩行找到已經轉好的檔案：同一個檔案、同樣的選項（順序、`--fit=…` 的寫法不影響）就直接用，沒有才轉。所以不管是手動轉的還是巨集轉的，同一份只轉一次。
+`MELODY("path", "options")` in a program finds a converted file by these two lines: the same file with the same options (the order and the form `--fit=…` do not matter) is used as it is, only otherwise is it converted. So converted by hand or by a macro, each is converted only once.
 
-| 規則 | 說明 |
+| Rule | Explanation |
 |---|---|
-| 名稱 | `convert.py` 的規則：`{檔名}_{設定}`，struct 同名（`melody::名稱`） |
-| `assets/` 外面的檔案 | 檔名前面加上資料夾（相對於專案；不在專案裡就相對於家目錄），例如 `~/Music/Game/title.mp3` → `music_game_title_…`，不同資料夾的同名檔案不會混在一起 |
-| 不是英數字的字（例如日文） | 拿掉，改加 6 碼雜湊，例如 `16 戦い：ウォロ.aiff` → `…_16_7b5dc7_…` |
-| 名稱撞到（名稱沒包含每個選項，或來源不同） | 加 `_2`、`_3`…，不會蓋掉別的檔案 |
-| 原始檔改過 | 編譯時會警告；`python tools/assets.py --force` 重轉（同名的蓋掉） |
-| 原始檔移走、刪掉 | 輸出還在就照樣能編譯（程式裡的舊路徑一樣找得到它） |
-| 不要的 | `python tools/assets.py --unused` 列出沒有程式（包括 `.bak`）用的，自己刪 |
+| Names | the rule of `convert.py`: `{file name}_{settings}`, the struct named the same (`melody::name`) |
+| Files outside `assets/` | the folders go in front of the file name (relative to the project; outside the project, to the home folder), e.g. `~/Music/Game/title.mp3` → `music_game_title_…`, so files with the same name in different folders never mix |
+| Characters that are not letters or digits (e.g. Japanese) | left out, with a 6-digit hash added instead, e.g. `16 戦い：ウォロ.aiff` → `…_16_7b5dc7_…` |
+| Equal names (the name does not hold every option, or another source) | `_2`, `_3`… added, never replacing another file |
+| The source changed | a warning when compiling; `python src/tools/assets.py --force` converts it again (replacing the one with the same name) |
+| The source moved or deleted | it still compiles as long as the output is there (the old path in the program still finds it) |
+| Unwanted ones | `python src/tools/assets.py --unused` lists those no program (`.bak` included) uses; delete them yourself |

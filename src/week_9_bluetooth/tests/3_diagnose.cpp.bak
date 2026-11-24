@@ -1,0 +1,221 @@
+#include <Arduino.h>
+#include "Uno_serial.h"
+#include "Uno_pin.h"
+#include "Uno_soft_serial.h"
+
+// UNO + HC-05 / HC-06: checks the wiring and finds the module's baud and AT mode, told on the USB serial
+//   pio device monitor        (platformio.ini: monitor_speed = MONITOR_BAUD)
+// 0. EN not driven, LOW, HIGH: does the module's TXD (idle HIGH while it runs) follow? On some boards EN is the
+//    module's power switch (LOW = off), not KEY: then EN_IS_POWER = true in 1_HC_05.cpp
+// 1. the RX line (the module's TXD) without the pull-up: HIGH if the module drives it
+// 2. STATE for STATE_WATCH_MS: steady LOW (unconnected), steady HIGH (connected) or blinking (wired to the LED)
+// 3. "AT\r\n" (HC-05) and "AT" (HC-06) at every baud, EN LOW and HIGH: the raw bytes that come back
+//    "OK" at some baud: that is the module's baud (BT_BAUD); only with EN HIGH: AT needs EN
+//    bytes but no "OK": a wrong baud (try the others); nothing at all: TXD / RXD wiring, or the module's power
+// (the same pins as 1_HC_05.cpp)
+
+// ---------- settings ----------
+
+constexpr uint8_t BT_RX_PIN = A0;           // <- the module's TXD
+constexpr uint8_t BT_TX_PIN = A1;           // -> the module's RXD (through the divider)
+constexpr uint8_t KEY_PIN = 12;             // -> EN (through the divider): KEY or the power switch
+constexpr uint8_t STATE_PIN = 4;            // <- STATE
+constexpr uint32_t MONITOR_BAUD = 1000000;  // USB serial: the same as monitor_speed in platformio.ini
+
+constexpr uint16_t STATE_WATCH_MS = 3000;   // how long STATE is watched
+constexpr uint16_t KEY_SETTLE_MS = 300;     // EN changed -> the module notices
+constexpr uint16_t LISTEN_MS = 700;         // how long the answer is collected
+constexpr uint8_t SHOWN_BYTES = 24;         // the most bytes printed per try
+constexpr uint16_t EN_WAIT_MS = 1500;       // EN changed -> the module (re)started before measuring
+
+// ---------- parts ----------
+
+using Monitor = Uno::UnoSerial<MONITOR_BAUD>;
+using Key = Uno::UnoOutputPin<KEY_PIN>;
+using State = Uno::UnoInputPin<STATE_PIN>;
+
+// ---------- checks ----------
+
+// how many of 100 samples of the RX line are HIGH (no pull-up)
+uint8_t rxHighCount() {
+    Uno::pinInput<BT_RX_PIN>(false);
+    Monitor::delayMs(5);
+    uint8_t high = 0;
+    for (uint8_t i = 0; i < 100; i++) {
+        high += Uno::pinRead<BT_RX_PIN>() ? 1 : 0;
+        Monitor::delayUs(200);
+    }
+    return high;
+}
+
+// 0: not driven (input), 1: LOW, 2: HIGH
+void setEn(uint8_t mode) {
+    if (mode == 0) {
+        Uno::pinInput<KEY_PIN>(false);
+    } else {
+        Key::init();
+        Key::write(mode == 2);
+    }
+}
+
+void checkEnable() {
+    static const char *const NAMES[] = {"not driven", "LOW", "HIGH"};
+    uint8_t high[3];
+    for (uint8_t mode = 0; mode < 3; mode++) {
+        setEn(mode);
+        Monitor::delayMs(EN_WAIT_MS);
+        high[mode] = rxHighCount();
+        Monitor::printText("[INFO] EN ");
+        Monitor::printText(NAMES[mode]);
+        Monitor::printText(": module TXD HIGH ");
+        Monitor::printNumber(high[mode]);
+        Monitor::printText(" of 100\r\n");
+    }
+    if (high[1] < 50 && (high[0] == 100 || high[2] == 100)) {
+        Monitor::printText("[WARNING] the module stops when EN is LOW: on this board EN is its power switch, not KEY "
+                           "(EN_IS_POWER = true)\r\n");
+    } else if (high[0] < 50 && high[1] < 50 && high[2] < 50) {
+        Monitor::printText("[WARNING] the module's TXD is never HIGH: no power (VCC, GND), or TXD not on the RX pin\r\n");
+    }
+    setEn(0);
+    Monitor::delayMs(EN_WAIT_MS);
+}
+
+void checkRxLine() {
+    Uno::pinInput<BT_RX_PIN>(false);
+    Monitor::delayMs(5);
+    uint8_t high = 0;
+    for (uint8_t i = 0; i < 100; i++) {
+        high += Uno::pinRead<BT_RX_PIN>() ? 1 : 0;
+        Monitor::delayUs(200);
+    }
+    Monitor::printText("[INFO] RX line (module TXD -> ");
+    Monitor::printPin(BT_RX_PIN);
+    Monitor::printText(") without pull-up: HIGH ");
+    Monitor::printNumber(high);
+    Monitor::printText(" of 100 samples");
+    Monitor::printText(high == 100 ? " (driven HIGH: likely wired)\r\n"
+                                   : " (not steadily HIGH: TXD not wired, or the module off)\r\n");
+}
+
+void checkState() {
+    State::init();
+    uint16_t changes = 0;
+    uint32_t highMs = 0;
+    bool last = State::read();
+    uint32_t startMs = Monitor::nowMs();
+    uint32_t sampleMs = startMs;
+    while (Monitor::nowMs() - startMs < STATE_WATCH_MS) {
+        bool level = State::read();
+        if (level != last) {
+            changes++;
+            last = level;
+        }
+        if (Monitor::nowMs() != sampleMs) {
+            sampleMs = Monitor::nowMs();
+            highMs += level ? 1 : 0;
+        }
+    }
+    Monitor::printText("[INFO] STATE (");
+    Monitor::printPin(STATE_PIN);
+    Monitor::printText("): HIGH ");
+    Monitor::printNumber(highMs * 100 / STATE_WATCH_MS);
+    Monitor::printText(" % of the time, ");
+    Monitor::printNumber(changes);
+    Monitor::printText(" changes");
+    if (changes > 2) {
+        Monitor::printText(" (blinking: wired to the LED, or not STATE)\r\n");
+    } else if (highMs == 0) {
+        Monitor::printText(" (LOW: not connected, or not wired)\r\n");
+    } else {
+        Monitor::printText(" (HIGH: connected)\r\n");
+    }
+}
+
+template <uint32_t BAUD>
+void tryAt(bool keyHigh, bool lineEnd) {
+    using Link = Uno::UnoSoftSerial<BT_RX_PIN, BT_TX_PIN, BAUD, 64>;
+    Link::init();
+    setEn(keyHigh ? 2 : 1);
+    Link::delayMs(KEY_SETTLE_MS);
+    Link::clearInput();
+    Link::write8('A');
+    Link::write8('T');
+    if (lineEnd) {
+        Link::write8('\r');
+        Link::write8('\n');
+    }
+    uint8_t bytes[SHOWN_BYTES];
+    uint8_t count = 0;
+    uint16_t total = 0;
+    uint32_t startMs = Link::nowMs();
+    while (Link::nowMs() - startMs < LISTEN_MS) {
+        uint8_t byte;
+        if (Link::read8(byte, 5)) {
+            if (count < SHOWN_BYTES) {
+                bytes[count] = byte;
+                count++;
+            }
+            total++;
+        }
+    }
+    bool ok = count >= 2 && bytes[0] == 'O' && bytes[1] == 'K';
+    Monitor::printText(ok ? "[SUCCESS] " : total > 0 ? "[WARNING] " : "[INFO] ");
+    Monitor::printNumber(BAUD, 6);
+    Monitor::printText(" baud, EN ");
+    Monitor::printText(keyHigh ? "HIGH" : "LOW ");
+    Monitor::printText(lineEnd ? ", \"AT\\r\\n\": " : ", \"AT\"    : ");
+    Monitor::printNumber(total, 3);
+    Monitor::printText(" bytes, broken ");
+    Monitor::printNumber(Link::brokenCount(), 3);
+    Monitor::printText(" |");
+    for (uint8_t i = 0; i < count; i++) {
+        Monitor::printText(" ");
+        Monitor::printHex(bytes[i]);
+    }
+    Monitor::printText(" | \"");
+    for (uint8_t i = 0; i < count; i++) {
+        char text[2] = {bytes[i] >= ' ' && bytes[i] <= '~' ? (char)bytes[i] : '.', '\0'};
+        Monitor::printText(text);
+    }
+    Monitor::printText("\"\r\n");
+    setEn(0);
+    Link::delayMs(KEY_SETTLE_MS);
+}
+
+template <uint32_t BAUD>
+void tryBaud() {
+    tryAt<BAUD>(true, true);
+    tryAt<BAUD>(false, true);
+    tryAt<BAUD>(false, false);
+}
+
+// ---------- main ----------
+
+void setup() {
+    Monitor::init();
+    setEn(0);                               // EN not driven until checkEnable()
+    Monitor::printText("\r\n[INFO] diagnose: module TXD -> ");
+    Monitor::printPin(BT_RX_PIN);
+    Monitor::printText(", RXD <- ");
+    Monitor::printPin(BT_TX_PIN);
+    Monitor::printText(", EN <- ");
+    Monitor::printPin(KEY_PIN);
+    Monitor::printText(", STATE -> ");
+    Monitor::printPin(STATE_PIN);
+    Monitor::printText("\r\n");
+    Monitor::delayMs(1000);                 // the module starting up
+    checkEnable();
+    checkRxLine();
+    checkState();
+    tryBaud<9600>();
+    tryBaud<38400>();
+    tryBaud<19200>();
+    tryBaud<4800>();
+    tryBaud<2400>();
+    tryBaud<1200>();
+    Monitor::printText("[INFO] done\r\n");
+}
+
+void loop() {
+}

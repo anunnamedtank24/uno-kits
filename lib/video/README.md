@@ -1,21 +1,23 @@
 # video
 
-| 需要 | 得到 |
+English | [中文](讀我.md)
+
+| Needs | Gives |
 |---|---|
-| 一個 `Screen`：`setWindow(…)`、`writePixel(color)`… 和它的顏色格式 `ColorFormat`（`ST7789::M130T<Bus, color::RGB565>`、`SSD1306::OLED128x64<Bus, color::BW<>>`） | `video::FlashPlayer`：播燒進 Flash 的動畫 |
-| 串流：再加一個 `Stream`（`stream::Puller<Uno::UnoSerial<BAUD>, CHUNK>`） | `video::StreamPlayer`：幀留在電腦，播的時候才送過來（播放、暫停、跳轉、速度、循環） |
-| 動態圖或影片（gif、webp、mp4、mov…） | `animation::*`：`ANIMATION("檔案")` 或 `source/convert.py` 轉出來的動畫 |
+| a `Screen`: `setWindow(…)`, `writePixel(color)`… and its color format `ColorFormat` (`ST7789::M130T<Bus, color::RGB565>`, `SSD1306::OLED128x64<Bus, color::BW<>>`) | `video::FlashPlayer`: plays animations burned into Flash |
+| streaming: also a `Stream` (`stream::Puller<Uno::UnoSerial<BAUD>, CHUNK>`) | `video::StreamPlayer`: the frames stay on the computer and are sent while playing (play, pause, seek, speed, loop) |
+| animated pictures or videos (gif, webp, mp4, mov…) | `animation::*`: animations made by `ANIMATION("file")` or `source/convert.py` |
 
-「需要」是介面（duck typing），括號裡是這個專案現成的實作，換主板只要換它們。開發者看的細節（前提條件、介面需求、每個函式、參數、資源）在 [INTERFACE.md](INTERFACE.md)。
+"Needs" are interfaces (duck typing); in parentheses the ready implementations of this project, and another board only replaces them. The details for developers (prerequisites, interface requirements, every function, parameters, resources) are in [INTERFACE.md](INTERFACE.md).
 
-在螢幕上播放動畫和影片，`namespace video`（播放器）和 `namespace animation`（產生的動畫）。來源可以是動態圖（.gif、.webp、.apng）或影片（.mp4、.mov、.webm…），由 `source/convert.py` 轉成同一種幀格式。
+Animations and videos on a screen, `namespace video` (the players) and `namespace animation` (the animations made). The source can be an animated picture (.gif, .webp, .apng) or a video (.mp4, .mov, .webm…), turned into the same frame format by `source/convert.py`.
 
-兩種來源：
+Two sources:
 
-- **預先編譯**：幀燒進 Flash（`FlashPlayer`）。
-- **跟電腦拿**：幀留在電腦，經過 USB 串口送過來（`StreamPlayer`）。
+- **Compiled in**: the frames are burned into Flash (`FlashPlayer`).
+- **From the computer**: the frames stay on the computer and come over the USB serial (`StreamPlayer`).
 
-## 用法
+## Usage
 
 ### FlashPlayer
 
@@ -28,17 +30,17 @@ python source/convert.py clip.mp4 output --target flash --fit 64x64 --mono --sta
 ```cpp
 #include "color.h"
 #include "video.h"
-video::FlashPlayer<Screen> player(screen);           // 顏色跟著 Screen::ColorFormat，見 lib/color
-if (player.start<animation::orbit_flash_120x120_palette_16>(60, 40)) {   // 放不下螢幕就回傳 false
+video::FlashPlayer<Screen> player(screen);           // colors follow Screen::ColorFormat, see lib/color
+if (player.start<animation::orbit_flash_120x120_palette_16>(60, 40)) {   // false if it does not fit the screen
     while (true) {
-        player.update();   // 時間到了才畫下一幀
+        player.update();   // draws the next frame only when it is time
     }
 }
 ```
 
 ### StreamPlayer
 
-**電腦**：執行一次就好，不用參數。它會自動找板子，拔掉、重插、板子重置都會自己接回；圖片、動畫、聲音都是同一個程式（[lib/stream](../stream/README.md)）。
+**The computer**: run it once, no arguments. It finds the board by itself and reconnects after unplugging, replugging or a board reset; pictures, animations and sounds all use this one program ([lib/stream](../stream/README.md)).
 
 ```bash
 cd lib/video
@@ -47,13 +49,13 @@ cd ../..
 python lib/stream/source/stream.py
 ```
 
-**UNO**：
+**The UNO**:
 
 ```cpp
 #include "Uno_serial.h"
 #include "stream.h"
-constexpr uint32_t BAUD = 1000000;                                  // 跟 stream.py 的 --baud 一樣
-constexpr uint8_t STREAM_CHUNK = 64;                                // 一次接收的 byte 數（RAM），16 ～ 255
+constexpr uint32_t BAUD = 1000000;                                  // the same as --baud of stream.py
+constexpr uint8_t STREAM_CHUNK = 64;                                // bytes received at a time (RAM), 16 ~ 255
 using Link = Uno::UnoSerial<BAUD>;
 using StreamLink = stream::Puller<Link, STREAM_CHUNK>;
 video::StreamPlayer<Screen, StreamLink> player(screen);
@@ -63,9 +65,9 @@ while (true) {
 }
 ```
 
-### 在 OLED 上播
+### Playing on the OLED
 
-`SSD1306::Frame`（[SSD1306](../SSD1306/README.md)）也有 `setWindow`、`writePixel`、`endWrite`，所以 `FlashPlayer` 可以直接用：
+`SSD1306::Frame` ([SSD1306](../SSD1306/README.md)) also has `setWindow`, `writePixel`, `endWrite`, so `FlashPlayer` works directly:
 
 ```bash
 python source/convert.py assets/orbit.gif output --target flash --fit 64x64 --mono --keyframe 8
@@ -73,23 +75,23 @@ python source/convert.py assets/orbit.gif output --target flash --fit 64x64 --mo
 
 ```cpp
 SSD1306::OLED128x64<Bus, color::BW<>> screen;
-video::FlashPlayer<SSD1306::OLED128x64<Bus, color::BW<>>> player(screen);   // 亮度 ≥ 128 的點亮起來
+video::FlashPlayer<SSD1306::OLED128x64<Bus, color::BW<>>> player(screen);   // points with brightness ≥ 128 light up
 player.start<animation::orbit_flash_64x64_palette_16_mono>(32, 0);
 while (true) {
     if (player.update()) {
-        screen.display();    // 畫進 RAM 的畫面，再送出改過的部分
+        screen.display();    // drawn into the screen in RAM, then the changed parts sent
     }
 }
 ```
 
-- `--mono`：轉換時就變成黑白（0x0000 / 0xFFFF），`color::BW<>` 不用再判斷；彩色的動畫也能播，由 `color::BW<門檻>` 依亮度決定每一點亮不亮。
-- 實測 16.5 ～ 17 fps（動畫本身 16.7 fps），沒有跳幀。
+- `--mono`: turned into black and white when converting (0x0000 / 0xFFFF), so `color::BW<>` has nothing left to decide; colored animations play too, with `color::BW<threshold>` lighting each point by its brightness.
+- Measured 16.5 ~ 17 fps (the animation itself is 16.7 fps), no skipped frames.
 
-完整的例子：`src/week_3_ST7789_DS18B20_graphics_color_font_image_video/tests/1_screen.cpp` 的 `tests[18]`、`tests[19]`（ST7789）、`src/week_4_SSD1306_switch_buzzer_audio/assignments/2_animation.cpp`（OLED）。
+Complete examples: `tests[18]`, `tests[19]` of `src/week_3_ST7789_DS18B20_graphics_color_font_image_video/tests/1_screen.cpp` (ST7789), `src/week_4_SSD1306_switch_buzzer_audio/assignments/2_animation.cpp` (OLED).
 
-## 直接用檔案（推薦）
+## Using the files directly (recommended)
 
-程式裡寫 `ANIMATION("路徑", "選項")`，編譯前自動轉換，不用先跑 `convert.py`，檔案也不用放在 `assets/`：
+A program writes `ANIMATION("path", "options")` and it is converted before compiling: no need to run `convert.py` first, and the file need not be in `assets/`:
 
 ```cpp
 #include "video.h"
@@ -97,60 +99,60 @@ using Orbit = ANIMATION("clips/orbit.gif", "--width 64 --mono");
 player.start<Orbit>(32, 0);
 ```
 
-| 項目 | 說明 |
+| Item | Explanation |
 |---|---|
-| 路徑 | 絕對路徑、`~/…`、相對於寫它的 .cpp；找不到時再試專案資料夾、`lib/video/assets/` |
-| 選項 | 一個字串，就是 `source/convert.py` 的選項：`--target`、`--width` / `--fit`…、`--palette`、`--mono`、`--max-fps`…；省略 `--target` 時是 `flash`（跟 `convert.py` 一樣） |
-| 轉到哪 | `lib/video/output/`，跟手動跑 `convert.py` 的一樣（`tools/assets.py` 每次編譯前找：同一個檔案、同樣的選項已經轉過就直接用，沒有才轉） |
-| 型態 | `ANIMATION(...)` 就是那個 `animation::` struct，跟手動轉換的一樣用 |
-| 限制 | 兩個參數都要是字串常數（不能是變數） |
+| Path | absolute, `~/…`, relative to the .cpp that writes it; if not found, the project folder, then `lib/video/assets/` |
+| Options | one string, the options of `source/convert.py`: `--target`, `--width` / `--fit`…, `--palette`, `--mono`, `--max-fps`…; without `--target` it is `flash` (as for `convert.py`) |
+| Where it goes | `lib/video/output/`, the same as running `convert.py` by hand (`src/tools/assets.py` looks before every build: the same file with the same options already converted is used, only otherwise is it converted) |
+| Type | `ANIMATION(...)` is that `animation::` struct, used like one converted by hand |
+| Limits | both arguments must be string constants (no variables) |
 
-完整的說明：[lib/README.md](../README.md#字型圖片影片聲音直接用檔案)；例子：`src/week_4_SSD1306_switch_buzzer_audio/tests/5_files.cpp`（四種都有）。上面「用法」是手動轉換的方式，一樣能用。
+The full explanation: [lib/README.md](../README.md#fonts-pictures-videos-sounds-use-the-files-directly); example: `src/week_4_SSD1306_switch_buzzer_audio/tests/5_files.cpp` (all four kinds). "Usage" above is the way of converting by hand, which works just as well.
 
-## 三種目標
+## The three targets
 
 | | `--target flash` | `--target stream` | `--target flash stream` |
 |---|---|---|---|
-| 幀資料在哪 | `output/x.h`，燒進 Flash | `output/x.h` 的 `#if 0` 裡，留在電腦 | `output/x.h` |
-| 能用的播放器 | `FlashPlayer`（`StreamPlayer` 也行，會警告） | `StreamPlayer` | 兩個都可以 |
-| 適合 | 小、色少、短、不需要電腦 | 大、全彩、長 | 兩種都想用 |
+| where the frame data is | `output/x.h`, burned into Flash | in the `#if 0` of `output/x.h`, staying on the computer | `output/x.h` |
+| the players that work | `FlashPlayer` (`StreamPlayer` too, with a warning) | `StreamPlayer` | both |
+| good for | small, few colors, short, no computer needed | big, full color, long | wanting both |
 
-| 用錯時 | 結果 | 原因 |
+| Used wrong | Result | Why |
 |---|---|---|
-| `FlashPlayer` 拿到只有 stream 的檔案 | 編譯錯誤 | 檔案裡沒有幀資料 |
-| `StreamPlayer` 拿到只有 flash 的檔案 | 編譯警告 | 能播，但沒用 stream 的範圍檢查過 |
-| `StreamPlayer` 拿到 256 色的檔案 | 編譯警告 | 調色盤跟著標頭先傳，放在執行時配置的 RAM，直到 `close()` 或下一次開啟才釋放（原理見 [image 的說明](../image/README.md#串流-256-色調色盤先傳放在執行時配置的-ram)） |
+| `FlashPlayer` given a stream-only file | compile error | the file has no frame data |
+| `StreamPlayer` given a flash-only file | compile warning | it plays, but was not checked against the stream's ranges |
+| `StreamPlayer` given a 256-color file | compile warning | the palette comes first with the header and is kept in RAM taken at run time, freed only at `close()` or the next open (how it works: see [image's explanation](../image/README.md#streaming-256-colors-the-palette-first-in-ram-taken-at-run-time)) |
 
-## 時間控制
+## Timing
 
 | | FlashPlayer | StreamPlayer |
 |---|---|---|
-| 誰計時 | 板子（`nowMs`） | 電腦；板子只照電腦給的位置畫 |
-| 第一幀 | 第一次 `update()` 時畫第 0 幀（I 幀） | 連上後先送整張畫面 |
-| 之後 | 每一幀在「前面所有幀的延遲加總」時到期 | 電腦送「現在該顯示的幀」跟螢幕上那幀的差異 |
-| 落後超過一幀 | 跳到最後一個已經到期的 I 幀（跳過的算進 `skippedFrames()`）；中間沒有 I 幀就照順序畫，並從現在重新計時（變慢，但不會畫錯） | 直接跳過，不需要 I 幀 |
+| who keeps the time | the board (`nowMs`) | the computer; the board only draws where the computer says |
+| the first frame | frame 0 (an I-frame) is drawn at the first `update()` | the whole picture is sent first after connecting |
+| afterwards | each frame is due at "the sum of the delays of all earlier frames" | the computer sends the difference between "the frame due now" and the one on the screen |
+| behind by more than a frame | jumps to the last I-frame already due (skipped ones count in `skippedFrames()`); with no I-frame in between it draws in order and restarts the timing from now (slower, but never drawn wrong) | skips directly, no I-frame needed |
 
-- `--keyframe N`：每 N 幀放一個 I 幀。間隔越短，落後時越快追上，但資料越大。
+- `--keyframe N`: an I-frame every N frames. The shorter, the faster it catches up when behind, but the bigger the data.
 
-## 輸入限制
+## Input limits
 
-| 項目 | 範圍 | 超出時 |
+| Item | Range | Beyond it |
 |---|---|---|
-| `start` / `open` 的 x、y | 整個動畫（放大後）在螢幕上：x ≥ 0、x + 寬 ≤ 螢幕寬，y 也一樣 | 不畫：`start` 回傳 false、`error()` = `ERROR_TOO_BIG`（直接串流進一個窗口，不經過裁切） |
-| `Animation` | `output/selected.h` 裡的 struct | 編譯錯誤 |
-| 放大後的一列 | 有放大時，存的寬度 ≤ 120（板子的一列緩衝） | 不畫（`convert.py` 已經保證） |
-| `seek(ms)` | 0 ～ 總長；超過時循環取餘數，不循環停在結尾 | — |
-| `setSpeed(percent)` | 1 ～ 1000 | 夾到範圍內（電腦端） |
-| `Stream` 的 `CHUNK` | 16 ～ 255 | 編譯錯誤 |
-| 時間精度 | 1 ms（`millis`） | — |
+| x, y of `start` / `open` | the whole animation (scaled up) on the screen: x ≥ 0, x + width ≤ screen width, the same for y | not drawn: `start` returns false, `error()` = `ERROR_TOO_BIG` (streamed straight into one window, without clipping) |
+| `Animation` | a struct in `output/selected.h` | compile error |
+| a row after scaling | with scaling, the stored width ≤ 120 (the board's row buffer) | not drawn (ensured by `convert.py`) |
+| `seek(ms)` | 0 ~ the total length; beyond it, the remainder when looping, the end when not | — |
+| `setSpeed(percent)` | 1 ~ 1000 | clamped (on the computer) |
+| `CHUNK` of `Stream` | 16 ~ 255 | compile error |
+| time resolution | 1 ms (`millis`) | — |
 
-## 注意事項
+## Caveats
 
-| 情況 | 結果 | 做法 |
+| Situation | Result | What to do |
 |---|---|---|
-| 沒有一直呼叫 `update()` | 不用中斷，`update()` 被呼叫時才會畫：`FlashPlayer` 跳幀追時間，`StreamPlayer` 讓電腦跳幀 | 中間不要做太久的事 |
-| 在動畫範圍內畫別的東西 | P 幀只畫有變化的地方：`FlashPlayer` 被蓋掉的地方要等到下一個 I 幀；`StreamPlayer` 會一直錯，直到那裡的像素又變化 | 不要蓋到動畫；`StreamPlayer` 要重畫就重新 `open` |
-| 動畫一部分在螢幕外 | 不畫（不裁切） | 改位置，或轉換時改尺寸 |
-| 同時用 Arduino 的 `Serial` | `UnoSerial` 也用 D0 / D1 | 不能同時用；也要先關掉序列監看視窗 |
-| `stream.py` 開著時燒錄 | 燒錄時它自動放開串口，可以一直開著 | 先開 `stream.py`，再燒錄（打開串口會讓板子重置，見 [lib/stream](../stream/README.md#streampy)） |
-| ST7789 上大面積變化 | M130T 沒有 TE 腳，可能看到畫面撕裂 | — |
+| not calling `update()` all the time | no interrupts: drawing happens only when `update()` is called; `FlashPlayer` skips frames to catch up, `StreamPlayer` has the computer skip frames | do nothing long in between |
+| drawing something else inside the animation's area | P-frames draw only what changed: with `FlashPlayer` the covered part waits for the next I-frame; with `StreamPlayer` it stays wrong until those pixels change again | do not cover the animation; for `StreamPlayer`, `open` again to redraw |
+| part of the animation off the screen | not drawn (no clipping) | move it, or change the size when converting |
+| Arduino's `Serial` at the same time | `UnoSerial` uses D0 / D1 too | they cannot be used together; close the serial monitor first too |
+| uploading with `stream.py` running | it lets go of the port while uploading, so it can stay running | start `stream.py` first, then upload (opening the port resets the board, see [lib/stream](../stream/README.md#streampy)) |
+| large changes on the ST7789 | the M130T has no TE pin, so tearing may show | — |

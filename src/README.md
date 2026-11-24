@@ -1,94 +1,100 @@
 # src
 
-要燒進 UNO 的程式。每個程式是一個 `.cpp`，一次只能有一個（PlatformIO 會編譯 `src/` 裡所有的 `.cpp`，但只能有一個 `setup()` / `loop()`），其他的改成 `.cpp.bak`。
+English | [中文](讀我.md)
+
+The programs to upload to the UNO. Each program is one `.cpp`, and only one at a time (PlatformIO compiles every `.cpp` in `src/`, but there can be only one `setup()` / `loop()`); the others are renamed to `.cpp.bak`.
 
 ```bash
-python src/hide.py week_7_L298N/tests/6_car     # 只留下這個（拿掉 .bak），其他改成 .bak
-pio run -t upload                       # 編譯、燒錄
-pio device monitor                      # 看串口（1 Mbaud，platformio.ini 的 monitor_speed）
+python src/hide.py week_7_L298N/tests/6_car     # keep only this one (drop its .bak), the others become .bak
+pio run -t upload                       # compile, upload
+pio device monitor                      # watch the serial (at BAUD, = monitor_speed in platformio.ini)
 ```
 
-## 檔案
+## Files
 
 ```
 src/
-├── README.md       這份：程式的寫法
-├── hide.py         只留一個程式，其他的改成 .bak（用 git mv，git 保留檔案的歷史）
-├── clean.py        刪掉快取和轉好的素材（__pycache__、.pio/build、lib/<種類>/output/*.h）
-└── week_{N}_{lib}/ 每週一個資料夾，名稱是週數加上這週新用到的函式庫（硬體在前、輔助在後）
-    ├── README.md
+├── README.md     this file: how a program is written (English)
+├── 讀我.md       how a program is written (Chinese, a sentence-by-sentence translation of README.md)
+├── hide.py         keeps one program, renames the others to .bak (with git mv, so git keeps the files' history)
+├── clean.py        deletes caches and converted assets (__pycache__, .pio/build, lib/<kind>/output/*.h)
+├── tools/
+│   └── assets.py   run by PlatformIO before every build: converts the files of FONT(...) and the other macros (not a program: never compiled)
+└── week_{N}_{lib}/ one folder a week, named after the week and the libraries new that week (hardware first, helpers after)
+    ├── README.md, 讀我.md
     ├── tests/
-    │   └── {n}_{說明}.cpp    測試：一個零件或函式庫的功能，一項一項確認
+    │   └── {n}_{description}.cpp    tests: one part or one library's features, checked one by one
     └── assignments/
-        └── {n}_{說明}.cpp    作業：用這些零件做出一個東西
+        └── {n}_{description}.cpp    assignments: something made with these parts
 ```
 
-| 資料夾 | 內容 |
+| Folder | Contents |
 |---|---|
-| [week_1_analog/](week_1_analog/README.md) | 類比感測器：旋鈕、光敏電阻、搖桿、NTC、聲音模組 |
-| [week_2_LED/](week_2_LED/README.md) | LED 的亮度和效果（閃爍、呼吸、漸變、心跳） |
-| [week_3_ST7789_DS18B20_graphics_color_font_image_video/](week_3_ST7789_DS18B20_graphics_color_font_image_video/README.md) | M130T 測試、溫度感測器、彩色圖片、作業一～三 |
-| [week_4_SSD1306_switch_buzzer_audio/](week_4_SSD1306_switch_buzzer_audio/README.md) | OLED、黑白圖片、開關、按鈕手勢、蜂鳴器、播任意音檔的測試，作業一～四 |
-| [week_5_NEC/](week_5_NEC/README.md) | 紅外線遙控器的測試，作業一～四（RGB LED、移動方塊、五線譜、鋼琴） |
-| [week_6_ultrasonic/](week_6_ultrasonic/README.md) | HC-SR04 超音波測距、中位數濾波的測試，作業一、二 |
-| [week_7_L298N/](week_7_L298N/README.md) | L298N 的測試：一顆、兩顆馬達、控制電壓、PWM、步進馬達、兩輪車、背景遙控 |
-| [week_8_TCRT5000/](week_8_TCRT5000/README.md) | HW-006 循跡模組的測試 |
+| [week_1_analog/](week_1_analog/README.md) | analog sensors: knob, photoresistor, joystick, NTC, sound module |
+| [week_2_LED/](week_2_LED/README.md) | LED brightness and effects (blinking, breathing, fading, heartbeat) |
+| [week_3_ST7789_DS18B20_graphics_color_font_image_video/](week_3_ST7789_DS18B20_graphics_color_font_image_video/README.md) | M130T tests, temperature sensor, color pictures, assignments 1 ~ 3 |
+| [week_4_SSD1306_switch_buzzer_audio/](week_4_SSD1306_switch_buzzer_audio/README.md) | tests of the OLED, black-and-white pictures, switches, button gestures, buzzers, playing any sound file; assignments 1 ~ 4 |
+| [week_5_NEC/](week_5_NEC/README.md) | tests of the infrared remote; assignments 1 ~ 4 (RGB LED, moving square, staff, piano) |
+| [week_6_ultrasonic/](week_6_ultrasonic/README.md) | tests of HC-SR04 ultrasonic ranging and the median filter; assignments 1, 2 |
+| [week_7_L298N/](week_7_L298N/README.md) | tests of the L298N: one motor, two motors, voltage control, PWM, stepper, two-wheeled car, background remote, a car with speed on EN |
+| [week_8_TCRT5000/](week_8_TCRT5000/README.md) | tests of the HW-006 line tracking board |
+| [week_9_bluetooth/](week_9_bluetooth/README.md) | tests of the HC-05 / HC-06 Bluetooth modules: AT commands, a round trip computer → USB → UNO → Bluetooth → computer |
 
 ## hide.py
 
-| 指令 | 結果 |
+| Command | Result |
 |---|---|
-| `python src/hide.py week_3_ST7789_DS18B20_graphics_color_font_image_video/tests/1_screen` | 只留 `week_3_ST7789_DS18B20_graphics_color_font_image_video/tests/1_screen.cpp`，其他全部 `.bak` |
-| `python src/hide.py src/week_3_ST7789_DS18B20_graphics_color_font_image_video/tests/1_screen.cpp.bak` | 同上（`src/` 之前和第一個 `.` 之後會被拿掉，可以直接貼路徑） |
-| `python src/hide.py week_8` | 含有 `week_8` 的程式只有一個時，留那一個 |
-| `python src/hide.py '7*car'` | `*` 是任意字：依序含有 `7`、`car` 的那一個（要加引號） |
-| `python src/hide.py` | 全部 `.bak`，什麼都不編譯 |
+| `python src/hide.py week_3_ST7789_DS18B20_graphics_color_font_image_video/tests/1_screen` | keeps only `week_3_ST7789_DS18B20_graphics_color_font_image_video/tests/1_screen.cpp`, all others `.bak` |
+| `python src/hide.py src/week_3_ST7789_DS18B20_graphics_color_font_image_video/tests/1_screen.cpp.bak` | the same (what is before `src/` and after the first `.` is dropped, so a path can be pasted as it is) |
+| `python src/hide.py week_8` | keeps the one program containing `week_8`, if there is exactly one |
+| `python src/hide.py '7*car'` | `*` is anything: the one containing `7`, then `car` (needs quotes) |
+| `python src/hide.py` | all `.bak`, nothing is compiled |
 
-符合的不是剛好一個時，什麼都不改，印出錯誤。
+When not exactly one matches, nothing is changed and an error is printed.
 
 ## clean.py
 
-刪掉工具產生、而且能再產生的東西：每個 `__pycache__`、PlatformIO 的 `.pio/build`、`lib/font`、`image`、`video`、`audio` 的 `output/*.h`（`README.md` 留著）。
+Deletes what the tools made and can make again: every `__pycache__`, PlatformIO's `.pio/build`, the `output/*.h` of `lib/font`, `image`, `video`, `audio` (`README.md` and `讀我.md` stay).
 
-| 指令 | 結果 |
+| Command | Result |
 |---|---|
-| `python src/clean.py --dry-run` | 只列出會刪什麼 |
-| `python src/clean.py` | 刪掉 |
-| `python src/clean.py --rebuild` | 刪掉，再照每個檔案開頭的 `// source:`、`// options:` 全部重新轉換（檔名不變）；原始檔不見的那個不刪，印警告 |
+| `python src/clean.py --dry-run` | only lists what would be deleted |
+| `python src/clean.py` | deletes |
+| `python src/clean.py --rebuild` | deletes, then converts every file again from its `// source:` and `// options:` (same file names); one whose source is gone is not deleted, with a warning |
 
-- **只刪不轉時**：下次編譯只會重轉程式裡 `FONT(...)` 這類巨集的檔案；直接用名稱的（`font::menlo_…`、`picture::sunset_…`）要 `--rebuild`，或 `git restore lib` 拿回來（轉好的檔案都在 git 裡）。
-- **`--rebuild` 什麼時候用**：改了 `convert.py`、想讓每個輸出都是最新的寫法（約 10 秒）。轉換用的 Python 跟 `tools/assets.py` 一樣：`platformio.ini` 的 `custom_asset_python`。
-- `.pio/build` 刪掉後，下一次編譯會全部重新編譯（慢一點，結果一樣）。
+- **After deleting without converting**: the next build converts again only the files of macros like `FONT(...)` in the program; programs that use names directly (`font::menlo_…`, `picture::sunset_…`) need `--rebuild`, or `git restore lib` to get them back (the converted files are in git).
+- **When to use `--rebuild`**: after changing a `convert.py`, after changing the board or its numbers (`custom_board` in `platformio.ini` and the `board.json` it points to), or to make every output use the latest form (about 10 s). The converters' Python is the same as for `src/tools/assets.py`: `ASSET_PYTHON` in `.env`, else `custom_asset_python` in `platformio.ini`.
+- With `.pio/build` deleted, the next build compiles everything again (a bit slower, the same result).
 
-## 檔名
+## File names
 
-| 什麼 | 名稱 | 例子 |
+| What | Name | Example |
 |---|---|---|
-| 一週 | `week_{N}_{lib}`：N 是第幾週；`{lib}` 是這週**第一次用到的函式庫**（`lib/` 的資料夾名稱，照 `lib/` 的大小寫），多個用 `_` 接起來 | `week_3_ST7789_DS18B20_graphics_color_font_image_video` |
-| 測試 | `week_…/tests/{n}_{說明}.cpp`：n 從 1 開始；說明是小寫英文、底線分開的幾個字 | `week_7_L298N/tests/6_car.cpp` |
-| 作業 | `week_…/assignments/{n}_{說明}.cpp`：n 照作業的編號 | `week_5_NEC/assignments/4_piano.cpp` |
+| a week | `week_{N}_{lib}`: N is the week; `{lib}` is the **libraries used for the first time** that week (folder names of `lib/`, with the case of `lib/`), joined with `_` | `week_3_ST7789_DS18B20_graphics_color_font_image_video` |
+| a test | `week_…/tests/{n}_{description}.cpp`: n from 1; the description is a few lowercase English words joined by underscores | `week_7_L298N/tests/6_car.cpp` |
+| an assignment | `week_…/assignments/{n}_{description}.cpp`: n is the assignment's number | `week_5_NEC/assignments/4_piano.cpp` |
 
-- **`{lib}` 的順序**：先放硬體的函式庫（`ST7789`、`DS18B20`、`switch`、`L298N`…，這週的主角），再放輔助的，固定照 `graphics`、`color`、`font`、`image`、`video`、`audio`、`stream` 的順序（先畫圖的基礎，再素材）。前幾週已經出現過的不再寫（week_4 也用 `graphics`，但它在 week_3 已經寫了）；`Uno` 每週都用，不寫。
-- **新的程式放在哪一週**：它主要測的硬體函式庫第一次出現的那一週。可以用前面幾週的零件（例如 `week_4_SSD1306_switch_buzzer_audio/tests/6_clicks` 用 week_2 的 LED 顯示按鈕手勢），不能用後面幾週的。
-- **沒有對應的週**：開新的一週；比較底層、其他零件會用到的放前面的週（例如類比輸入 → `week_1_analog`）。
-- **一個程式測好幾個函式庫的功能時**：拆成每個函式庫一個測試，各放在自己的週。
+- **The order of `{lib}`**: hardware libraries first (`ST7789`, `DS18B20`, `switch`, `L298N`…, the stars of the week), then the helpers, always in the order `graphics`, `color`, `font`, `image`, `video`, `audio`, `stream` (the drawing basics first, then assets). Libraries of earlier weeks are not written again (week_4 also uses `graphics`, but week_3 already has it); `Uno` is used every week and never written.
+- **Which week a new program goes into**: the week where the hardware library it mainly tests first appears. It may use parts of earlier weeks (e.g. `week_4_SSD1306_switch_buzzer_audio/tests/6_clicks` shows button gestures on the LED of week_2), not of later weeks.
+- **No matching week**: start a new week; things more basic, used by other parts, go into an earlier week (e.g. analog input → `week_1_analog`).
+- **One program testing features of several libraries**: split it into one test per library, each in its own week.
 
-## 程式的寫法
+## How a program is written
 
-每個程式由上到下都是這個順序，註解用英文：
+Every program has this order from top to bottom, with comments in English:
 
 ```cpp
-#include <Arduino.h>                  // 1. include：Arduino.h，Uno_*.h，再來函式庫的入口
+#include <Arduino.h>                  // 1. includes: Arduino.h, Uno_*.h, then the libraries' entries
 #include "Uno_serial.h"
 #include "Uno_pin.h"
 #include "L298N.h"
 
 // UNO + L298N board + 2 DC motors as a two-wheeled car: moves with times, told on the USB serial
 //   pio device monitor        (platformio.ini: monitor_speed = BAUD)
-//                                    2. 說明：第一行「UNO + 零件: 做什麼」，接著怎麼看結果、要先知道的事
+//                                    2. description: first line "UNO + parts: what it does", then how to see the result, what to know first
 
 // ---------- settings ----------
-                                      // 3. 所有可以調的東西
+                                      // 3. everything that can be tuned
 // wiring: L298N with both EN jumpers ON
 //   +12V -> battery +   GND -> battery - AND the UNO's GND
 constexpr uint8_t IN1_PIN = 5;              // IN1: a PWM pin (3, 5, 6, 9, 10, 11)
@@ -98,59 +104,59 @@ constexpr uint8_t SPEED = 128;              // 0 ~ 255
 constexpr uint16_t PAUSE_MS = 800;          // braked between the moves
 
 // ---------- parts ----------
-                                      // 4. 用設定組出零件
+                                      // 4. the parts built from the settings
 using Link = Uno::UnoSerial<BAUD>;
 using Car = L298N::TwoWheelCar<Board, IN12_SIDE, IN12_POSITIVE, IN34_POSITIVE>;
 Car car;
 
 // ---------- squares ----------
-                                      // 5. 程式自己的功能，一段一個主題（名稱自訂）
+                                      // 5. the program's own features, one topic a section (any name)
 // ---------- tests ----------
-                                      // 6. 測試（只有測試程式有）
+                                      // 6. tests (only test programs)
 // ---------- main ----------
-                                      // 7. setup()、loop()
+                                      // 7. setup(), loop()
 void setup() { ... }
 void loop() { ... }
 ```
 
 ### 1. include
 
-`#include <Arduino.h>` → 用到的 `Uno_*.h`（UNO 的介面）→ 函式庫的入口（`L298N.h`、`audio.h`…）。只 include 入口，不要 include `module/` 裡的檔案（原因見 [lib/README.md](../lib/README.md#include-的規則)）。
+`#include <Arduino.h>` → the `Uno_*.h` used (the UNO's interfaces) → the libraries' entries (`L298N.h`, `audio.h`…). Include only the entries, never files in `module/` (why: see [lib/README.md](../lib/README.md#include-rules)).
 
-### 2. 說明
+### 2. Description
 
-| 行 | 寫什麼 | 例子 |
+| Line | What to write | Example |
 |---|---|---|
-| 第一行 | `// UNO + 零件（模組名）: 做什麼` | `// UNO + HC-SR04 ultrasonic distance module: every measurement goes to the USB serial` |
-| 接著 | 怎麼看結果（`pio device monitor`、要先跑的 `stream.py`） | `//   pio device monitor        (platformio.ini: monitor_speed = BAUD)` |
-| 接著 | 會發生什麼、要先知道的事、怎麼調 | `// SPIN_90_MS depends on the car and the floor: measure it` |
+| first line | `// UNO + parts (module name): what it does` | `// UNO + HC-SR04 ultrasonic distance module: every measurement goes to the USB serial` |
+| then | how to see the result (`pio device monitor`, a `stream.py` to start first) | `//   pio device monitor        (platformio.ini: monitor_speed = BAUD)` |
+| then | what happens, what to know first, how to tune it | `// SPIN_90_MS depends on the car and the floor: measure it` |
 
-接線不寫在這裡，寫在 settings 的腳位旁邊。
+The wiring is not written here but next to the pins in the settings.
 
 ### 3. settings
 
-換腳、調參數只改這一段，不用往下找。**能調的都放這裡，越多越好。**
+Changing a pin or tuning a value touches only this section, no need to look further down. **Put everything tunable here, the more the better.**
 
-| 放什麼 | 寫法 | 例子 |
+| What goes in | How | Example |
 |---|---|---|
-| 固定的接線（電源、GND、硬體 SPI） | `// wiring:` 註解 | `// wiring: M130T VCC -> 3.3V, GND -> GND, SCL -> D13, SDA -> D11 (hardware SPI: fixed)` |
-| 每隻可以換的腳 | `constexpr uint8_t X_PIN = …;`，註解寫零件上的腳名和限制；類比腳寫 `A0`；沒接寫 `Uno::NONE` | `constexpr uint8_t ENA_PIN = 5;  // ENA: a PWM pin (3, 5, 6, 9, 10, 11)` |
-| 接法的選項 | `bool`、enum | `SWITCH_ACTIVE_HIGH`、`IN12_SIDE` |
-| 串口速度 | `BAUD`（跟 `platformio.ini` 的 `monitor_speed` 一樣） | `constexpr uint32_t BAUD = 1000000;` |
-| 函式庫 template 參數的預設值 | 列出來，即使跟預設一樣 | `DEBOUNCE_MS`、`I2C_KHZ`、`GAP_MS`、`IR_QUEUE`、`STREAM_CHUNK` |
-| 螢幕的顏色格式 | ST7789：`using ScreenColor = …;`（換格式只改這行）；OLED 只能黑白，放門檻 `BW_THRESHOLD` | `using ScreenColor = color::RGB565;` |
-| 時間、速度、亮度、音量、門檻 | 名稱加單位 | `HOLD_MS`、`TONE_HZ`、`MIN_MM`、`SUPPLY_V`、`VOLUME` |
-| 用哪個檔案 | `FONT(...)`、`PICTURE(...)`、`ANIMATION(...)`、`MELODY(...)` | `using Song = MELODY("~/x.aiff", "--quality high");` |
-| 測試的順序表、對應表 | 陣列 | `LADDER[]`、`NOTE_HZ[]`、`MOVES[]` |
-| 只跑某幾個測試 | `ONLY_TESTS`：0 = 全部，bit i = 只跑測試 i | `constexpr uint32_t ONLY_TESTS = (1UL << 14) \| (1UL << 15);` |
+| fixed wiring (power, GND, hardware SPI) | a `// wiring:` comment | `// wiring: M130T VCC -> 3.3V, GND -> GND, SCL -> D13, SDA -> D11 (hardware SPI: fixed)` |
+| every pin that can change | `constexpr uint8_t X_PIN = …;`, the comment says the pin's name on the part and its limits; analog pins as `A0`; not connected: `Uno::NONE` | `constexpr uint8_t ENA_PIN = 5;  // ENA: a PWM pin (3, 5, 6, 9, 10, 11)` |
+| wiring options | `bool`, enums | `SWITCH_ACTIVE_HIGH`, `IN12_SIDE` |
+| serial speed | `BAUD` (the same as `monitor_speed` in `platformio.ini`) | `constexpr uint32_t BAUD = 1000000;` |
+| defaults of the libraries' template parameters | listed, even when equal to the default | `DEBOUNCE_MS`, `I2C_KHZ`, `GAP_MS`, `IR_QUEUE`, `STREAM_CHUNK` |
+| the screen's color format | ST7789: `using ScreenColor = …;` (another format changes only this line); the OLED is black and white only, with the threshold `BW_THRESHOLD` | `using ScreenColor = color::RGB565;` |
+| times, speeds, brightness, volume, thresholds | the name with its unit | `HOLD_MS`, `TONE_HZ`, `MIN_MM`, `SUPPLY_V`, `VOLUME` |
+| which file to use | `FONT(...)`, `PICTURE(...)`, `ANIMATION(...)`, `MELODY(...)` | `using Song = MELODY("~/x.aiff", "--quality high");` |
+| order tables of tests, mapping tables | arrays | `LADDER[]`, `NOTE_HZ[]`, `MOVES[]` |
+| running only some tests | `ONLY_TESTS`: 0 = all, bit i = only test i | `constexpr uint32_t ONLY_TESTS = (1UL << 14) \| (1UL << 15);` |
 
-- **每行一個 `constexpr`**，型別用剛好的（`uint8_t`、`uint16_t`、`int16_t`…），註解寫範圍、單位或接到哪。
-- **名稱**：大寫加底線；腳位 `_PIN`；單位放最後：`_MS`、`_US`、`_HZ`、`_KHZ`、`_MM`、`_CM`、`_V`；個數 `_COUNT`。
-- **分組**：接線（腳位、接法、`BAUD`）在前，空一行，再來行為的參數。
+- **One `constexpr` a line**, with the type that just fits (`uint8_t`, `uint16_t`, `int16_t`…); the comment gives the range, the unit or where it connects.
+- **Names**: uppercase with underscores; pins `_PIN`; the unit last: `_MS`, `_US`, `_HZ`, `_KHZ`, `_MM`, `_CM`, `_V`; counts `_COUNT`.
+- **Groups**: the wiring (pins, wiring options, `BAUD`) first, a blank line, then the parameters of the behavior.
 
 ### 4. parts
 
-用 settings 組出零件，這裡不出現數字：
+The parts built from the settings; no numbers appear here:
 
 ```cpp
 using Link = Uno::UnoSerial<BAUD>;
@@ -158,17 +164,17 @@ using Button = switches::Switch3Pins<Uno::UnoInputPin<SWITCH_PIN>, SWITCH_ACTIVE
 Button button;
 ```
 
-- **不要直接寫 `Uno::UnoInputPin<2>`**：腳位一定先寫成 `X_PIN`。
-- **型別用 `using` 取名**：大駝峰，用零件的角色命名（`Bus`、`Screen`、`Link`、`Speaker`、`Car`、`Button`），不用型號。
-- 物件（變數）用小駝峰（`screen`、`car`、`speaker`）。
-- **顏色**：常數用 `ScreenColor::RED`、`ScreenColor::color(r, g, b)`；存顏色的變數、參數用 `using Color = ScreenColor::Value;`，不要寫 `uint16_t` 或 `RGB565::`（換格式時才不用改程式）。
-- 別的接法寫在旁邊的註解：`// 3-pin module: PassiveBuzzer3Pins<Uno::UnoTone<BUZZER_PIN, true>>`。
+- **Never write `Uno::UnoInputPin<2>` directly**: a pin is always an `X_PIN` first.
+- **Types get a name with `using`**: UpperCamelCase, named after the part's role (`Bus`, `Screen`, `Link`, `Speaker`, `Car`, `Button`), not its model.
+- Objects (variables) use lowerCamelCase (`screen`, `car`, `speaker`).
+- **Colors**: constants as `ScreenColor::RED`, `ScreenColor::color(r, g, b)`; variables and parameters holding a color use `using Color = ScreenColor::Value;`, never `uint16_t` or `RGB565::` (so another format needs no change of the code).
+- Other wirings go in a comment next to it: `// 3-pin module: PassiveBuzzer3Pins<Uno::UnoTone<BUZZER_PIN, true>>`.
 
-### 5. 程式自己的段落
+### 5. The program's own sections
 
-`// ---------- 名稱 ----------`，名稱小寫英文，說這段在做什麼（`rings`、`keys`、`distance -> pitch`）。函式名稱小駝峰、動詞開頭（`drawRing`、`printResult`）；每個函式上面一行註解說它做什麼。
+`// ---------- name ----------`, the name in lowercase English, saying what the section does (`rings`, `keys`, `distance -> pitch`). Function names in lowerCamelCase, starting with a verb (`drawRing`, `printResult`); one comment line above each function says what it does.
 
-### 6. tests（測試程式）
+### 6. tests (test programs)
 
 ```cpp
 // ---------- tests ----------
@@ -183,27 +189,28 @@ void (*const tests[])() = {
 };
 ```
 
-- 每個測試一個函式 `testXxx()`，上面註解 `// N. 測什麼`，下一行 `//    expected: 應該看到什麼`；N 是在 `tests[]` 的位置，從 0 開始。
-- 用 `ONLY_TESTS` 挑測試，不要把 `tests[]` 裡的註解掉。
-- 只有一個流程的測試（例如一直印距離）沒有 `tests[]`，段落名稱用 `test`。
+- One function `testXxx()` per test, with the comment `// N. what it tests` above it and `//    expected: what you should see` on the next line; N is its position in `tests[]`, from 0.
+- Pick tests with `ONLY_TESTS`; do not comment out entries of `tests[]`.
+- A test with a single flow (e.g. printing the distance forever) has no `tests[]`, and its section is named `test`.
 
 ### 7. main
 
-`setup()`、`loop()` 放最後，前面一定是 `// ---------- main ----------`。
+`setup()` and `loop()` come last, always after `// ---------- main ----------`.
 
-- **`loop()` 不要卡住**：零件的動作用「開始 + 每次 `loop()` 呼叫 `update()`」的寫法（車、LED 效果、蜂鳴器、按鈕都是），`delay()` 只用在測試的「停一下讓人看」。哪些函式會等，見 [lib/README.md 的「會不會等」](../lib/README.md#會不會等loop-會不會卡住)。
-- **印到串口**：`Link::printText`、`printNumber`、`printDecimal`（小數）、`printHex`、`printPin`（腳位名稱，換腳後跟著變），換行寫 `"\r\n"`。出問題的那一行用 `[ERROR] …` 或 `[WARNING] …` 開頭（跟 Python 工具一樣，見 [lib/README.md 的「提示和錯誤」](../lib/README.md#提示和錯誤)），平常的量測結果不加標籤。不用 Arduino 的 `Serial`（它比較大，而且跟 `Uno::UnoSerial` 搶同一個 UART）。
+- **`loop()` must not block**: the parts' actions follow "start + `update()` in every `loop()`" (the car, LED effects, buzzers, buttons all do); `delay()` only for "pause so people can look" in tests. Which functions wait: see [the "Does it wait" of lib/README.md](../lib/README.md#does-it-wait-does-loop-block).
+- **Printing to the serial**: `Link::printText`, `printNumber`, `printDecimal` (decimals), `printHex`, `printPin` (a pin's name, which follows a pin change), with `"\r\n"` for a new line. A line about a problem starts with `[ERROR] …` or `[WARNING] …` (like the Python tools, see [the "Messages and errors" of lib/README.md](../lib/README.md#messages-and-errors)); plain measurements have no tag. Arduino's `Serial` is not used (it is bigger, and fights `Uno::UnoSerial` for the same UART).
 
-## 週的 README
+## The weeks' READMEs
 
-每個 `week_{N}_{lib}/README.md` 都是這個順序：
+Every `week_{N}_{lib}/README.md` (English) and `讀我.md` (Chinese, a sentence-by-sentence translation) has this order:
 
-| 段落 | 內容 |
+| Section | Content |
 |---|---|
-| `# week_{N}_{lib}` | 一段說明（這週的零件，連到 `lib/` 的 README）、`hide.py` 的用法、程式的總表「檔案 / 內容 / 需要的硬體」 |
-| `## 接線` | 每個零件的腳 → UNO 的腳（跟程式的 `*_PIN` 一樣），哪個程式用到 |
-| `# tests/{n}_{說明}.cpp：說明`、`# assignments/…` | 每個程式一段，**測試在前、作業在後**：會看到什麼、怎麼操作、settings 裡可以調的、看到的不對時怎麼辦 |
+| `# week_{N}_{lib}` | a paragraph (the week's parts, linked to the READMEs of `lib/`), how to use `hide.py`, the table of programs "File / Contents / Hardware needed" |
+| `## Wiring` | each part's pins → the program's `*_PIN` (and the rules a pin must follow), which programs use them |
+| `# tests/{n}_{description}.cpp: description`, `# assignments/…` | one section per program, **tests first, assignments after**: what you will see, how to use it, what can be tuned in the settings, what to do when it looks wrong |
 
-- 程式的段落用 `#`（一級），裡面的小節用 `##`；在週的 README 裡提到自己這週的程式寫 `tests/6_car`，別週的寫完整的 `week_7_L298N/tests/6_car`。
-- 寫到設定時用設定的名稱：「改 `SCL_PIN`、`SDA_PIN`」，不寫「改 `Uno::UnoI2C<13, 11>` 的數字」。
-- 用詞跟 lib 的 README 一樣（[lib/README.md 的「用詞」](../lib/README.md#readme-的格式)）。
+- A program's section uses `#` (level one), its subsections `##`; in a week's README, programs of the same week are written `tests/6_car`, those of other weeks in full: `week_7_L298N/tests/6_car`.
+- Settings are named by their names: "change `SCL_PIN`, `SDA_PIN`", not "change the numbers of `Uno::UnoI2C<13, 11>`".
+- **No values of the settings**: a README says what a setting means and does ("waits `HOLD_MS`", "`BUZZER_PIN`: D9 or D10"), never what it is now ("waits 2 seconds", "D9"): the values live only in the program, where they are tuned on the hardware. Parameter tables have no value column, and no example tables are worked out from the current values.
+- The wording follows the READMEs of lib ([the "Wording" of lib/README.md](../lib/README.md#readme-format)).

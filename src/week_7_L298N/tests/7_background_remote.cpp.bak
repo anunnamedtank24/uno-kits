@@ -5,7 +5,8 @@
 #include "L298N.h"
 
 // UNO + L298N + 2 DC motors: the car runs in the background (Uno::UnoBackground), steered by keys on the USB serial
-//   wiring as tests/6_car
+//   wiring: the right column of the table of tests/6_car in the README (all four INs on PWM pins:
+//   backward and spinning need them)
 //   pio device monitor        (platformio.ini: monitor_speed = BAUD), then press keys (no Enter needed):
 //     w  forward        s  backward       a  spin left       d  spin right
 //     q  arc left       e  arc right      space / x  stop

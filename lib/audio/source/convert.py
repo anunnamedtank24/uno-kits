@@ -52,7 +52,7 @@ How (notes and rhythm):
     a chord or a song with drums and voice gives the loudest line, not always the tune:
     cut a part (--start / --duration) where the melody is alone or on top
 How (pcm):
-    resampled by ffmpeg to the rate the board really makes (Uno::UnoPcmOut: 2 MHz or 500 kHz / whole ticks),
+    resampled by ffmpeg to the rate the board really makes (board.json pcmOut, e.g. Uno::UnoPcmOut: 2 MHz or 500 kHz / whole ticks),
     the loudest sample brought to full scale (+ --gain), then 8 / 4 bits or IMA ADPCM
 Pitch (passive):
     --quantize semitone / raw, --transpose N, --range LOW HIGH (notes outside move by octaves)
@@ -77,18 +77,11 @@ MAX_PITCH_HZ = 5000.0
 MEDIAN_FRAMES = 5 # pitch smoothing: odd
 ONSET_FRAMES = 4 # --onset: the rise is measured over this many frames
 
-# the board: Uno::UnoTone plays 16 ~ 20000 Hz, Player counts steps in uint16_t
-MIN_HZ = 16
-MAX_HZ = 20000
+# audio::Player counts steps in uint16_t; the board's numbers (tone range, flash, the sample clock, what a
+# stream keeps up with) are in its board.json (--board): see get_tone_range, get_real_rate ...
 MAX_PLAYER_STEPS = 65535
-FLASH_BYTES = 32256 # UNO flash for the program
 NOTE_NAMES = ("C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B")
 
-# Uno::UnoPcmOut: Timer2 at 2 MHz (n <= 256) or 500 kHz
-PCM_MIN_RATE = 2000
-PCM_MAX_RATE = 32000
-PCM_RECOMMENDED_MAX_RATE = 22050 # above: the interrupt takes a lot of the CPU
-STREAM_RECOMMENDED_BYTES_PER_S = 12000 # above: the link may not keep up (measured: 16000 is at the edge, see README)
 
 TARGET_BITS = {"flash": 1, "stream": 2} # audio::TARGET_FLASH / TARGET_STREAM
 KINDS = {"passive": 0, "active": 1, "pcm": 2} # audio::KIND_NOTES / KIND_RHYTHM / KIND_PCM
@@ -98,7 +91,8 @@ ENCODING_NAMES = {0: "NOTES_HZ_MS", 1: "NOTES_COMPACT", 2: "RHYTHM_MS", 3: "PCM_
 COMPACT_TICK_MS = 10
 RHYTHM_MAX_MS = 32767
 RHYTHM_GAP_MS = 30 # active: between two notes that touch, so they are heard as two (one pitch only)
-RECOMMENDED_MAX_BYTES = {"passive": 8192, "active": 8192, "pcm": 20000} # --target flash: more = little flash left
+# --target flash: a share of the board's flash above which little is left for the program
+RECOMMENDED_MAX_FLASH_SHARE = {"passive": 0.25, "active": 0.25, "pcm": 0.625}
 
 # --quality presets, overridden by the single options
 NOTE_PRESETS = {
@@ -417,7 +411,8 @@ def get_note_hz(midi: float, settings: Settings) -> tuple[int, bool]:
     while hz > settings.high_hz and hz/2 >= settings.low_hz:
         hz /= 2
         moved = True
-    return min(MAX_HZ, max(MIN_HZ, round(hz))), moved
+    min_hz, max_hz = get_tone_range()
+    return min(max_hz, max(min_hz, round(hz))), moved
 
 
 def get_notes(segments: list[Segment], settings: Settings) -> tuple[list[tuple[int, int]], int]:
@@ -510,14 +505,21 @@ def get_board_note_hz(midi: int) -> int:
     return (octave_8[midi % 12] + (50 << shift))//(100 << shift)
 
 
+def get_tone_range() -> tuple[int, int]:
+    # the frequencies the board's square wave can have (board.json: tone)
+    return check.board_value("tone", "minHz"), check.board_value("tone", "maxHz")
+
+
 def get_real_rate(rate: int) -> float:
-    # what Uno::UnoPcmOut makes of rate: whole ticks of Timer2 at 2 MHz (n <= 256) or 500 kHz
-    ticks = (2000000 + rate//2)//rate
-    clock = 2000000
-    if ticks > 256:
-        ticks = (500000 + rate//2)//rate
-        clock = 500000
-    return clock/ticks
+    # what the board makes of rate (board.json: pcmOut): whole ticks (at most maxTicks) of the first clock where
+    # they fit, e.g. Uno::UnoPcmOut: Timer2 at 2 MHz (n <= 256), else 500 kHz
+    clocks = check.board_value("pcmOut", "clocksHz")
+    max_ticks = check.board_value("pcmOut", "maxTicks")
+    for clock in clocks:
+        ticks = (clock + rate//2)//rate
+        if ticks <= max_ticks or clock == clocks[-1]:
+            return clock/max(1, min(ticks, max_ticks))
+    return float(rate)
 
 
 def get_pcm_values(samples: np.ndarray, encoding: str) -> tuple[list[int], list[int]]:
@@ -661,7 +663,7 @@ def get_c_table_str(c_type: str, name: str, values: list[int], values_per_line: 
     lines = [", ".join(str(value) for value in values[i:i + values_per_line]) + "," for i in range(0, len(values), values_per_line)]
     if not lines:
         lines = ["0, // empty"]
-    return f"static const {c_type} {name}[] PROGMEM = {{\n" + indent("\n".join(lines)) + "\n};\n"
+    return check.get_array_start_str(c_type, name) + "{\n" + indent("\n".join(lines)) + "\n};\n"
 
 
 def get_c_getter_str(comment: str, c_type: str, function: str, table_str: str, name: str) -> str:
@@ -689,7 +691,12 @@ def get_c_info_str(settings: Settings, count: int, duration_ms: int, rate: int, 
     info += f"static constexpr uint32_t dataSize = {data_bytes};\n"
     info += "\n"
     info += get_c_getter_str("where stream.py finds the data, relative to lib/audio (the stream players send it)",
-                             "char", "getPath", f'static const char path[] PROGMEM = "{path}";\n', "path")
+                             "char", "getPath", check.get_array_start_str("char", "path") + f'"{path}";\n', "path")
+    if settings.sound == "pcm" and settings.encoding == "adpcm":
+        # the decoder's table, kept like the data (flash attribute of the project); --target stream needs it too
+        info += "\n" + get_c_getter_str("the 89 steps of IMA ADPCM, for the decoder (lib/audio/format.h: audio::Adpcm)",
+                                        "uint16_t", "getSteps", get_c_table_str("uint16_t", "steps", list(ADPCM_STEPS), 20),
+                                        "steps")
     return info
 
 
@@ -722,15 +729,11 @@ def get_c_str(name: str, command: str, audio_path: Path, settings_str: str, info
     c_str += "// generated by convert.py, do not edit\n"
     c_str += command
     c_str += check.get_format_str()
+    c_str += check.get_board_str()
     c_str += check.get_source_str(audio_path)
     c_str += settings_str + "\n"
     c_str += "#include <stdint.h>\n"
-    c_str += "#if defined(__AVR__)\n"
-    c_str += "#include <avr/pgmspace.h>\n"
-    c_str += "#endif\n"
-    c_str += "#ifndef PROGMEM\n"
-    c_str += "#define PROGMEM\n"
-    c_str += "#endif\n\n"
+    c_str += check.get_flash_include_str() + "\n"
     c_str += f"namespace {check.NAMESPACE} {{\n"
     c_str += indent("".join(f"// {line}\n" for line in usage.split("\n")) + f"struct {name} {{\n" + indent(struct_str.rstrip("\n")) + "\n};") + "\n"
     c_str += "}\n\n#endif\n"
@@ -831,7 +834,7 @@ def get_parser() -> argparse.ArgumentParser:
     rhythm_group.add_argument("--hz", type=get_positive_int, help="the pitch of the rhythm on a passive buzzer (default: the median note, or 2000)")
 
     pcm_group = parser.add_argument_group("samples (pcm)")
-    pcm_group.add_argument("--rate", type=get_positive_int, help=f"samples a second, {PCM_MIN_RATE} ~ {PCM_MAX_RATE} (default: --quality)")
+    pcm_group.add_argument("--rate", type=get_positive_int, help="samples a second, pcmOut.minRate ~ maxRate of the board (default: --quality)")
     pcm_group.add_argument("--encoding", choices=("u8", "u4", "adpcm"), help="u8: 8 bits; u4: 4 bits; adpcm: 4 bits, sounds better (default: --quality)")
     pcm_group.add_argument("--gain", type=float, default=0.0, help="dB after the loudest sample is brought to full scale; > 0 clips the peaks, louder (default 0)")
 
@@ -839,6 +842,7 @@ def get_parser() -> argparse.ArgumentParser:
     detection_group.add_argument("--silence", type=get_positive_float, default=35.0, help="dB under the loudest: rest (default 35)")
     detection_group.add_argument("--voicing", type=get_positive_float, default=0.2, help="YIN threshold 0.05 ~ 0.5 (default 0.2)")
     detection_group.add_argument("--onset", type=get_non_negative_float, default=6.0, help="dB rise that starts a new note, 0 = off (default 6)")
+    check.add_board_argument(parser)
     return parser
 
 
@@ -852,8 +856,9 @@ def check_args(parser: argparse.ArgumentParser, args: argparse.Namespace) -> lis
         parser.error(f"audio_path must be {' / '.join(SUFFIXES)}, got {audio_path.name}")
     args.target = [target for target in ("flash", "stream") if target in args.target]
     low_hz, high_hz = args.range
-    if not MIN_HZ <= low_hz < high_hz <= MAX_HZ:
-        parser.error(f"--range must be {MIN_HZ} <= LOW < HIGH <= {MAX_HZ}, got {low_hz:g} {high_hz:g}")
+    min_hz, max_hz = get_tone_range()
+    if not min_hz <= low_hz < high_hz <= max_hz:
+        parser.error(f"--range must be {min_hz} <= LOW < HIGH <= {max_hz} (the board), got {low_hz:g} {high_hz:g}")
     if high_hz < 2*low_hz:
         parser.error(f"--range must span an octave at least (HIGH >= 2 x LOW), got {low_hz:g} {high_hz:g}")
     if not 0.05 <= args.voicing <= 0.5:
@@ -870,10 +875,12 @@ def check_args(parser: argparse.ArgumentParser, args: argparse.Namespace) -> lis
         if pitch_given or notes_given:
             parser.error("--quantize / --transpose / --range / --min-note / --min-rest / --hz are for notes: not with --sound pcm")
         rate = args.rate if args.rate is not None else PCM_PRESETS[args.quality]["rate"]
-        if not PCM_MIN_RATE <= rate <= PCM_MAX_RATE:
-            parser.error(f"--rate must be {PCM_MIN_RATE} ~ {PCM_MAX_RATE}, got {rate}")
-        if rate > PCM_RECOMMENDED_MAX_RATE:
-            warnings.append(f"--rate {rate}: the sample interrupt takes much of the CPU above {PCM_RECOMMENDED_MAX_RATE}")
+        min_rate, max_rate = check.board_value("pcmOut", "minRate"), check.board_value("pcmOut", "maxRate")
+        recommended_max_rate = check.board_value("pcmOut", "recommendedMaxRate")
+        if not min_rate <= rate <= max_rate:
+            parser.error(f"--rate must be {min_rate} ~ {max_rate} (the board), got {rate}")
+        if rate > recommended_max_rate:
+            warnings.append(f"--rate {rate}: the sample interrupt takes much of the CPU above {recommended_max_rate}")
         if rate < 4000:
             warnings.append(f"--rate {rate}: muffled, nothing above {rate//2} Hz")
     else:
@@ -967,7 +974,7 @@ def get_pcm_data(audio_path: Path, settings: Settings, warnings: list[str]) -> t
     duration_ms = round(1000*count/real_rate)
     error = np.sqrt(np.mean(((np.array(played) - 128)/128 - np.clip(scaled, -1, 127/128))**2))
     snr = 20*math.log10(np.sqrt(np.mean(scaled**2))/max(error, 1e-9))
-    lines = [f"rate        {settings.rate} Hz asked, {real_rate:.1f} Hz on the board (Uno::UnoPcmOut)",
+    lines = [f"rate        {settings.rate} Hz asked, {real_rate:.1f} Hz on {check.board_value('name')}",
              f"level       peak to 0.98, gain {settings.gain_db:+g} dB, {100*clipped:.2f} % clipped",
              f"result      {count} samples, {count/real_rate:.2f} s, signal / error {snr:.1f} dB, "
              f"{len(data)/(count/real_rate):.0f} bytes a second"]
@@ -996,14 +1003,17 @@ def convert_audio_to_h(args: argparse.Namespace, command: str, warnings: list[st
         data_bytes = 2*len(data)
         bytes_per_s = 0
 
+    flash_bytes = check.board_value("flash", "bytes")
     if "flash" in settings.targets:
-        if data_bytes > FLASH_BYTES:
-            raise ValueError(f"{data_bytes} bytes: more than the UNO's flash ({FLASH_BYTES}); cut it (--duration), "
-                             f"lower --quality, or --target stream")
-        if data_bytes > RECOMMENDED_MAX_BYTES[settings.sound]:
-            warnings.append(f"{data_bytes} bytes: above {RECOMMENDED_MAX_BYTES[settings.sound]}, little flash left for the program")
-    if "stream" in settings.targets and bytes_per_s > STREAM_RECOMMENDED_BYTES_PER_S:
-        warnings.append(f"{bytes_per_s:.0f} bytes a second: streaming may run short above {STREAM_RECOMMENDED_BYTES_PER_S} "
+        if data_bytes > flash_bytes:
+            raise ValueError(f"{data_bytes} bytes: more than the flash of {check.board_value('name')} ({flash_bytes}); "
+                             f"cut it (--duration), lower --quality, or --target stream")
+        recommended_max_bytes = round(RECOMMENDED_MAX_FLASH_SHARE[settings.sound]*flash_bytes)
+        if data_bytes > recommended_max_bytes:
+            warnings.append(f"{data_bytes} bytes: above {recommended_max_bytes}, little flash left for the program")
+    max_stream_bytes = check.board_value("serial", "maxStreamBytesPerSecond")
+    if "stream" in settings.targets and bytes_per_s > max_stream_bytes:
+        warnings.append(f"{bytes_per_s:.0f} bytes a second: streaming may run short above {max_stream_bytes} "
                         f"(StreamSamplePlayer counts underruns())")
 
     name = args.name or check.get_free_name(output_dir_path, get_name(audio_path, settings), audio_path, command)
@@ -1050,6 +1060,10 @@ def convert_audio_to_h(args: argparse.Namespace, command: str, warnings: list[st
 def main():
     parser = get_parser()
     args = parser.parse_args()
+    try:
+        check.load_board(args.board)
+    except ValueError as e:
+        parser.error(str(e))
     warnings = check_args(parser, args)
     command = check.get_options_str(check.get_options(sys.argv[1:], [args.audio_path, args.output_dir_path]))
     try:

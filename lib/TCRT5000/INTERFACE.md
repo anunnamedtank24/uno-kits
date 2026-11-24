@@ -5,7 +5,7 @@
 | 數位輸出（OUT）：一個 `Pin`：`init()`、`read()`、`nowMs()`（`Uno::UnoInputPin<PIN>`） | `TCRT5000::HW006`（`Reflector`）：反射或暗、剛改變、維持多久 |
 | 類比輸出（四腳板的 A0）：`AnalogPin`（`Uno::UnoAnalogPin<A0>`） | `TCRT5000::AnalogReflector`：反射有多強 |
 
-給要寫新套件、換主板或換零件的人；用法、接線、注意事項見 [README.md](README.md)。
+給要寫新套件、換主板或換零件的人；用法、接線、注意事項見 [讀我.md](讀我.md)。
 
 ## 前提條件
 

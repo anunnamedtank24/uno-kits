@@ -1,7 +1,7 @@
 #ifndef FONT_SELECTED_H
 #define FONT_SELECTED_H
 
-// written by tools/assets.py before every build and by convert.py (do not edit): every .h of output/,
+// written by src/tools/assets.py before every build and by convert.py (do not edit): every .h of output/,
 // so a program can use any of them as font::name; what a program does not use is not compiled in
 
 #include "menlo_height_12_first_32_last_126_default_63.h"

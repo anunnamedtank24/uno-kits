@@ -40,7 +40,7 @@ constexpr bool FLIP = false;                // true: the OLED turned 180° (pins
 // dots
 constexpr uint8_t K = 4;                  // nearest dots looked at
 constexpr float RHO_0 = 0.65f;            // w at which rho = 0.5: higher = more dots
-constexpr float P_DIE_0 = 0.01f;           // dying even alone: 0, aging does it now
+constexpr float P_DIE_0 = 0.01f;          // dying even alone (small: aging does most of it)
 constexpr float C_DIE = 0.1f;
 constexpr float C_REP = 0.5f;             // must be > P_DIE_0, or the dots die out
 constexpr float P_SEX_0 = 0.5f;           // rho at which half the children have a partner

@@ -10,7 +10,7 @@ from pathlib import Path
 
 """
 Func: deletes what the tools made and can make again: every __pycache__, PlatformIO's build folder (.pio/build),
-      and the converted fonts, pictures, animations and sounds (lib/<kind>/output/*.h; the README.md stays)
+      and the converted fonts, pictures, animations and sounds (lib/<kind>/output/*.h; README.md and 讀我.md stay)
 Usage:
     python src/clean.py                  deletes them
     python src/clean.py --dry-run        only lists what it would delete
@@ -19,18 +19,18 @@ Usage:
                                          a fresh copy of every output; one whose source file is gone is kept
 After a plain clean:
     the next build converts again only the FONT / PICTURE / ANIMATION / MELODY files the program names
-    (tools/assets.py); a program that names an output directly (font::menlo_..., picture::sunset_...) does not
+    (src/tools/assets.py); a program that names an output directly (font::menlo_..., picture::sunset_...) does not
     compile until it is converted again: use --rebuild, or git restore lib (the outputs are in git)
-The converters' python: platformio.ini custom_asset_python, else ASSET_PYTHON, else python3
+The converters' python: ASSET_PYTHON (environment, then .env), else platformio.ini custom_asset_python, else python3
 """
 
 
 PROJECT_DIR_PATH = Path(__file__).resolve().parent.parent
 ASSET_KINDS = ("font", "image", "video", "audio")
-KEPT_NAMES = {"README.md"}
+KEPT_NAMES = {"README.md", "讀我.md"}
 SOURCE_PATTERN = re.compile(r"^// source: (.+) sha256 [0-9a-f]{64}$", re.MULTILINE)
 OPTIONS_PATTERN = re.compile(r"^// options: (.*)$", re.MULTILINE)
-# made by tools/assets.py on every build, not from one source file
+# made by src/tools/assets.py on every build, not from one source file
 WRITTEN_NAMES = {"selected.h", "registry.h"}
 
 
@@ -68,11 +68,27 @@ def get_source_path(lib_dir_path: Path, source_str: str) -> Path:
     return path if path.is_absolute() else lib_dir_path/path
 
 
+def get_dotenv() -> dict[str, str]:
+    # KEY=VALUE lines of the project's .env (this computer's settings, not in git); # comments, quotes removed
+    values = {}
+    path = PROJECT_DIR_PATH/".env"
+    if not path.exists():
+        return values
+    for line in path.read_text().splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.removeprefix("export ").split("=", 1)
+        values[key.strip()] = value.strip().strip("'\"")
+    return values
+
+
 def get_python() -> str:
+    # the same order as src/tools/assets.py: ASSET_PYTHON (environment, then .env), custom_asset_python, python3
     ini_path = PROJECT_DIR_PATH/"platformio.ini"
     match = re.search(r"^custom_asset_python\s*=\s*(\S+)", ini_path.read_text(), re.MULTILINE) if ini_path.exists() else None
-    for candidate in (match.group(1) if match else None, os.environ.get("ASSET_PYTHON"), shutil.which("python3"),
-                      sys.executable):
+    for candidate in (os.environ.get("ASSET_PYTHON"), get_dotenv().get("ASSET_PYTHON"), match.group(1) if match else None,
+                      shutil.which("python3"), sys.executable):
         if candidate:
             return str(Path(candidate).expanduser())
     return "python3"

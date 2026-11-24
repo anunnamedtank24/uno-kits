@@ -79,7 +79,7 @@ class Animation:
 
     @staticmethod
     def get_array(text: str, name: str) -> list[int]:
-        match = re.search(rf"\b{name}\[\] PROGMEM = \{{(.*?)\}};", text, re.DOTALL)
+        match = re.search(rf"\b{name}\[\][^=\n]*= \{{(.*?)\}};", text, re.DOTALL)
         if not match:
             raise ValueError(f"no array {name}[]")
         body = re.sub(r"//[^\n]*", "", match.group(1))
@@ -100,7 +100,8 @@ class Handler:
         self.link = link
         self.tile = args.tile
         # one byte = 10 bits on the line, in CPU cycles (+ chunk requests)
-        self.byte_cycles = convert.BOARD["cpuHz"]*10/args.baud*1.1
+        convert.check.load_board(args.board)  # the frames are encoded with the board's drawing cycles
+        self.byte_cycles = convert.check.board_value("cpuHz")*10/args.baud*1.1
         self.cache = {} # path -> Animation
         self.animation = None
         self.chunk_size = 64

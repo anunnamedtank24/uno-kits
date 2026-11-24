@@ -1,11 +1,5 @@
 {
-    "note": "ranges and defaults of convert.py / stream.py; hard limits (the format or the board cannot do it) stop with an error, recommended ranges only warn",
-    "board": {
-        "note": "UNO 16 MHz, ST7789 on 8 MHz SPI; a segment = one writeWindow (window + clipping), cycles counted like lib/video/source/config.json",
-        "cpuHz": 16000000,
-        "segmentCycles": 900,
-        "pixelCycles": 60
-    },
+    "note": "ranges and defaults of convert.py / stream.py; hard limits (the format or the board cannot do it) stop with an error, recommended ranges only warn; the board's numbers (clock, flash, drawing cycles) are in its board.json (--board)",
     "screen": {
         "note": "the biggest screen of this project (M130T); pictures are clipped, so bigger is only wasted data",
         "width": 240,
@@ -16,20 +10,36 @@
     "targets": {
         "flash": {
             "note": "pixels in flash (output/*.h), drawn by image::FlashImage",
-            "palettes": [2, 16, 256, 565],
-            "recommendedPalettes": [2, 16, 256],
+            "palettes": [
+                2,
+                16,
+                256,
+                565
+            ],
+            "recommendedPalettes": [
+                2,
+                16,
+                256
+            ],
             "defaultPalette": 16,
-            "byteCycles": 6,
-            "recommendedMaxBytes": 16000
+            "recommendedMaxFlashShare": 0.5
         },
         "stream": {
             "note": "pixels stay on the computer (in output/*.h, after #if 0), stream.py sends them to image::StreamImage; the board only has the size and the path (output/*.h); palette 256 works (the board keeps it in RAM taken at run time, 2 bytes a color), but warns",
-            "palettes": [2, 16, 256, 565],
-            "recommendedPalettes": [2, 16, 565],
+            "palettes": [
+                2,
+                16,
+                256,
+                565
+            ],
+            "recommendedPalettes": [
+                2,
+                16,
+                565
+            ],
             "defaultPalette": 565,
             "baud": 1000000,
-            "byteCycles": 176,
-            "recommendedMaxBytes": null
+            "recommendedMaxFlashShare": null
         }
     }
 }

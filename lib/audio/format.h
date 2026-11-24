@@ -2,12 +2,6 @@
 #define AUDIO_FORMAT_H
 
 #include <stdint.h>
-#if defined(__AVR__)
-#include <avr/pgmspace.h>
-#endif
-#ifndef PROGMEM
-#define PROGMEM
-#endif
 #include "note.h"
 
 namespace audio {
@@ -30,7 +24,9 @@ namespace audio {
     // a struct (e.g. melody::ode_to_joy_flash_passive_medium) has
     //   target, kind, encoding, count (steps or samples), durationMs, rate (PCM), rhythmHz (RHYTHM),
     //   dataSize, getPath() (for stream.py); and the data if made for the UNO:
-    //   getNotes() (const uint16_t *, NOTES / RHYTHM) or getSamples() (const uint8_t *, PCM)
+    //   getNotes() (const uint16_t *, NOTES / RHYTHM) or getSamples() (const uint8_t *, PCM);
+    //   PCM_ADPCM also getSteps() (const uint16_t *, the 89 steps of IMA ADPCM), also for --target stream:
+    //   the decoder's table, in flash the way the board says (board.json flash.attribute, platformio.ini custom_board)
 
     constexpr uint8_t TARGET_FLASH = 1;     // the data is in the struct (flash)
     constexpr uint8_t TARGET_STREAM = 2;    // the data stays on the computer: stream.py sends it
@@ -60,16 +56,28 @@ namespace audio {
     // IMA ADPCM: 4-bit codes -> 16-bit samples (the decoder of source/convert.py does the same)
     class Adpcm {
     public:
-        inline void reset();
+        // from the start; steps: the sound's getSteps() (89 values in flash); nullptr: decode() gives silence
+        inline void reset(const uint16_t *steps);
+
+        // from the start again, the same table (a sound played again)
+        inline void restart();
+
+        // the table given to reset()
+        inline const uint16_t *steps() const;
 
         // one code (0 ~ 15) -> an 8-bit sample (0 ~ 255); readFlash16 reads the step table
         template <uint16_t (*readFlash16)(const uint16_t *)>
         inline uint8_t decode(uint8_t code);
 
     private:
+        const uint16_t *_steps = nullptr;
         int16_t _predictor = 0;
         int8_t _index = 0;
     };
+
+    // the step table of a sound: Clip::getSteps() for PCM_ADPCM, else nullptr
+    template <class Clip>
+    inline const uint16_t *stepsOf();
 
     // compile-time warnings: static_assert(audio::warn::Xxx<condition>::ok, "")
     namespace warn {
@@ -108,24 +116,38 @@ namespace audio {
     }
 
     namespace adpcm {
-        constexpr uint16_t STEPS[89] PROGMEM = {
-            7, 8, 9, 10, 11, 12, 13, 14, 16, 17, 19, 21, 23, 25, 28, 31, 34, 37, 41, 45,
-            50, 55, 60, 66, 73, 80, 88, 97, 107, 118, 130, 143, 157, 173, 190, 209, 230, 253, 279, 307,
-            337, 371, 408, 449, 494, 544, 598, 658, 724, 796, 876, 963, 1060, 1166, 1282, 1411, 1552, 1707, 1878, 2066,
-            2272, 2499, 2749, 3024, 3327, 3660, 4026, 4428, 4871, 5358, 5894, 6484, 7132, 7845, 8630, 9493, 10442, 11487, 12635, 13899,
-            15289, 16818, 18500, 20350, 22385, 24623, 27086, 29794, 32767,
-        };
         constexpr int8_t INDEX_CHANGES[8] = {-1, -1, -1, -1, 2, 4, 6, 8};
     }
 
-    inline void Adpcm::reset() {
+    inline void Adpcm::reset(const uint16_t *steps) {
+        _steps = steps;
+        restart();
+    }
+
+    inline void Adpcm::restart() {
         _predictor = 0;
         _index = 0;
     }
 
+    inline const uint16_t *Adpcm::steps() const {
+        return _steps;
+    }
+
+    template <class Clip>
+    inline const uint16_t *stepsOf() {
+        if constexpr (Clip::encoding == PCM_ADPCM) {
+            return Clip::getSteps();
+        } else {
+            return nullptr;
+        }
+    }
+
     template <uint16_t (*readFlash16)(const uint16_t *)>
     inline uint8_t Adpcm::decode(uint8_t code) {
-        uint16_t step = readFlash16(&adpcm::STEPS[_index]);
+        if (_steps == nullptr) {
+            return PCM_SILENCE;
+        }
+        uint16_t step = readFlash16(&_steps[_index]);
         int32_t difference = step >> 3;
         if (code & 4) {
             difference += step;

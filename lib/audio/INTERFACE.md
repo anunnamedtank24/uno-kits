@@ -2,12 +2,12 @@
 
 | 需要 | 得到 |
 |---|---|
-| 播音符、節奏：`Sound`（[buzzer](../buzzer/README.md) 的模組） | `audio::Player`：嗶聲、旋律、滑音，播放時不會等 |
+| 播音符、節奏：`Sound`（[buzzer](../buzzer/讀我.md) 的模組） | `audio::Player`：嗶聲、旋律、滑音，播放時不會等 |
 | 播取樣：`SampleOut`（`Uno::UnoPcmOut<9>`） | `audio::SamplePlayer`：真正的波形（說話、音樂） |
 | 串流：再加一個 `Stream`（`stream::Puller<Uno::UnoSerial<BAUD>, CHUNK>`） | `audio::StreamPlayer`、`StreamSamplePlayer`：聲音留在電腦，播放時才送過來 |
 | 音檔（wav、mp3、m4a…） | `melody::*`：`MELODY("檔案")` 或 `source/convert.py` 轉出來的聲音 |
 
-給要寫新套件、換主板或換零件的人；用法、接線、注意事項見 [README.md](README.md)。
+給要寫新套件、換主板或換零件的人；用法、接線、注意事項見 [讀我.md](讀我.md)。
 
 ## 前提條件
 
@@ -24,7 +24,7 @@
 ```
 lib/audio/
 ├── audio.h                   入口：全部（程式只 include 它）
-├── asset.h                   MELODY(路徑, 選項) 巨集：編譯前自動轉換（tools/assets.py）
+├── asset.h                   MELODY(路徑, 選項) 巨集：編譯前自動轉換（src/tools/assets.py）
 ├── note.h                    noteHz(A, 4) = 440、midiHz、Pitch、REST、beatMs：手寫旋律
 ├── format.h                  交換格式：KIND_*、編碼、TARGET_*、decodeStep、Adpcm
 ├── player.h                  Player<Sound, GAP_MS>：tone / beep / beeps / slide、Flash 的音符和節奏
@@ -32,8 +32,8 @@ lib/audio/
 ├── sample_player.h           SamplePlayer<SampleOut>：Flash 的取樣（PCM）
 ├── stream_sample_player.h    StreamSamplePlayer<SampleOut, Stream, BUFFER>：電腦傳來的取樣
 ├── assets/                   範例音檔（7 種格式 + macOS `say` 的人聲 hello.aiff）
-├── source/                   convert.py、check.py、stream_handler.py（lib/stream 的 stream.py 用它讀聲音），見 source/README.md
-└── output/                   產生的聲音和 selected.h，見 output/README.md
+├── source/                   convert.py、check.py、stream_handler.py（lib/stream 的 stream.py 用它讀聲音），見 source/讀我.md
+└── output/                   產生的聲音和 selected.h，見 output/讀我.md
 ```
 
 ## 介面需求
@@ -42,7 +42,7 @@ lib/audio/
 |---|---|---|
 | `Sound`（`Player`、`StreamPlayer`） | `HAS_PITCH`（常數）、`init()`、`start(hz)`（再呼叫一次就換頻率）、`stop()`、`nowMs()`、`readFlash8(address)`、`readFlash16(address)` | `buzzer` 的模組（`ActiveBuzzer2Pins`、`PassiveBuzzer2Pins`…） |
 | `SampleOut`（`SamplePlayer`、`StreamSamplePlayer`） | `init()`、`start(rate, next)`（每秒 rate 次在中斷裡呼叫 `next()` 拿下一個取樣）、`stop()`、`realRate()`、`stopInterrupts()`、`restoreInterrupts(saved)`、`readFlash8`、`readFlash16` | `Uno::UnoPcmOut` |
-| `Stream`（串流） | `CHUNK_SIZE`、`OK`、`ERROR_*`、`begin()`、`write8()`、`writePath()`、`waitAnswer()`；`StreamPlayer` 另外要 `Answer` 類別，`StreamSamplePlayer` 另外要 `pullLength()`、`receive()` | `stream::Puller<Uno::UnoSerial<BAUD>, CHUNK>`（[lib/stream](../stream/README.md)） |
+| `Stream`（串流） | `CHUNK_SIZE`、`OK`、`ERROR_*`、`begin()`、`write8()`、`writePath()`、`waitAnswer()`；`StreamPlayer` 另外要 `Answer` 類別，`StreamSamplePlayer` 另外要 `pullLength()`、`receive()` | `stream::Puller<Uno::UnoSerial<BAUD>, CHUNK>`（[lib/stream](../stream/讀我.md)） |
 | `Melody` / `Clip` | `output/selected.h` 裡的 struct：`target`、`kind`、`encoding`、`count`、`rate`、`rhythmHz`、`getPath()`；`--target flash` 的還有 `getNotes()` 或 `getSamples()` | `melody::*` |
 
 ## 函式
@@ -57,10 +57,10 @@ lib/audio/
 | `beep(hz, ms)` | 響一次 |
 | `beeps(hz, count, onMs, offMs)` | 響 count 次，間隔 offMs（最後一次後面不再等） |
 | `play<Melody>(repeat)` | 播 `output/` 的音符或節奏，例如 `play<melody::scale_flash_passive_medium>()` |
-| `play(notes, count, repeat)` | 播手寫的 `{hz, ms, ...}`（見[手寫旋律](README.md#手寫旋律)） |
+| `play(notes, count, repeat)` | 播手寫的 `{hz, ms, ...}`（見[手寫旋律](讀我.md#手寫旋律)） |
 | `slide(fromHz, toHz, ms)` | 滑音（以 Hz 直線變化）：警笛、雷射 |
 | `stop()` | 立刻安靜 |
-| `setVolume(volume)`、`volume()` | 設定、回傳音量 0 ～ 255（預設 255）：無源改工作週期、有源只有 0 = 靜音（見 [buzzer 的音量](../buzzer/README.md#音量)） |
+| `setVolume(volume)`、`volume()` | 設定、回傳音量 0 ～ 255（預設 255）：無源改工作週期、有源只有 0 = 靜音（見 [buzzer 的音量](../buzzer/讀我.md#音量)） |
 | `isPlaying()`、`currentHz()`、`noteIndex()` | 回傳有沒有在播、現在的頻率（0 = 安靜）、播到第幾步 |
 
 ### StreamPlayer（電腦的音符、節奏）
@@ -78,6 +78,7 @@ lib/audio/
 |---|---|
 | `init()` | 初始化 SampleOut，安靜 |
 | `SamplePlayer::play<Clip>(repeat)` | 播 Flash 的取樣 |
+| `SamplePlayer::play(samples, count, encoding, rate, repeat, steps)` | 同上，用指標；`PCM_ADPCM` 要給步階表 `steps`（聲音的 `getSteps()`），沒有時安靜 |
 | `StreamSamplePlayer::open<Clip>(repeat)` | 跟 `stream.py` 要取樣、先把緩衝填滿再開始；回傳 `OK` 或錯誤 |
 | `update()` | 播完就停（或從頭）；串流的還會在緩衝空出 CHUNK 時補資料。每次 loop 都要呼叫 |
 | `stop()`、`isPlaying()`、`position()` | 停止、回傳有沒有在播、播了幾個取樣 |
@@ -90,7 +91,7 @@ lib/audio/
 | `OK`（0） | — |
 | `ERROR_NOT_FOUND`（1） | `stream.py` 找不到檔案（或在 `lib/audio` 外面） |
 | `ERROR_UNREADABLE`（2） | 檔案讀不懂 |
-| `ERROR_WRONG_KIND`（3） | 取樣給了 `StreamPlayer`，或音符給了 `StreamSamplePlayer` |
+| `ERROR_WRONG_KIND`（3） | 取樣給了 `StreamPlayer`，或音符給了 `StreamSamplePlayer`；電腦上的檔案是 ADPCM，板子上的 struct 不是（之後重轉過） |
 | `ERROR_NO_ANSWER`（4） | 3 秒沒回答（`stream.py` 沒開，或串口被佔用） |
 | `ERROR_BROKEN`（5） | 傳到一半斷了（200 ms 收不到下一塊）或資料不合理 |
 
@@ -112,7 +113,8 @@ lib/audio/
 |---|---|
 | `stepBytes(encoding)` | 回傳音符 / 節奏的一步佔幾個 byte |
 | `decodeStep(encoding, first, second, rhythmHz, hz, ms)` | 把一步的兩個字解成 hz（0 = 安靜）和 ms；節奏的「開」用 rhythmHz |
-| `Adpcm::reset()`、`decode<readFlash16>(code)` | IMA ADPCM：每個 4 bit 的碼解成一個 8 bit 取樣（0 ～ 255），跟 `convert.py` 的解碼器一樣 |
+| `Adpcm::reset(steps)`、`restart()`、`steps()`、`decode<readFlash16>(code)` | IMA ADPCM：每個 4 bit 的碼解成一個 8 bit 取樣（0 ～ 255），跟 `convert.py` 的解碼器一樣；步階表 `steps` 是聲音的 `getSteps()`（在 Flash，跟資料一樣由 `convert.py` 產生），`nullptr` 時解出靜音 |
+| `stepsOf<Clip>()` | `PCM_ADPCM` 的聲音回傳 `Clip::getSteps()`，其他 `nullptr` |
 
 ## 參數
 
@@ -161,7 +163,7 @@ lib/audio/
 | `BUFFER`、`CHUNK` | 見參數 | 編譯錯誤 |
 | `noteHz` 的八度 | 0 ～ 8 | 回傳 0（休止） |
 | `update()` 的間隔 | 越常越好 | 音符：邊界晚，但節奏不飄；串流取樣：緩衝撐不住就 underrun |
-| `notes` 指標 | 必須指向 `PROGMEM` 的陣列 | 不檢查：播出亂七八糟的音 |
+| `notes` 指標 | 必須指向 Flash 裡的陣列（UNO：`PROGMEM`） | 不檢查：播出亂七八糟的音 |
 
 ## 資源
 

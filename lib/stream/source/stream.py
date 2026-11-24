@@ -3,6 +3,7 @@ sys.dont_write_bytecode = True # loading the handlers (and their convert.py) mus
 
 import argparse
 import importlib.util
+import json
 import re
 import subprocess
 import threading
@@ -40,9 +41,9 @@ Protocol (board -> computer: commands; computer -> board: at most 1 byte unasked
 
 
 POLL_S = 0.005
-DEFAULT_BAUD = 1000000 # Uno::UnoSerial<1000000>
-# USB vendor ids: Arduino (2), WCH CH340, FTDI, Silicon Labs CP210x, Prolific PL2303
-BOARD_VIDS = {0x2341, 0x2A03, 0x1A86, 0x0403, 0x10C4, 0x067B}
+# the board's numbers (--board, default custom_board of platformio.ini): serial.baud (the default of --baud),
+# serial.usbVendorIds (how the board is found), passed on to the handlers (the drawing cycles of animations)
+PROJECT_DIR_PATH = Path(__file__).resolve().parent.parent.parent.parent
 UPLOAD_CHECK_S = 0.3
 # avrdude itself, or PlatformIO starting an upload (released before it even builds)
 # only the program itself (its first word, or the script python runs), not a shell line that mentions it
@@ -229,10 +230,23 @@ def wait_for_upload():
     print("[INFO] Upload done, taking the port again")
 
 
-def find_port() -> str | None:
-    # any system (macOS /dev/cu.usbmodem..., Linux /dev/ttyACM0 / ttyUSB0, Windows COM3 ...): the USB serial chips
-    # of UNO boards and their clones (Arduino, CH340, FTDI, CP210x, PL2303) by their USB id
-    ports = sorted(info.device for info in list_ports.comports() if info.vid in BOARD_VIDS)
+def get_board_path(given: str | None) -> Path | None:
+    # --board, else custom_board of platformio.ini (relative to the project)
+    if given:
+        return Path(given).expanduser().resolve()
+    ini_path = PROJECT_DIR_PATH/"platformio.ini"
+    match = re.search(r"^custom_board[ \t]*=[ \t]*(.*?)[ \t]*(?:[ \t];.*)?$", ini_path.read_text(), re.MULTILINE) \
+        if ini_path.exists() else None
+    if match is None or not match.group(1):
+        return None
+    path = Path(match.group(1)).expanduser()
+    return path if path.is_absolute() else PROJECT_DIR_PATH/path
+
+
+def find_port(vendor_ids: set[int]) -> str | None:
+    # any system (macOS /dev/cu.usbmodem..., Linux /dev/ttyACM0 / ttyUSB0, Windows COM3 ...): the board's USB serial
+    # chips by their USB vendor id (board.json: serial.usbVendorIds)
+    ports = sorted(info.device for info in list_ports.comports() if info.vid in vendor_ids)
     if len(ports) > 1:
         print(f"[WARNING] More than one board: {', '.join(ports)}; using {ports[0]} (or give --port)")
     return ports[0] if ports else None
@@ -260,8 +274,10 @@ def get_parser(modules: list) -> argparse.ArgumentParser:
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument("--port", help="serial port of the board, e.g. /dev/cu.usbmodem1101, COM3, /dev/ttyACM0 (default: found by its USB id)")
-    parser.add_argument("--baud", type=get_positive_int, default=DEFAULT_BAUD,
-                        help=f"same as Uno::UnoSerial<BAUD> (default {DEFAULT_BAUD})")
+    parser.add_argument("--board", metavar="FILE",
+                        help="the board's numbers, e.g. lib/Uno/board.json (default: custom_board of platformio.ini)")
+    parser.add_argument("--baud", type=get_positive_int,
+                        help="the same as the program's BAUD (default: serial.baud of the board)")
     for module in modules:
         if hasattr(module, "add_arguments"):
             module.add_arguments(parser)
@@ -274,6 +290,17 @@ def main():
     args = parser.parse_args()
     if serial is None:
         parser.error("pyserial is not installed: pip install pyserial")
+    board_path = get_board_path(args.board)
+    if board_path is None:
+        parser.error("no board: give --board, or custom_board in platformio.ini (e.g. lib/Uno/board.json)")
+    try:
+        board = json.loads(board_path.read_text())
+        vendor_ids = {int(value, 0) for value in board["serial"]["usbVendorIds"]}
+        if args.baud is None:
+            args.baud = board["serial"]["baud"]
+    except (OSError, ValueError, KeyError) as e:
+        parser.error(f"board file {board_path}: {e}")
+    args.board = str(board_path)
     names = ", ".join(f"{module.NAME} ({' '.join(chr(c) for c in module.COMMANDS)})" for module in modules)
     print(f"[INFO] Serving {names}; Ctrl+C to stop")
 
@@ -284,7 +311,7 @@ def main():
             if is_uploading():
                 wait_for_upload()
                 continue
-            port_name = args.port or find_port()
+            port_name = args.port or find_port(vendor_ids)
             if port_name is None:
                 if not waiting_printed:
                     print("[INFO] Waiting for a board to be plugged in")

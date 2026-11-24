@@ -1,14 +1,16 @@
 # font
 
-| 需要 | 得到 |
+English | [中文](讀我.md)
+
+| Needs | Gives |
 |---|---|
-| （不需要）；字型檔 .ttf / .otf | `font::*`：每個字型一個 struct（`FONT("檔案")` 或 `source/convert.py` 轉出來），給 `graphics::Text` 的 `setFont<…>()` |
+| (nothing); a font file .ttf / .otf | `font::*`: one struct per font (made by `FONT("file")` or `source/convert.py`), for `setFont<…>()` of `graphics::Text` |
 
-不需要任何介面，任何主板都能用。開發者看的細節（前提條件、資料怎麼產生、輸入限制）在 [INTERFACE.md](INTERFACE.md)。
+Needs no interface: works on any board. The details for developers (prerequisites, how the data is made, input limits) are in [INTERFACE.md](INTERFACE.md).
 
-字型資料，`namespace font`。每個字型是一個 struct，由 `source/convert.py` 從 .ttf / .otf 產生，給 `graphics::Text` 畫。
+Font data, `namespace font`. Each font is a struct made by `source/convert.py` from a .ttf / .otf, drawn by `graphics::Text`.
 
-## 用法
+## Usage
 
 ```bash
 cd lib/font
@@ -22,11 +24,11 @@ screen.setFont<font::menlo_height_23_first_32_last_126_default_63>();
 screen.drawTexts(10, 10, color, "hello");
 ```
 
-完整的例子：`src/week_3_ST7789_DS18B20_graphics_color_font_image_video/tests/1_screen.cpp`（ST7789）、`src/week_4_SSD1306_switch_buzzer_audio/tests/1_oled.cpp`（OLED）。
+Complete examples: `src/week_3_ST7789_DS18B20_graphics_color_font_image_video/tests/1_screen.cpp` (ST7789), `src/week_4_SSD1306_switch_buzzer_audio/tests/1_oled.cpp` (OLED).
 
-## 直接用檔案（推薦）
+## Using the files directly (recommended)
 
-程式裡寫 `FONT("路徑", "選項")`，編譯前自動轉換，不用先跑 `convert.py`，檔案也不用放在 `assets/`：
+A program writes `FONT("path", "options")` and it is converted before compiling: no need to run `convert.py` first, and the file need not be in `assets/`:
 
 ```cpp
 #include "font.h"
@@ -34,33 +36,33 @@ using Title = FONT("~/Fonts/Inter.ttf", "--height 16");
 screen.setFont<Title>();
 ```
 
-| 項目 | 說明 |
+| Item | Explanation |
 |---|---|
-| 路徑 | 絕對路徑、`~/…`、相對於寫它的 .cpp；找不到時再試專案資料夾、`lib/font/assets/` |
-| 選項 | 一個字串，就是 `source/convert.py` 的選項：大小（`--height` / `--width` / `--size`）、`--first`、`--last`、`--default`；省略大小時是 `--height 16` |
-| 轉到哪 | `lib/font/output/`，跟手動跑 `convert.py` 的一樣（`tools/assets.py` 每次編譯前找：同一個檔案、同樣的選項已經轉過就直接用，沒有才轉） |
-| 型態 | `FONT(...)` 就是那個 `font::` struct，跟手動轉換的一樣用 |
-| 限制 | 兩個參數都要是字串常數（不能是變數） |
+| Path | absolute, `~/…`, relative to the .cpp that writes it; if not found, the project folder, then `lib/font/assets/` |
+| Options | one string, the options of `source/convert.py`: size (`--height` / `--width` / `--size`), `--first`, `--last`, `--default`; without a size it is `--height 16` |
+| Where it goes | `lib/font/output/`, the same as running `convert.py` by hand (`src/tools/assets.py` looks before every build: the same file with the same options already converted is used, only otherwise is it converted) |
+| Type | `FONT(...)` is that `font::` struct, used like one converted by hand |
+| Limits | both arguments must be string constants (no variables) |
 
-完整的說明：[lib/README.md](../README.md#字型圖片影片聲音直接用檔案)；例子：`src/week_4_SSD1306_switch_buzzer_audio/tests/5_files.cpp`（四種都有）。上面「用法」是手動轉換的方式，一樣能用。
+The full explanation: [lib/README.md](../README.md#fonts-pictures-videos-sounds-use-the-files-directly); example: `src/week_4_SSD1306_switch_buzzer_audio/tests/5_files.cpp` (all four kinds). "Usage" above is the way of converting by hand, which works just as well.
 
-## 輸入限制
+## Input limits
 
-| 項目 | 範圍 | 超出時 |
+| Item | Range | Beyond it |
 |---|---|---|
-| 字元碼 | 0 ～ 255，一個 byte 一個字 | UTF-8 的中文等多 byte 字元拆成好幾個 byte，各自畫成預設字元 |
-| `--first` ～ `--last` | 0 ～ 255，first ≤ last，連續 | `convert.py` 報錯 |
-| 格子高度、每個字的寬度 | ≤ 255 px | `convert.py` 報錯 |
-| 每個字的點、橫線、直線、矩形數量 | 各 ≤ 255 | `convert.py` 報錯 |
-| 整個字型的形狀資料 | ≤ 65535 bytes | `convert.py` 報錯：縮小字型或字元範圍 |
-| 預設字元 `--default` | 必須在字型裡 | `convert.py` 報錯 |
-| 字型檔 | .ttf、.otf | `convert.py` 報錯 |
+| character codes | 0 ~ 255, one byte a character | multi-byte UTF-8 characters such as Chinese split into several bytes, each drawn as the default character |
+| `--first` ~ `--last` | 0 ~ 255, first ≤ last, continuous | `convert.py` error |
+| grid height, the width of each character | ≤ 255 px | `convert.py` error |
+| points, horizontal lines, vertical lines, rectangles of a character | ≤ 255 each | `convert.py` error |
+| the shape data of the whole font | ≤ 65535 bytes | `convert.py` error: make the font or the character range smaller |
+| the default character `--default` | must be in the font | `convert.py` error |
+| font files | .ttf, .otf | `convert.py` error |
 
-## 注意事項
+## Caveats
 
-| 情況 | 結果 | 做法 |
+| Situation | Result | What to do |
 |---|---|---|
-| 字型裡沒有的符號（例如 `°`） | `assets/menlo.ttf` 只有 ASCII | 先用 fontTools 從系統字型取出需要的字再轉換 |
-| 抗鋸齒 | 沒有：每個像素不是有就是沒有，也沒有背景色 | 要蓋掉舊字，先自己畫背景 |
-| 小字（12 px） | 只有 4 px 寬，看起來很粗糙 | 用 23 px 以上 |
-| 等寬或不等寬 | 都可以：每個字有自己的寬度，高度都是 `gridHeight` | — |
+| symbols the font does not have (e.g. `°`) | `assets/menlo.ttf` has only ASCII | take the needed characters out of a system font with fontTools first, then convert |
+| anti-aliasing | none: every pixel is on or off, and there is no background color | to cover old text, draw the background yourself first |
+| small text (12 px) | only 4 px wide, looks rough | use 23 px or more |
+| monospaced or not | both work: every character has its own width, all share the height `gridHeight` | — |

@@ -46,11 +46,11 @@ namespace buzzer {
         static inline uint32_t nowMs();
         static inline uint8_t readFlash8(const uint8_t *address);
         static inline uint16_t readFlash16(const uint16_t *address);
-    };
 
-    namespace active_buzzer_state {
-        inline bool muted = false;
-    }
+    private:
+        // one for each buzzer (each Pin): muting one leaves the others on
+        static inline bool _muted = false;
+    };
 
     // ================= definitions =================
 
@@ -63,7 +63,7 @@ namespace buzzer {
     template <class Pin, bool ACTIVE_HIGH>
     inline void ActiveBuzzer<Pin, ACTIVE_HIGH>::start(uint16_t hz) {
         (void)hz;
-        if (active_buzzer_state::muted) {
+        if (_muted) {
             return;
         }
         Pin::write(ACTIVE_HIGH);
@@ -71,15 +71,15 @@ namespace buzzer {
 
     template <class Pin, bool ACTIVE_HIGH>
     inline void ActiveBuzzer<Pin, ACTIVE_HIGH>::setVolume(uint8_t volume) {
-        active_buzzer_state::muted = volume == 0;
-        if (active_buzzer_state::muted) {
+        _muted = volume == 0;
+        if (_muted) {
             stop();
         }
     }
 
     template <class Pin, bool ACTIVE_HIGH>
     inline uint8_t ActiveBuzzer<Pin, ACTIVE_HIGH>::volume() {
-        return active_buzzer_state::muted ? 0 : 255;
+        return _muted ? 0 : 255;
     }
 
     template <class Pin, bool ACTIVE_HIGH>

@@ -101,8 +101,9 @@ void testTriangles() {
 }
 
 // 5. circles, 2 forms
-//    expected: left Radius, right Points, the same size; outline on the left, filled on the right;
-//              the dark dot in the right disc is the given point on its edge
+//    expected: three of the same size: outline by Radius (left), outline by Points (middle),
+//              filled by Radius and by Points on the same place (right, one disc);
+//              the dark dot on the right disc's edge is the point given to Points
 void testCircles() {
     screen.drawHollowCircleRadius(24, 32, 20, ON);
     screen.drawHollowCirclePoints(64, 32, 76, 48, ON);    // distance = 20

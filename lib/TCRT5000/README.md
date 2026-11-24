@@ -1,21 +1,23 @@
 # TCRT5000
 
-| 需要 | 得到 |
+English | [中文](讀我.md)
+
+| Needs | Gives |
 |---|---|
-| 數位輸出（OUT）：一個 `Pin`：`init()`、`read()`、`nowMs()`（`Uno::UnoInputPin<PIN>`） | `TCRT5000::HW006`（`Reflector`）：反射或暗、剛改變、維持多久 |
-| 類比輸出（四腳板的 A0）：`AnalogPin`（`Uno::UnoAnalogPin<A0>`） | `TCRT5000::AnalogReflector`：反射有多強 |
+| the digital output (OUT): a `Pin`: `init()`, `read()`, `nowMs()` (`Uno::UnoInputPin<PIN>`) | `TCRT5000::HW006` (`Reflector`): reflecting or dark, just changed, for how long |
+| the analog output (A0 of the 4-pin board): `AnalogPin` (`Uno::UnoAnalogPin<A0>`) | `TCRT5000::AnalogReflector`: how strong the reflection is |
 
-「需要」是介面（duck typing），括號裡是這個專案現成的實作，換主板只要換它們。開發者看的細節（前提條件、介面需求、每個函式、參數、資源）在 [INTERFACE.md](INTERFACE.md)。
+"Needs" are interfaces (duck typing); in parentheses the ready implementations of this project, and another board only replaces them. The details for developers (prerequisites, interface requirements, every function, parameters, resources) are in [INTERFACE.md](INTERFACE.md).
 
-TCRT5000 反射式紅外線感測器（裝在有比較器的小板子上），`namespace TCRT5000`。
+The TCRT5000 reflective infrared sensor (on a small board with a comparator), `namespace TCRT5000`.
 
-## 用法
+## Usage
 
 ```cpp
 #include "Uno_pin.h"
 #include "TCRT5000.h"
 
-constexpr uint8_t OUT_PIN = 4;            // 板子的 OUT
+constexpr uint8_t OUT_PIN = 4;            // the board's OUT
 TCRT5000::HW006<Uno::UnoInputPin<OUT_PIN>> sensor;
 
 void setup() {
@@ -23,80 +25,80 @@ void setup() {
 }
 
 void loop() {
-    sensor.update();                       // 每次 loop 都要呼叫，不會等
+    sensor.update();                       // call it every loop, it never waits
     if (sensor.becameDark()) {
-        // 剛碰到黑線（或離開白色的表面）
+        // just reached a black line (or left a white surface)
     }
 }
 ```
 
-完整的例子：`src/week_8_TCRT5000/tests/1_line_tracking.cpp`（狀態印到串口）。
+Complete example: `src/week_8_TCRT5000/tests/1_line_tracking.cpp` (the state printed to the serial).
 
-## 四腳板：反射有多強（A0）
+## The 4-pin board: how strong the reflection is (A0)
 
-四隻腳的 TCRT5000 板子（VCC、GND、D0、A0）多一隻 A0：光電晶體本身的電壓。D0 跟 HW-006 一樣是 0 / 1（用 `Reflector`），A0 可以知道反射**有多強**。
+The TCRT5000 board with four pins (VCC, GND, D0, A0) has one more pin, A0: the voltage of the phototransistor itself. D0 is 0 / 1 like the HW-006 (use `Reflector`); A0 tells **how strong** the reflection is.
 
-| 腳 | UNO |
+| Pin | UNO |
 |---|---|
-| VCC、GND | 5V、GND |
-| A0 | A0 ～ A5（`Uno::UnoAnalogPin<A0>` ～ `<A5>`） |
-| D0 | 任何數位腳（要的話，用 `Reflector`） |
+| VCC, GND | 5V, GND |
+| A0 | A0 ~ A5 (`Uno::UnoAnalogPin<A0>` ~ `<A5>`) |
+| D0 | any digital pin (if wanted, with `Reflector`) |
 
 ```cpp
-constexpr uint8_t REFLECTION_PIN = A0;                         // 板子的 A0
+constexpr uint8_t REFLECTION_PIN = A0;                         // the board's A0
 TCRT5000::AnalogReflector<Uno::UnoAnalogPin<REFLECTION_PIN>> sensor;
 sensor.init();
-// loop 裡：
+// in loop:
 sensor.update();
-uint16_t r = sensor.reflection();       // 0（沒反射）～ 1023（全反射）
+uint16_t r = sensor.reflection();       // 0 (no reflection) ~ 1023 (full reflection)
 ```
 
-| 函式 | 說明 |
+| Function | What it does |
 |---|---|
-| `update()` | 讀一次（約 112 µs）；`isReflecting()` 剛改變時回傳 true |
-| `reflection()` | 0 ～ 1023，越大反射越多（白、近）；已經平滑 |
-| `percent()` | 在看過的最暗和最亮之間的 0 ～ 100（自己學） |
-| `setThreshold(on, off)` | 升到 on 算反射、降到 off 以下算暗（中間留間隔，不會閃） |
-| `isReflecting()`、`isDark()` | 跟 `Reflector` 一樣的意思 |
+| `update()` | reads once (about 112 µs); returns true when `isReflecting()` just changed |
+| `reflection()` | 0 ~ 1023, the bigger the more reflection (white, near); already smoothed |
+| `percent()` | 0 ~ 100 between the darkest and brightest seen so far (learns by itself) |
+| `setThreshold(on, off)` | reflecting when it rises to on, dark when it falls below off (a gap between, so it does not flicker) |
+| `isReflecting()`, `isDark()` | the same meaning as for `Reflector` |
 
-- **板子上 A0 是反的**：反射越多電壓越低，`reflection()` 已經翻過來了。
-- **循跡更順**：兩個以上的感測器，用 `reflection()` 的差可以知道偏離黑線多少，轉彎可以有大有小。
+- **A0 on the board is inverted**: the more reflection, the lower the voltage; `reflection()` is already turned the right way.
+- **Smoother line following**: with two or more sensors, the difference of `reflection()` tells how far off the black line it is, so turns can be bigger or smaller.
 
-## 接線
+## Wiring
 
 | HW-006 | UNO |
 |---|---|
-| VCC | 5V（3.3 ～ 5 V 都可以） |
+| VCC | 5V (3.3 ~ 5 V both fine) |
 | GND | GND |
-| OUT（有些板子印 D0） | 任何數位腳，例如 **D4**；不用上拉（板子自己輸出） |
+| OUT (some boards print D0) | any digital pin, e.g. **D4**; no pull-up (the board drives it itself) |
 
-## 名稱
+## Names
 
-| 名稱 | 是什麼 |
+| Name | What it is |
 |---|---|
-| **TCRT5000** | 感測元件：一顆紅外線 LED 和一顆光電晶體並排、朝同一個方向（板子前端那個黑色、兩個圓眼的零件） |
-| **LM393** | 板子上的比較器：把光電晶體收到的強弱變成 OUT 的 HIGH / LOW |
-| **HW-006** | 板子的型號（零件），放在 `module/HW_006.h`；循跡模組 |
+| **TCRT5000** | the sensing part: an infrared LED and a phototransistor side by side, facing the same way (the black part with two round eyes at the front of the board) |
+| **LM393** | the comparator on the board: turns how much the phototransistor receives into HIGH / LOW on OUT |
+| **HW-006** | the board's model (the part), in `module/HW_006.h`; a line tracking module |
 
-照「`lib/` 用晶片命名」的規則，決定程式怎麼寫的是 TCRT5000（什麼算反射），所以叫 `TCRT5000/`。四腳板也在 `module/`（`TCRT5000_4_pins.h`）；以後其他 TCRT5000 的板子（KY-033）也放那裡。
+By the rule "`lib/` is named after the chip", what decides how the code is written is the TCRT5000 (what counts as reflecting), so the folder is `TCRT5000/`. The 4-pin board is also in `module/` (`TCRT5000_4_pins.h`); other TCRT5000 boards (KY-033) will go there too.
 
-## 原理
+## How it works
 
-| 前面是什麼 | 紅外線 | OUT | 板子上的訊號燈 | `isReflecting()` |
+| What is in front | Infrared | OUT | The board's signal LED | `isReflecting()` |
 |---|---|---|---|---|
-| 白紙、亮的表面，約 1 ～ 25 mm 內 | 反射回來很多 | **LOW** | 亮 | true |
-| 黑色（膠帶、墨水）、太遠、什麼都沒有 | 幾乎沒回來 | **HIGH** | 暗 | false（`isDark()`） |
+| white paper, a bright surface, within about 1 ~ 25 mm | much comes back | **LOW** | on | true |
+| black (tape, ink), too far, nothing | almost nothing comes back | **HIGH** | off | false (`isDark()`) |
 
-- **藍色的可變電阻**：調「多少反射才算」。轉到放白紙時燈亮、放黑線時燈滅。
-- **循跡**：黑線吸收紅外線，所以在線上時 `isDark()` 是 true。
-- **怕太陽**：陽光裡有很多紅外線，室外或窗邊會一直是「反射」。
-- 這是「有沒有」的感測器，不能量距離。
+- **The blue potentiometer**: sets "how much reflection counts". Turn it until the LED is on over white paper and off over the black line.
+- **Line tracking**: a black line absorbs infrared, so `isDark()` is true on the line.
+- **Afraid of the sun**: sunlight has a lot of infrared; outdoors or by a window it stays "reflecting".
+- It senses "something there or not"; it cannot measure distance.
 
-## 輸入限制
+## Input limits
 
-| 項目 | 範圍 | 超出時 |
+| Item | Range | Beyond it |
 |---|---|---|
-| `Pin` 的腳位 | 0 ～ 19；D0 / D1 編譯警告（USB 串口） | 編譯錯誤 |
-| `FILTER_MS` | 0 ～ 255 ms | — |
-| `update()` 的間隔 | 越常越好；循跡的車子越快越要常呼叫 | 比 `FILTER_MS` 久時，很快掠過的黑線可能會漏掉 |
-| `changeCount()` | 0 ～ 65535 | 停在 65535 |
+| pin of `Pin` | 0 ~ 19; D0 / D1 compile warning (USB serial) | compile error |
+| `FILTER_MS` | 0 ~ 255 ms | — |
+| interval of `update()` | the more often the better; the faster a line-following car, the more often | longer than `FILTER_MS`: a black line passed quickly may be missed |
+| `changeCount()` | 0 ~ 65535 | stays at 65535 |

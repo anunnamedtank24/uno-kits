@@ -1,87 +1,89 @@
 # DS18B20
 
-| 需要 | 得到 |
+English | [中文](讀我.md)
+
+| Needs | Gives |
 |---|---|
-| 一個 `Wire`（1-Wire 匯流排）：`init()`、`reset()`、`write8()`、`read8()`…（`Uno::UnoOneWire<PIN>`） | `DS18B20::TO92`、`WaterproofProbe`、`KY001`：溫度（1/100 °C 或 float）、解析度 9 ～ 12 bits、不用等的轉換、錯誤碼 |
+| a `Wire` (1-Wire bus): `init()`, `reset()`, `write8()`, `read8()`… (`Uno::UnoOneWire<PIN>`) | `DS18B20::TO92`, `WaterproofProbe`, `KY001`: temperature (1/100 °C or float), resolution 9 ~ 12 bits, conversions without waiting, error codes |
 
-「需要」是介面（duck typing），括號裡是這個專案現成的實作，換主板只要換它們。開發者看的細節（前提條件、介面需求、每個函式、參數、資源）在 [INTERFACE.md](INTERFACE.md)。
+"Needs" are interfaces (duck typing); in parentheses the ready implementations of this project, and another board only replaces them. The details for developers (prerequisites, interface requirements, every function, parameters, resources) are in [INTERFACE.md](INTERFACE.md).
 
-DS18B20 數位溫度感測器（三隻腳：VCC、DQ、GND），`namespace DS18B20`，類別 `DS18B20::Thermometer`。資料夾用晶片命名；裸的 TO-92、防水探頭、KY-001 模組裡面都是同一顆 DS18B20，程式一樣，`module/` 只記錄各自的接法（差在有沒有上拉電阻）。
+The DS18B20 digital temperature sensor (three pins: VCC, DQ, GND), `namespace DS18B20`, class `DS18B20::Thermometer`. The folder is named after the chip; the bare TO-92, the waterproof probe and the KY-001 module all hold the same DS18B20 with the same code, and `module/` only records how each is wired (they differ in having a pull-up resistor or not).
 
-## 用法
+## Usage
 
 ```cpp
 #include "Uno_one_wire.h"
 #include "DS18B20.h"
 
-constexpr uint8_t DQ_PIN = 2;                     // 感測器的 DQ
+constexpr uint8_t DQ_PIN = 2;                     // the sensor's DQ
 using SensorWire = Uno::UnoOneWire<DQ_PIN>;
-DS18B20::KY001<SensorWire> sensor;                // 板子上有上拉；裸的用 DS18B20::TO92
+DS18B20::KY001<SensorWire> sensor;                // the board has a pull-up; a bare one: DS18B20::TO92
 
-sensor.init(12);                                  // 12 bits：0.0625 °C，一次 750 ms
+sensor.init(12);                                  // 12 bits: 0.0625 °C, 750 ms a conversion
 int16_t centi;
 if (sensor.readCentiCelsius(centi) == sensor.OK) {
-    // centi = 2350 表示 23.50 °C
+    // centi = 2350 means 23.50 °C
 }
 ```
 
-不想卡住 750 ms 時，分步驟做：
+To avoid blocking for 750 ms, do it in steps:
 
 ```cpp
 sensor.startConversion();
-// ……做別的事，或一直問 sensor.isConversionDone()
+// ……do other things, or keep asking sensor.isConversionDone()
 int16_t raw;
 if (sensor.readRaw(raw) == sensor.OK) {
     int16_t centi = sensor.toCentiCelsius(raw);
 }
 ```
 
-完整的例子：`src/week_3_ST7789_DS18B20_graphics_color_font_image_video/tests/2_temperature.cpp`（把溫度用文字送到串口）、`src/week_3_ST7789_DS18B20_graphics_color_font_image_video/assignments/1_temperature_display.cpp`（顯示在螢幕上）。
+Complete examples: `src/week_3_ST7789_DS18B20_graphics_color_font_image_video/tests/2_temperature.cpp` (the temperature as text on the serial), `src/week_3_ST7789_DS18B20_graphics_color_font_image_video/assignments/1_temperature_display.cpp` (shown on the screen).
 
-## 接線
+## Wiring
 
-| 感測器 | UNO |
+| Sensor | UNO |
 |---|---|
-| VCC | 5V（3.0 ～ 5.5 V） |
-| DQ | 任何數位腳，例如 D2 |
+| VCC | 5V (3.0 ~ 5.5 V) |
+| DQ | any digital pin, e.g. D2 |
 | GND | GND |
 
-| 零件 | 腳位 | 上拉電阻 | 用 |
+| Part | Pins | Pull-up resistor | Use |
 |---|---|---|---|
-| 裸的 DS18B20（TO-92） | 平面朝自己、腳朝下：GND、DQ、VDD | **要自己加** 4.7 kΩ（DQ 到 VCC） | `DS18B20::TO92` |
-| 防水探頭 | 紅 VDD、黑 GND、黃（或白、藍）DQ；顏色依賣家，看說明 | **要自己加**，線長更需要 | `DS18B20::WaterproofProbe` |
-| KY-001 等模組板 | 照板子印的字：S = DQ、中間 = VCC、- = GND | 板子上已經有 | `DS18B20::KY001` |
+| bare DS18B20 (TO-92) | flat side facing you, legs down: GND, DQ, VDD | **add it yourself**: 4.7 kΩ (DQ to VCC) | `DS18B20::TO92` |
+| waterproof probe | red VDD, black GND, yellow (or white, blue) DQ; colors depend on the seller, read the description | **add it yourself**, all the more with long wires | `DS18B20::WaterproofProbe` |
+| KY-001 and other module boards | as printed on the board: S = DQ, middle = VCC, - = GND | already on the board | `DS18B20::KY001` |
 
-- **DQ 要有上拉電阻**：1-Wire 只靠上拉電阻把線拉回 HIGH。
-- `Uno::UnoOneWire` 預設也會開 UNO 內部約 35 kΩ 的上拉，短線（幾十公分內）沒有外接電阻也可能可以用，但不保證。
+- **DQ needs a pull-up resistor**: 1-Wire relies only on the pull-up to bring the line back HIGH.
+- `Uno::UnoOneWire` also turns on the UNO's internal pull-up of about 35 kΩ by default; short wires (within a few tens of centimeters) may work without an external resistor, but this is not guaranteed.
 
-## 解析度
+## Resolution
 
-| bits | 每格 | 一次轉換 | `conversionMs()` |
+| bits | A step | A conversion | `conversionMs()` |
 |---|---|---|---|
 | 9 | 0.5 °C | 93.75 ms | 94 |
 | 10 | 0.25 °C | 187.5 ms | 188 |
 | 11 | 0.125 °C | 375 ms | 375 |
-| 12（預設） | 0.0625 °C | 750 ms | 750 |
+| 12 (default) | 0.0625 °C | 750 ms | 750 |
 
-- 解析度存在感測器的 RAM，斷電就回到 12 bits；`init()` 會重新設定。
-- 低解析度時，raw 沒用到的低位元會被清成 0。
+- The resolution is kept in the sensor's RAM and goes back to 12 bits without power; `init()` sets it again.
+- At lower resolutions, the unused low bits of raw are cleared to 0.
 
-## 輸入限制
+## Input limits
 
-| 項目 | 範圍 | 超出時 |
+| Item | Range | Beyond it |
 |---|---|---|
-| `init(bits)`、`setResolution(bits)` | 9 ～ 12 | 回傳錯誤 `ERROR_RESOLUTION` |
-| 量測範圍 | −55 ～ +125 °C（raw −880 ～ 2000） | 感測器的規格 |
-| 準確度 | −10 ～ +85 °C 時 ±0.5 °C | 感測器的規格；解析度高不代表更準 |
-| `toCentiCelsius` | −5500 ～ 12500 | — |
-| 感測器數量 | 一條線一個（Skip ROM，不分辨是誰） | 不檢查：兩個以上會同時回答，CRC 錯或讀到錯的值 |
+| `init(bits)`, `setResolution(bits)` | 9 ~ 12 | returns the error `ERROR_RESOLUTION` |
+| measuring range | −55 ~ +125 °C (raw −880 ~ 2000) | the sensor's specification |
+| accuracy | ±0.5 °C at −10 ~ +85 °C | the sensor's specification; a higher resolution is not more accurate |
+| `toCentiCelsius` | −5500 ~ 12500 | — |
+| number of sensors | one a line (Skip ROM, does not tell them apart) | not checked: two or more answer at once, a CRC error or wrong values |
 
-## 注意事項
+## Caveats
 
-| 情況 | 結果 | 做法 |
+| Situation | Result | What to do |
 |---|---|---|
-| 讀到 85.00 °C | 開機後還沒轉換過的值（`POWER_ON_RAW`） | 剛上電就讀、或轉換被斷電打斷時會出現：再量一次 |
-| 寄生電源（VCC 接 GND） | 不支援：轉換時需要強上拉 | 接 VCC |
-| 線很長 | `ERROR_CRC` 或 `ERROR_NO_SENSOR` | 用較小的上拉（例如 2.2 kΩ） |
-| 同時用 `UnoTone` 在 D9 / D10 以外的腳 | 關中斷時方波暫停，聲音抖一下 | 蜂鳴器接 D9 或 D10 |
+| reading 85.00 °C | the value before any conversion after power-on (`POWER_ON_RAW`) | shows up when read right after power-on or when a conversion was cut by power loss: measure again |
+| parasite power (VCC on GND) | not supported: a conversion needs a strong pull-up | connect VCC |
+| very long wires | `ERROR_CRC` or `ERROR_NO_SENSOR` | use a smaller pull-up (e.g. 2.2 kΩ) |
+| `UnoTone` on a pin other than D9 / D10 at the same time | the square wave pauses while interrupts are off, the sound wobbles | put the buzzer on D9 or D10 |

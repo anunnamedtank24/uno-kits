@@ -1,113 +1,115 @@
 # switch
 
-| 需要 | 得到 |
+English | [中文](讀我.md)
+
+| Needs | Gives |
 |---|---|
-| 一個 `Pin`：`init()`、`read()`、`nowMs()`（`Uno::UnoInputPin<PIN>`） | `switches::Switch2Pins`、`Switch3Pins`：去彈跳的開關（開著沒、剛按下、按了幾次、多久）；`switches::Clicks`：單擊、雙擊、長按、按住連發 |
+| a `Pin`: `init()`, `read()`, `nowMs()` (`Uno::UnoInputPin<PIN>`) | `switches::Switch2Pins`, `Switch3Pins`: debounced switches (on or not, just pressed, how many presses, for how long); `switches::Clicks`: click, double click, long press, repeat while held |
 
-「需要」是介面（duck typing），括號裡是這個專案現成的實作，換主板只要換它們。開發者看的細節（前提條件、介面需求、每個函式、參數、資源）在 [INTERFACE.md](INTERFACE.md)。
+"Needs" are interfaces (duck typing); in parentheses the ready implementations of this project, and another board only replaces them. The details for developers (prerequisites, interface requirements, every function, parameters, resources) are in [INTERFACE.md](INTERFACE.md).
 
-開關，`namespace switches`（`switch` 是 C++ 的關鍵字，不能當 namespace）。
+Switches, `namespace switches` (`switch` is a C++ keyword and cannot be a namespace).
 
-## 用法
+## Usage
 
 ```cpp
 #include "Uno_pin.h"
 #include "switch.h"
 
-constexpr uint8_t SWITCH_PIN = 2;                 // 模組的 OUT
+constexpr uint8_t SWITCH_PIN = 2;                 // the module's OUT
 switches::Switch3Pins<Uno::UnoInputPin<SWITCH_PIN>> button;
-// switches::Switch2Pins<Uno::UnoInputPin<SWITCH_PIN, true>> button;   // 兩隻腳的裸按鈕：接 SWITCH_PIN 和 GND
+// switches::Switch2Pins<Uno::UnoInputPin<SWITCH_PIN, true>> button;   // a bare 2-pin button: on SWITCH_PIN and GND
 
 void setup() {
     button.init();
 }
 
 void loop() {
-    button.update();                              // 每次 loop 都要呼叫，不會等
+    button.update();                              // call it every loop, it never waits
     if (button.wasPressed()) {
-        // 剛按下（每按一次只會是 true 一次）
+        // just pressed (true only once per press)
     }
 }
 ```
 
-完整的例子：`src/week_4_SSD1306_switch_buzzer_audio/tests/2_switch.cpp`（把狀態用文字送到串口）、`src/week_4_SSD1306_switch_buzzer_audio/assignments/1_photo_switch.cpp`（按一下換照片）。
+Complete examples: `src/week_4_SSD1306_switch_buzzer_audio/tests/2_switch.cpp` (the state as text on the serial), `src/week_4_SSD1306_switch_buzzer_audio/assignments/1_photo_switch.cpp` (one press, the next photo).
 
-## Clicks：一個按鈕當好幾個按鈕用
+## Clicks: one button as several buttons
 
 ```cpp
 constexpr uint8_t BUTTON_PIN = 2;
 switches::Switch2Pins<Uno::UnoInputPin<BUTTON_PIN, true>> button;
 switches::Clicks<decltype(button)> clicks(button);
 
-void setup() { clicks.init(); }            // 也會 init 按鈕
+void setup() { clicks.init(); }            // inits the button too
 void loop() {
-    switch (clicks.update()) {             // 只要呼叫它（它會呼叫按鈕的 update）
-        case switches::CLICK:        /* 按一下 */ break;
-        case switches::DOUBLE_CLICK: /* 按兩下 */ break;
-        case switches::LONG_PRESS:   /* 按住 0.8 秒 */ break;
+    switch (clicks.update()) {             // only call this (it calls the button's update)
+        case switches::CLICK:        /* one press */ break;
+        case switches::DOUBLE_CLICK: /* two presses */ break;
+        case switches::LONG_PRESS:   /* held 0.8 seconds */ break;
         default: break;
     }
 }
 ```
 
-| 事件 | 什麼時候 |
+| Event | When |
 |---|---|
-| `CLICK` | 按一下放開，而且 `doubleMs`（300 ms）內沒有再按 |
-| `DOUBLE_CLICK` | 快速按兩下 |
-| `MULTI_CLICK` | 快速按 3 下以上，`count()` 是幾下 |
-| `LONG_PRESS` | 按住 `longMs`（800 ms），還沒放開就會報 |
-| `REPEAT` | 長按之後繼續按住，每 `repeatMs`（150 ms）一次（像按住鍵盤） |
-| `LONG_RELEASE` | 長按之後放開 |
+| `CLICK` | pressed and released once, and no other press within `doubleMs` (300 ms) |
+| `DOUBLE_CLICK` | two quick presses |
+| `MULTI_CLICK` | 3 or more quick presses; `count()` is how many |
+| `LONG_PRESS` | held for `longMs` (800 ms), reported before release |
+| `REPEAT` | held on after a long press: once every `repeatMs` (150 ms) (like holding a keyboard key) |
+| `LONG_RELEASE` | released after a long press |
 
-| 函式 | 說明 |
+| Function | What it does |
 |---|---|
-| `init()` | 也 init 按鈕 |
-| `update()` | 回傳剛發生的事件，沒有就是 `NOTHING` |
-| `count()` | 上一次單擊 / 雙擊 / 多擊按了幾下 |
-| `isPressed()` | 現在有沒有按著 |
-| `setDoubleMs(ms)` | 兩下之間最多隔多久（預設 300；0 = 不分辨雙擊，每次放開馬上報 `CLICK`） |
-| `setLongMs(ms)`、`setRepeatMs(ms)` | 長按的時間（預設 800）、重複的間隔（預設 150；0 = 不重複） |
+| `init()` | inits the button too |
+| `update()` | returns the event that just happened, `NOTHING` if none |
+| `count()` | how many presses the last click / double click / multi-click had |
+| `isPressed()` | whether it is held now |
+| `setDoubleMs(ms)` | the longest gap between two presses (default 300; 0 = no double clicks, `CLICK` on every release at once) |
+| `setLongMs(ms)`, `setRepeatMs(ms)` | the time of a long press (default 800), the interval of repeats (default 150; 0 = no repeats) |
 
-- **單擊會晚 300 ms**：要等著看會不會有第二下。不需要雙擊時 `setDoubleMs(0)`，就馬上報。
-- 完整的例子：`src/week_4_SSD1306_switch_buzzer_audio/tests/6_clicks.cpp`（單擊、雙擊、長按換 LED 效果）。
+- **A click comes 300 ms late**: it waits to see if a second press follows. Without double clicks, `setDoubleMs(0)` reports at once.
+- Complete example: `src/week_4_SSD1306_switch_buzzer_audio/tests/6_clicks.cpp` (click, double click, long press change the LED effect).
 
-## 接線
+## Wiring
 
-| 模組 | UNO |
+| Module | UNO |
 |---|---|
 | GND | GND |
 | VCC | 5V |
-| OUT | 任何數位腳，例如 D2 |
+| OUT | any digital pin, e.g. D2 |
 
-兩隻腳的裸開關：一邊接腳位、一邊接 GND，用 `Switch2Pins<Uno::UnoInputPin<PIN, true>>`。
+A bare 2-pin switch: one side on the pin, the other on GND, with `Switch2Pins<Uno::UnoInputPin<PIN, true>>`.
 
-## 兩隻腳和三隻腳
+## Two pins and three pins
 
-| 零件 | 例子 | 接法 | 用 |
+| Part | Examples | Wiring | Use |
 |---|---|---|---|
-| 兩隻腳的裸開關 | 按鈕、磁簧開關、傾斜開關（滾珠） | 一隻接腳位、一隻接 GND | `Switch2Pins<Uno::UnoInputPin<PIN, true>>`：內部上拉，沒按 HIGH、按下 LOW |
-| 四隻腳的輕觸按鈕 | 麵包板常用的方形按鈕 | 四隻腳兩兩相通，**取對角的兩隻**當兩隻腳 | 同上 |
-| 三隻腳的模組（GND、VCC、OUT） | 按鈕模組、TTP223 觸摸、傾斜、磁簧、霍爾模組 | OUT 接腳位，模組自己輸出高低 | `Switch3Pins<Uno::UnoInputPin<PIN>>`，不開上拉；按下是 LOW 的模組加 `false` |
+| a bare 2-pin switch | buttons, reed switches, tilt switches (ball) | one pin on the pin, one on GND | `Switch2Pins<Uno::UnoInputPin<PIN, true>>`: internal pull-up, HIGH when not pressed, LOW when pressed |
+| a 4-pin tactile button | the square button common on breadboards | the four pins are connected in pairs: **take two diagonal ones** as the two pins | the same |
+| a 3-pin module (GND, VCC, OUT) | button modules, TTP223 touch, tilt, reed, Hall modules | OUT on the pin; the module drives the level itself | `Switch3Pins<Uno::UnoInputPin<PIN>>`, no pull-up; add `false` for modules that are LOW when pressed |
 
-- **兩隻腳一定要上拉**：開關打開時沒有東西推腳位，不開上拉會讀到亂跳的雜訊。
-- **三隻腳的 ACTIVE_HIGH**：觸摸模組和大部分按鈕模組按下是 HIGH（預設）；有些按鈕、傾斜、霍爾模組按下是 LOW。不確定就跑 `src/week_4_SSD1306_switch_buzzer_audio/tests/2_switch.cpp`。
+- **Two pins always need a pull-up**: with the switch open nothing drives the pin, and without a pull-up it reads random noise.
+- **ACTIVE_HIGH of three pins**: touch modules and most button modules are HIGH when pressed (the default); some button, tilt and Hall modules are LOW. When unsure, run `src/week_4_SSD1306_switch_buzzer_audio/tests/2_switch.cpp`.
 
-## 去彈跳
+## Debouncing
 
-機械接點在碰到、分開的那幾 ms 會來回跳好幾次。不處理的話，按一次會被算成好幾次。
+A mechanical contact bounces back and forth several times in the few ms it touches or separates. Without handling, one press counts as several.
 
-| 情況 | 處理 |
+| Situation | Handling |
 |---|---|
-| 電位一直在跳 | 每跳一次就重新計時，不改狀態 |
-| 新的電位維持 `DEBOUNCE_MS` | 改狀態，`update()` 回傳 true，記下按下或放開 |
-| 代價 | 每次變化都晚 `DEBOUNCE_MS`（20 ms）才看得到 |
+| the level keeps bouncing | the timer restarts on every bounce, the state does not change |
+| the new level stays for `DEBOUNCE_MS` | the state changes, `update()` returns true, the press or release is recorded |
+| the cost | every change shows `DEBOUNCE_MS` (20 ms) late |
 
-## 輸入限制
+## Input limits
 
-| 項目 | 範圍 | 超出時 |
+| Item | Range | Beyond it |
 |---|---|---|
-| `Pin` 的腳位 | 0 ～ 19；D0 / D1 編譯警告（USB 串口） | 編譯錯誤 |
-| `DEBOUNCE_MS` | 0 ～ 255 ms；0 = 不去彈跳 | — |
-| `update()` 的間隔 | 越常越好 | 比 `DEBOUNCE_MS` 久時，很短的按壓可能會漏掉 |
-| `pressCount()` | 0 ～ 65535 | 之後從 0 重來 |
-| `stateMs()` | 約 49 天後 `millis()` 繞回 0 | 差值還是對的（無號數相減） |
+| pin of `Pin` | 0 ~ 19; D0 / D1 compile warning (USB serial) | compile error |
+| `DEBOUNCE_MS` | 0 ~ 255 ms; 0 = no debouncing | — |
+| interval of `update()` | the more often the better | longer than `DEBOUNCE_MS`: very short presses may be missed |
+| `pressCount()` | 0 ~ 65535 | starts again from 0 after that |
+| `stateMs()` | `millis()` wraps to 0 after about 49 days | differences stay right (unsigned subtraction) |

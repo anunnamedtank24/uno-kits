@@ -4,7 +4,7 @@
 |---|---|
 | 一個 `Pin`：`init()`、`read()`、`nowMs()`（`Uno::UnoInputPin<PIN>`） | `switches::Switch2Pins`、`Switch3Pins`：去彈跳的開關（開著沒、剛按下、按了幾次、多久）；`switches::Clicks`：單擊、雙擊、長按、按住連發 |
 
-給要寫新套件、換主板或換零件的人；用法、接線、注意事項見 [README.md](README.md)。
+給要寫新套件、換主板或換零件的人；用法、接線、注意事項見 [讀我.md](讀我.md)。
 
 ## 前提條件
 

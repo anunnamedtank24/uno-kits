@@ -1,0 +1,207 @@
+#include <Arduino.h>
+#include "Uno_serial_buffer.h"
+#include "Uno_pin.h"
+#include "Uno_soft_serial.h"
+#include "bluetooth.h"
+
+// UNO + HC-05 Bluetooth module: a bridge between the USB serial and Bluetooth, for a round trip
+//   python src/week_9_bluetooth/tests/round_trip.py --bt /dev/cu.<NAME>      (pair NAME first)
+//   a line from USB            -> packet 'T' over Bluetooth -> the computer's Bluetooth port
+//   packet 'T' from Bluetooth  -> "[FROM BLUETOOTH] text" on USB
+//   (pio device monitor works too: a line typed there goes out over Bluetooth)
+// at power on: name and PIN by AT commands, every result on USB, then "[INFO] ready"
+// EN is KEY on most boards and the module's power switch on some: EN_IS_POWER (3_diagnose.cpp tells which)
+// the module is on two other pins (a software UART), so D0 / D1 stay USB: upload with it connected
+
+// ---------- settings ----------
+
+// wiring: HC-05 VCC -> 5V, GND -> GND
+constexpr uint8_t BT_RX_PIN = A0;           // <- the module's TXD: any pin (3.3 V: read as HIGH); its group's pin
+                                            // change interrupt (A0 ~ A5): no other interrupt pin in that group
+constexpr uint8_t BT_TX_PIN = A1;           // -> the module's RXD through 1 kΩ, with 2 kΩ from RXD to GND (3.3 V)
+constexpr uint8_t EN_PIN = 12;              // -> EN: any pin, through a divider like RXD
+constexpr uint8_t STATE_PIN = 4;            // <- STATE: any pin, directly (3.3 V out: read as HIGH, no divider)
+constexpr uint32_t BT_BAUD = 9600;          // the module's data baud (HC-05: 9600 unless changed by AT+UART)
+constexpr uint32_t MONITOR_BAUD = 1000000;  // USB serial: the same as monitor_speed in platformio.ini
+constexpr bool EN_IS_POWER = true;          // true: EN switches the module on (kept HIGH), AT without KEY;
+                                            // false: EN is KEY (HIGH only during AT commands)
+
+constexpr const char *NAME = "TanksUno";     // the name the computer sees: 1 ~ 20 characters
+constexpr const char *PAIRING_PIN = "1234"; // 4 digits
+constexpr uint16_t USB_RX_BUFFER = 128;     // USB bytes kept while the board sends over Bluetooth (~1 ms a byte)
+constexpr uint16_t USB_TX_BUFFER = 64;      // USB bytes to send: printing returns at once while they fit
+constexpr uint16_t BT_RX_BUFFER = 64;       // Bluetooth bytes kept by the interrupt while loop() is busy
+constexpr uint8_t LINE_MAX = 60;            // the longest line forwarded, bytes (longer: cut)
+constexpr uint8_t PACKET_MAX_LENGTH = 64;   // the longest DATA of a packet from Bluetooth (RAM)
+constexpr uint16_t PACKET_GAP_MS = 100;     // a packet whose next byte takes longer is dropped
+
+// ---------- parts ----------
+
+using Monitor = Uno::UnoSerial<MONITOR_BAUD, USB_RX_BUFFER, USB_TX_BUFFER>;
+using BtLink = Uno::UnoSoftSerial<BT_RX_PIN, BT_TX_PIN, BT_BAUD, BT_RX_BUFFER>;
+using En = Uno::UnoOutputPin<EN_PIN>;
+using State = Uno::UnoInputPin<STATE_PIN>;
+using Module = bluetooth::HC05ByEn<BtLink, En, State, EN_IS_POWER>::Type;
+
+bluetooth::Packet<Module, PACKET_MAX_LENGTH, PACKET_GAP_MS> packets;
+
+// ---------- monitor ----------
+
+bool wasConnected = false;
+uint16_t shownDropped = 0;
+uint16_t shownBroken = 0;
+uint16_t shownLost = 0;
+
+const char *resultText(uint8_t result) {
+    switch (result) {
+        case Module::OK:
+            return "OK";
+        case Module::ERROR_NO_ANSWER:
+            return "no answer";
+        case Module::ERROR_REFUSED:
+            return "refused";
+        case Module::ERROR_BAD_VALUE:
+            return "bad value";
+        default:
+            return "connected";
+    }
+}
+
+void printResult(const char *what, uint8_t result) {
+    Monitor::printText(result == Module::OK ? "[INFO] " : "[ERROR] ");
+    Monitor::printText(what);
+    Monitor::printText(": ");
+    Monitor::printText(resultText(result));
+    Monitor::printText("\r\n");
+}
+
+void printBytes(const uint8_t *data, uint8_t length) {
+    for (uint8_t i = 0; i < length; i++) {
+        Monitor::write8(data[i]);
+    }
+}
+
+// a line only when one of the counts changed
+void printErrors() {
+    uint16_t dropped = packets.dropped();
+    uint16_t broken = BtLink::brokenCount();
+    uint16_t lost = BtLink::lostCount() + Monitor::lostCount();
+    if (dropped == shownDropped && broken == shownBroken && lost == shownLost) {
+        return;
+    }
+    shownDropped = dropped;
+    shownBroken = broken;
+    shownLost = lost;
+    Monitor::printText("[WARNING] packets dropped ");
+    Monitor::printNumber(dropped);
+    Monitor::printText(", bytes broken ");
+    Monitor::printNumber(broken);
+    Monitor::printText(", bytes lost ");
+    Monitor::printNumber(lost);
+    Monitor::printText("\r\n");
+}
+
+// ---------- bridge ----------
+
+uint8_t line[LINE_MAX];
+uint8_t lineLength = 0;
+bool lineCut = false;
+
+// the line from USB -> packet 'T' over Bluetooth
+void forwardLine() {
+    if (lineLength == 0) {
+        return;
+    }
+    if (!Module::isConnected()) {
+        Monitor::printText("[ERROR] not connected (STATE LOW): not sent: ");
+        printBytes(line, lineLength);
+        Monitor::printText("\r\n");
+        return;
+    }
+    packets.send('T', line, lineLength);
+    Monitor::printText("[TO BLUETOOTH] ");
+    printBytes(line, lineLength);
+    Monitor::printText(lineCut ? "   (cut at LINE_MAX)\r\n" : "\r\n");
+}
+
+// USB bytes -> lines ("\r\n" or "\n" ends one)
+void readUsb() {
+    uint8_t byte;
+    while (Monitor::available() && Monitor::read8(byte, 0)) {
+        if (byte == '\r') {
+            continue;
+        }
+        if (byte == '\n') {
+            forwardLine();
+            lineLength = 0;
+            lineCut = false;
+        } else if (lineLength < LINE_MAX) {
+            line[lineLength] = byte;
+            lineLength++;
+        } else {
+            lineCut = true;
+        }
+    }
+}
+
+// a packet from Bluetooth -> USB
+void showPacket() {
+    if (packets.command() == 'T') {
+        Monitor::printText("[FROM BLUETOOTH] ");
+        printBytes(packets.data(), packets.length());
+        Monitor::printText("\r\n");
+        return;
+    }
+    Monitor::printText("[FROM BLUETOOTH] packet ");
+    Monitor::printHex(packets.command());
+    Monitor::printText(", ");
+    Monitor::printNumber(packets.length());
+    Monitor::printText(" bytes (only 'T' is text)\r\n");
+}
+
+// ---------- main ----------
+
+void setup() {
+    Monitor::init();
+    Monitor::printText("\r\n[INFO] HC-05: module TXD -> ");
+    Monitor::printPin(BT_RX_PIN);
+    Monitor::printText(", RXD <- ");
+    Monitor::printPin(BT_TX_PIN);
+    Monitor::printText(EN_IS_POWER ? ", EN (power) <- " : ", EN (KEY) <- ");
+    Monitor::printPin(EN_PIN);
+    Monitor::printText(", STATE -> ");
+    Monitor::printPin(STATE_PIN);
+    Monitor::printText(", ");
+    Monitor::printNumber(BT_BAUD);
+    Monitor::printText(" baud\r\n");
+
+    packets.init();                         // Module::init() too: the software UART, EN (power: HIGH; KEY: LOW), STATE
+    printResult("AT", Module::check());
+    printResult("AT+NAME", Module::setName(NAME));
+    printResult("AT+PSWD", Module::setPin(PAIRING_PIN));
+    char firmware[24];
+    uint8_t result = Module::version(firmware, sizeof(firmware));
+    printResult("AT+VERSION?", result);
+    if (result == Module::OK) {
+        Monitor::printText("[INFO] firmware ");
+        Monitor::printText(firmware);
+        Monitor::printText("\r\n");
+    }
+    Monitor::printText("[INFO] ready: pair \"");
+    Monitor::printText(NAME);
+    Monitor::printText("\", open its serial port, then type lines here\r\n");
+}
+
+void loop() {
+    bool connected = Module::isConnected();
+    if (connected != wasConnected) {
+        Monitor::printText(connected ? "[INFO] connected\r\n" : "[INFO] disconnected\r\n");
+    }
+    wasConnected = connected;
+
+    readUsb();
+    if (packets.update()) {
+        showPacket();
+    }
+    printErrors();
+}

@@ -100,10 +100,7 @@ void setup() {
 }
 
 void loop() {
-    car.forward(SPEED);
-    car.wait();                  // 等它做完（裡面會一直呼叫 update）
-}
-/*
+    car.forward(SPEED, 1500);
     done("1 forward 1.5 s");
     car.backward(SPEED, 1500);
     done("2 backward 1.5 s");
@@ -147,4 +144,3 @@ void loop() {
     Link::printText("again in 3 s\r\n\r\n");
     delay(3000);
 }
-*/

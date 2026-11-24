@@ -4,7 +4,7 @@
 |---|---|
 | 一個 `Pwm`：`init()`、`write(duty)`（`Uno::UnoPwmPin<PIN>`） | `LED::LED2Pins`、`RGBLED4Pins`、`TrafficLight4Pins`：照眼睛感覺的亮度 0 ～ 255；`LED::Effect`：閃爍、呼吸、漸變、心跳 |
 
-給要寫新套件、換主板或換零件的人；用法、接線、注意事項見 [README.md](README.md)。
+給要寫新套件、換主板或換零件的人；用法、接線、注意事項見 [讀我.md](讀我.md)。
 
 ## 前提條件
 

@@ -1,7 +1,7 @@
 #ifndef MELODY_SELECTED_H
 #define MELODY_SELECTED_H
 
-// written by tools/assets.py before every build and by convert.py (do not edit): every .h of output/,
+// written by src/tools/assets.py before every build and by convert.py (do not edit): every .h of output/,
 // so a program can use any of them as melody::name; what a program does not use is not compiled in
 
 #include "error_flash_passive_medium.h"

@@ -1,7 +1,7 @@
 #ifndef PICTURE_SELECTED_H
 #define PICTURE_SELECTED_H
 
-// written by tools/assets.py before every build and by convert.py (do not edit): every .h of output/,
+// written by src/tools/assets.py before every build and by convert.py (do not edit): every .h of output/,
 // so a program can use any of them as picture::name; what a program does not use is not compiled in
 
 #include "city_flash_128x64_palette_2.h"

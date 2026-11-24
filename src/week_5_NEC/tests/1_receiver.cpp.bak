@@ -9,7 +9,7 @@
 // a press, then held:   "address 0x00  command 0x45  press     numbers top: 1      arrows top: *"
 //                       "address 0x00  command 0x45  repeat 1  numbers top: 1      arrows top: *"
 // the layout whose names match the keys pressed is the one of your remote: use it in the assignments
-// (the Remote line in the settings of src/week_5_NEC/assignment_*.cpp)
+// (the Remote line in the settings of src/week_5_NEC/assignments/*.cpp)
 //
 // nothing printed? the test also checks IR_PIN itself (D2 here):
 //   at the start:      "D2 idle: HIGH (ok)"  or  "D2 idle: LOW" (receiver not powered / pins swapped / OUT not on D2)

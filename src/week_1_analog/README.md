@@ -1,35 +1,37 @@
 # week_1_analog
 
-類比感測器（[lib/analog](../../lib/analog/README.md)）的測試：旋鈕、光敏電阻、搖桿、NTC 熱敏電阻、聲音模組，加上 UNO 晶片自己量的 5V 和溫度。
+English | [中文](讀我.md)
 
-全部的檔案現在都是 `.bak`，要跑哪個就留下哪個：
+Tests of the analog sensors ([lib/analog](../../lib/analog/README.md)): knob, photoresistor, joystick, NTC thermistor, sound module, plus the 5V and temperature the UNO chip measures itself.
+
+Every file is `.bak` now; keep the one to run:
 
 ```bash
-python src/hide.py week_1_analog/tests/1_sensors     # 只留下這個（拿掉 .bak），其他改成 .bak
+python src/hide.py week_1_analog/tests/1_sensors     # keep only this one (drop its .bak), the others become .bak
 pio run -t upload
-pio device monitor                      # 1 Mbaud
+pio device monitor                      # at BAUD (= monitor_speed of platformio.ini)
 ```
 
-| 檔案 | 內容 | 需要的硬體 |
+| File | Contents | Hardware needed |
 |---|---|---|
-| `tests/1_sensors.cpp` | 五種類比感測器和晶片的 5V、溫度，每 0.3 秒印一行，有事件時馬上印 | 有幾個接幾個 |
+| `tests/1_sensors.cpp` | five analog sensors and the chip's 5V and temperature: a line every `PRINT_MS`, events printed at once | as many as you have |
 
-## 接線
+## Wiring
 
-| 零件 | 腳 | UNO |
+| Part | Pins | UNO |
 |---|---|---|
-| 旋鈕 | 兩邊、中間 | 5V、GND；**A0** |
-| 光敏電阻模組 | S、+、- | **A1**、5V、GND |
-| 搖桿 KY-023 | VRx、VRy、SW、+5V、GND | **A2**、**A3**、**D4**、5V、GND |
-| NTC 模組 KY-013 | S、中間、- | **A4**、5V、GND |
-| 聲音模組 KY-037 / KY-038 | AO、+、G | **A5**、5V、GND |
+| knob | sides, middle | 5V, GND; **`KNOB_PIN`** |
+| photoresistor module | S, +, - | **`LIGHT_PIN`**, 5V, GND |
+| joystick KY-023 | VRx, VRy, SW, +5V, GND | **`STICK_X_PIN`**, **`STICK_Y_PIN`**, **`STICK_BUTTON_PIN`**, 5V, GND |
+| NTC module KY-013 | S, middle, - | **`NTC_PIN`**, 5V, GND |
+| sound module KY-037 / KY-038 | AO, +, G | **`SOUND_PIN`**, 5V, GND |
 
-- 每個都可以不接：沒接的只會讀到雜訊。
-- 換腳改 settings 的 `KNOB_PIN`、`LIGHT_PIN`、`STICK_X_PIN`…；類比的只能用 A0 ～ A5。
+- Each may be left unconnected: those not connected only read noise.
+- The pins are the `*_PIN` of the settings; analog ones only on A0 ~ A5.
 
-# tests/1_sensors.cpp：類比感測器
+# tests/1_sensors.cpp: analog sensors
 
-每 0.3 秒印一行，另外有事件時馬上印：
+A line every `PRINT_MS`, and events printed at once:
 
 ```
 Vcc 4987 mV, chip 31.2 C
@@ -40,8 +42,8 @@ clap!
 dark: night light on
 ```
 
-- **搖桿**：開機時不要碰，它記下中心。
-- **光敏電阻**：這裡 `BRIGHTER_IS_HIGHER = false`（模組：越亮讀數越低）；裸的光敏電阻改成 `true`。
-- **夜燈**：`DARK_ON`、`DARK_OFF`，變暗時印 `dark`，再亮時印 `light again`（數值依房間調）。
-- **聲音**：對著麥克風拍手會印 `clap!`；`sound` 是 0.3 秒內最大的擺幅。
-- **Vcc、chip**：`Uno::UnoChip` 量的實際 5V 和晶片溫度（晶片溫度比室溫高，只能參考）。
+- **Joystick**: do not touch it at power-on: it remembers the center.
+- **Photoresistor**: `BRIGHTER_IS_HIGHER` is `false` for a module (the brighter, the lower the reading), `true` for a bare photoresistor.
+- **Night light**: `DARK_ON`, `DARK_OFF`: prints `dark` when it gets dark, `light again` when it is bright again (tune the values for the room).
+- **Sound**: clapping at the microphone prints `clap!`; `sound` is the largest swing since the last line.
+- **Vcc, chip**: the real 5V and chip temperature measured by `Uno::UnoChip` (the chip is warmer than the room: for reference only).

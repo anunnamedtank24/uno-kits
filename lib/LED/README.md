@@ -1,20 +1,22 @@
 # LED
 
-| 需要 | 得到 |
+English | [中文](讀我.md)
+
+| Needs | Gives |
 |---|---|
-| 一個 `Pwm`：`init()`、`write(duty)`（`Uno::UnoPwmPin<PIN>`） | `LED::LED2Pins`、`RGBLED4Pins`、`TrafficLight4Pins`：照眼睛感覺的亮度 0 ～ 255；`LED::Effect`：閃爍、呼吸、漸變、心跳 |
+| a `Pwm`: `init()`, `write(duty)` (`Uno::UnoPwmPin<PIN>`) | `LED::LED2Pins`, `RGBLED4Pins`, `TrafficLight4Pins`: brightness 0 ~ 255 as the eye sees it; `LED::Effect`: blinking, breathing, fading, heartbeat |
 
-「需要」是介面（duck typing），括號裡是這個專案現成的實作，換主板只要換它們。開發者看的細節（前提條件、介面需求、每個函式、參數、資源）在 [INTERFACE.md](INTERFACE.md)。
+"Needs" are interfaces (duck typing); in parentheses the ready implementations of this project, and another board only replaces them. The details for developers (prerequisites, interface requirements, every function, parameters, resources) are in [INTERFACE.md](INTERFACE.md).
 
-用 PWM 調亮度的 LED，`namespace LED`。亮度照眼睛的感覺換算（0 ～ 255 看起來均勻變亮），不是直接的工作週期。
+LEDs with brightness by PWM, `namespace LED`. The brightness is converted for how the eye sees it (0 ~ 255 looks evenly brighter), not used directly as the duty cycle.
 
-## 用法
+## Usage
 
 ```cpp
 #include "Uno_pin.h"
 #include "LED.h"
 
-constexpr uint8_t RGB_RED_PIN = 3;                     // 都要是 PWM 腳：3、5、6、9、10、11
+constexpr uint8_t RGB_RED_PIN = 3;                     // all must be PWM pins: 3, 5, 6, 9, 10, 11
 constexpr uint8_t RGB_GREEN_PIN = 5;
 constexpr uint8_t RGB_BLUE_PIN = 6;
 constexpr uint8_t LIGHT_RED_PIN = 9;
@@ -22,113 +24,113 @@ constexpr uint8_t LIGHT_GREEN_PIN = 10;
 constexpr uint8_t SINGLE_PIN = 11;
 
 LED::RGBLED4Pins<Uno::UnoPwmPin<RGB_RED_PIN>, Uno::UnoPwmPin<RGB_GREEN_PIN>, Uno::UnoPwmPin<RGB_BLUE_PIN>> rgb;
-LED::TrafficLight4Pins<Uno::UnoPwmPin<LIGHT_RED_PIN>, LED::NoPwm, Uno::UnoPwmPin<LIGHT_GREEN_PIN>> trafficLight;   // 只用紅、綠
+LED::TrafficLight4Pins<Uno::UnoPwmPin<LIGHT_RED_PIN>, LED::NoPwm, Uno::UnoPwmPin<LIGHT_GREEN_PIN>> trafficLight;   // red and green only
 LED::LED2Pins<Uno::UnoPwmPin<SINGLE_PIN>> single;
 
 void setup() {
     rgb.init();
-    rgb.set(255, 128, 0);                                  // 橘色
-    rgb.setBlue(LED::levelToBrightness(3, 10));            // 藍色第 3 格（共 10 格）
+    rgb.set(255, 128, 0);                                  // orange
+    rgb.setBlue(LED::levelToBrightness(3, 10));            // blue at step 3 (of 10)
     trafficLight.init();
     trafficLight.setGreen(255);
     single.init();
-    single.set(128);                                       // 看起來一半亮
+    single.set(128);                                       // looks half as bright
 }
 ```
 
-完整的例子：`src/week_5_NEC/assignments/1_rgb_remote.cpp`（遙控器調紅綠燈的紅、綠和一顆藍色 LED）。
+Complete example: `src/week_5_NEC/assignments/1_rgb_remote.cpp` (a remote sets the red and green of a traffic light and a blue LED).
 
-## Effect：閃爍、呼吸、漸變、心跳
+## Effect: blinking, breathing, fading, heartbeat
 
 ```cpp
 constexpr uint8_t LED_PIN = 6;
 LED::LED2Pins<Uno::UnoPwmPin<LED_PIN>> light;
 LED::Effect<decltype(light)> effect(light);
 
-effect.breathe(2000);          // 2 秒一次呼吸
-// loop 裡：effect.update();
+effect.breathe(2000);          // one breath every 2 seconds
+// in loop: effect.update();
 ```
 
-| 函式 | 說明 |
+| Function | What it does |
 |---|---|
-| `steady(brightness)` | 固定亮度 |
-| `blink(onMs, offMs, count, brightness)` | 閃爍；`count` 次後熄滅（0 = 一直閃） |
-| `breathe(periodMs, low, high)` | 在 low 和 high 之間平順地變亮變暗，一次呼吸 periodMs |
-| `fadeTo(brightness, ms)` | 從現在的亮度漸變到 brightness |
-| `heartbeat(periodMs, brightness)` | 兩下短跳、休息（心跳） |
-| `update()` | 每次 loop 都要呼叫 |
-| `kind()`、`isRunning()` | 現在是哪一種；有次數的閃爍、漸變結束後是 false |
+| `steady(brightness)` | a fixed brightness |
+| `blink(onMs, offMs, count, brightness)` | blinking; off after `count` times (0 = forever) |
+| `breathe(periodMs, low, high)` | brighter and dimmer smoothly between low and high, one breath per periodMs |
+| `fadeTo(brightness, ms)` | fades from the current brightness to brightness |
+| `heartbeat(periodMs, brightness)` | two short beats, a rest (a heartbeat) |
+| `update()` | call it every loop |
+| `kind()`, `isRunning()` | which effect runs now; false after a counted blink or a fade has ended |
 
-- **亮度是眼睛看的**（0 ～ 255，見 `brightness.h`），所以呼吸看起來是均勻的。
-- 用在一個顏色上（`SingleLED`、`LED2Pins`）；RGB LED 的顏色要一起變，用 `set(r, g, b)`。
-- 完整的例子：`src/week_2_LED/tests/1_effects.cpp`（每種效果輪流）、`src/week_4_SSD1306_switch_buzzer_audio/tests/6_clicks.cpp`（按鈕手勢換效果）。
+- **The brightness is as the eye sees it** (0 ~ 255, see `brightness.h`), so breathing looks even.
+- For one color (`SingleLED`, `LED2Pins`); the colors of an RGB LED change together with `set(r, g, b)`.
+- Complete examples: `src/week_2_LED/tests/1_effects.cpp` (each effect in turn), `src/week_4_SSD1306_switch_buzzer_audio/tests/6_clicks.cpp` (button gestures change the effect).
 
-## 接線
+## Wiring
 
-**裸 LED 一定要串電阻**（220 ～ 330 Ω）：LED 自己不限流，直接接腳位會燒掉 LED 或腳位。板子上已經有電阻的模組（紅綠燈模組、部分 RGB 模組）不用再串。
+**A bare LED always needs a resistor in series** (220 ~ 330 Ω): an LED does not limit its current, and straight on a pin it burns the LED or the pin. Modules that already have resistors (traffic light modules, some RGB modules) need none.
 
-一顆 LED：
+One LED:
 
 | LED | UNO |
 |---|---|
-| 長腳（+） | 220 Ω → PWM 腳，例如 D3 |
-| 短腳（-） | GND |
+| long leg (+) | 220 Ω → a PWM pin, e.g. D3 |
+| short leg (-) | GND |
 
-RGB LED（4 隻腳，最長的是共用腳）：
+RGB LED (4 legs, the longest is the common one):
 
-| RGB LED | 共陰極（common cathode） | 共陽極（common anode） |
+| RGB LED | Common cathode | Common anode |
 |---|---|---|
 | R | 220 Ω → D3 | 220 Ω → D3 |
-| 最長的腳 | GND | 5V |
+| the longest leg | GND | 5V |
 | G | 220 Ω → D5 | 220 Ω → D5 |
 | B | 220 Ω → D6 | 220 Ω → D6 |
-| 參數 | `COMMON_ANODE = false`（預設） | `COMMON_ANODE = true` |
+| parameter | `COMMON_ANODE = false` (default) | `COMMON_ANODE = true` |
 
-- **分辨共陰、共陽**：最長的腳接 GND、另一隻腳串電阻接 5V 會亮的是共陰；要反過來才亮的是共陽。模組標 `-` 的（KY-016 等）是共陰。
-- **PWM 腳**：UNO 只有 D3、D5、D6、D9、D10、D11 能調亮度，其他腳編譯錯誤。
-- **模組板**：有些 RGB 模組已經焊了電阻，就不用再串。
-紅綠燈模組（4 隻腳：R、Y、G、GND，板子上已經有電阻）：
+- **Common cathode or anode**: if it lights with the longest leg on GND and another leg through a resistor on 5V, it is common cathode; if it needs the opposite, common anode. Modules marked `-` (KY-016 and others) are common cathode.
+- **PWM pins**: only D3, D5, D6, D9, D10, D11 of the UNO can set brightness; other pins are a compile error.
+- **Module boards**: some RGB modules have resistors soldered on already and need no more.
+A traffic light module (4 pins: R, Y, G, GND, resistors already on the board):
 
-| 紅綠燈 | UNO |
+| Traffic light | UNO |
 |---|---|
-| R | D3（直接接，不用電阻） |
-| Y | D5（不用的顏色就不接，程式給 `LED::NoPwm`） |
+| R | D3 (directly, no resistor) |
+| Y | D5 (an unused color stays unconnected, the program gives `LED::NoPwm`) |
 | G | D6 |
-| GND（或 -） | GND |
+| GND (or -) | GND |
 
-- **三顆分開的 LED 也可以**：紅、綠、藍三顆的長腳各串 220 Ω 接 D3、D5、D6，短腳都接 GND，就等於共陰極的 RGB LED，程式不用改。差別是光從三個點出來，近看不會混成一個顏色；靠在一起、蓋一張白紙就會混。
+- **Three separate LEDs work too**: the long legs of red, green and blue each through 220 Ω to D3, D5, D6, the short legs all on GND, is the same as a common-cathode RGB LED, with no change to the program. The difference: the light comes from three points and does not mix into one color up close; put them together under a sheet of white paper and they mix.
 
-## 亮度和 PWM
+## Brightness and PWM
 
-**PWM**：腳位很快地開關（UNO 約 976 Hz），開的時間比例（工作週期）越長看起來越亮。眼睛跟不上這麼快的閃爍，所以看到的是平均亮度。
+**PWM**: the pin switches on and off very fast (about 976 Hz on the UNO); the longer the share of "on" (the duty cycle), the brighter it looks. The eye cannot follow such fast blinking, so it sees the average brightness.
 
-**為什麼要換算**：眼睛對暗的變化比較敏感，工作週期 50% 看起來大約有 70% 亮。直接用工作週期調，前半段變化很大、後半段幾乎看不出來。
+**Why convert**: the eye is more sensitive to changes in the dark: a duty cycle of 50% looks about 70% bright. Set by the duty cycle directly, the first half changes a lot and the second half barely shows.
 
-| 亮度（`set`） | 工作週期（`toDuty`） | 看起來 |
+| Brightness (`set`) | Duty cycle (`toDuty`) | Looks |
 |---|---|---|
-| 0 | 0 | 關 |
-| 64 | 16（6%） | 約四分之一 |
-| 128 | 64（25%） | 約一半 |
-| 255 | 255（100%） | 最亮 |
+| 0 | 0 | off |
+| 64 | 16 (6%) | about a quarter |
+| 128 | 64 (25%) | about half |
+| 255 | 255 (100%) | brightest |
 
-- **格數**：`levelToBrightness(level, levels)` 把 0 ～ levels 平均分給 0 ～ 255，配上 `toDuty` 每一格看起來差不多一樣大。
-- **最暗的幾格**：工作週期只有整數，亮度 1 ～ 15 都是 0 ～ 1，看起來是關或很暗。
+- **Steps**: `levelToBrightness(level, levels)` spreads 0 ~ levels evenly over 0 ~ 255; with `toDuty`, each step looks about the same size.
+- **The darkest steps**: the duty cycle is a whole number, so brightness 1 ~ 15 gives 0 ~ 1: off or very dim.
 
-## 輸入限制
+## Input limits
 
-| 項目 | 範圍 | 超出時 |
+| Item | Range | Beyond it |
 |---|---|---|
-| 腳位 | 3、5、6、9、10、11 | 編譯錯誤 |
-| 亮度、工作週期 | 0 ～ 255 | — |
-| `levelToBrightness` 的 level | 0 ～ levels | 大於 levels 時是 255；levels = 0 時是 0 |
+| pins | 3, 5, 6, 9, 10, 11 | compile error |
+| brightness, duty cycle | 0 ~ 255 | — |
+| level of `levelToBrightness` | 0 ~ levels | above levels it is 255; with levels = 0 it is 0 |
 
-## 注意事項
+## Caveats
 
-| 情況 | 結果 | 做法 |
+| Situation | Result | What to do |
 |---|---|---|
-| 不串電阻 | 電流太大，LED 或腳位燒掉 | 每個顏色各串 220 ～ 330 Ω |
-| 三個顏色共用一顆電阻（串在共用腳） | 顏色互相影響，紅色比較亮（壓降最低） | 每個顏色各一顆 |
-| LED 接 D9 / D10，同時用無源蜂鳴器（`UnoTone`） | 兩邊搶 Timer1，亮度和音高都錯 | LED 改接 D3、D5、D6、D11 |
-| LED 接 D3 / D11，同時用 Arduino 的 `tone()` | 搶 Timer2 | 不要用 `tone()`（用 `lib/buzzer`） |
-| 共陽極設成共陰極 | 亮暗反過來：0 最亮 | 改 `COMMON_ANODE` |
-| 一隻腳推很多 LED | 一隻腳建議 ≤ 20 mA | 用電晶體 |
+| no resistor | too much current: the LED or the pin burns | 220 ~ 330 Ω for each color |
+| one resistor for all three colors (on the common leg) | the colors affect each other, red is brighter (the lowest drop) | one for each color |
+| LEDs on D9 / D10 together with a passive buzzer (`UnoTone`) | both fight over Timer1: brightness and pitch both wrong | move the LEDs to D3, D5, D6, D11 |
+| LEDs on D3 / D11 together with Arduino's `tone()` | they fight over Timer2 | do not use `tone()` (use `lib/buzzer`) |
+| a common anode set as common cathode | bright and dark swapped: 0 is brightest | change `COMMON_ANODE` |
+| one pin driving many LEDs | ≤ 20 mA a pin recommended | use a transistor |

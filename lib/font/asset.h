@@ -13,7 +13,7 @@
 // options: one string, exactly the options of lib/font/source/convert.py (see its README); "" or left out:
 //          its defaults (--height 16)
 //
-// how: before every build, tools/assets.py (platformio.ini: extra_scripts) finds each FONT(...) in src/,
+// how: before every build, src/tools/assets.py (platformio.ini: extra_scripts) finds each FONT(...) in src/,
 // looks in lib/font/output/ for the .h made from that file with those options (its first lines say so),
 // runs convert.py only if there is none (the same output as by hand: lib/font/output/<name>.h), and writes
 // output/registry.h, which gives font::Asset<key>::Type for each one; the key is a hash of the two
@@ -23,7 +23,7 @@
 // both arguments must be plain string literals (no variables, no macros): the script reads the source text
 // nothing converted is compiled in if it is not used (like every type in output/)
 namespace font {
-    // FNV-1a (32 bits) of path, 0x1F, options: the same as tools/assets.py
+    // FNV-1a (32 bits) of path, 0x1F, options: the same as src/tools/assets.py
     constexpr uint32_t assetHash(const char *text, uint32_t hash) {
         while (*text != '\0') {
             hash = (hash ^ (uint8_t)*text) * 16777619UL;
@@ -39,7 +39,7 @@ namespace font {
     // filled in by output/registry.h; an unknown key: not converted (yet)
     template <uint32_t KEY>
     struct Asset {
-        static_assert(KEY != KEY, "FONT(...): not converted. Build with PlatformIO: tools/assets.py "
+        static_assert(KEY != KEY, "FONT(...): not converted. Build with PlatformIO: src/tools/assets.py "
                                   "(platformio.ini extra_scripts) converts it first; see its messages above");
         using Type = void;
     };

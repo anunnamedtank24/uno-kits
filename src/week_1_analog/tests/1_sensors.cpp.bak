@@ -15,7 +15,7 @@
 // wiring (A0 ~ A5 only for the analog ones):
 // potentiometer: outer legs -> 5V, GND
 constexpr uint8_t KNOB_PIN = A0;            // middle (wiper)
-constexpr uint8_t KNOB_SMOOTHING = 3;       // 0 = raw ~ 8 = very smooth and slow
+constexpr uint8_t KNOB_SMOOTHING = 3;       // 0 = raw ~ 6 = very smooth and slow
 // photoresistor KY-018 / light sensor board: + -> 5V, - -> GND
 // (bare LDR: 5V -- LDR -- LIGHT_PIN -- 10 kΩ -- GND, and BRIGHTER_IS_HIGHER = true)
 constexpr uint8_t LIGHT_PIN = A1;           // S (AO)
@@ -70,8 +70,7 @@ void setup() {
     Link::printPin(LIGHT_PIN);
     Link::printText(", joystick ");
     Link::printPin(STICK_X_PIN);
-    Link::printText("");
-    Link::printText(" ");
+    Link::printText(" / ");
     Link::printPin(STICK_Y_PIN);
     Link::printText(" ");
     Link::printPin(STICK_BUTTON_PIN);

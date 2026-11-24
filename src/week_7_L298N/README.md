@@ -1,53 +1,56 @@
 # week_7_L298N
 
-L298N 馬達驅動（[lib/L298N](../../lib/L298N/README.md)）的測試：一顆、兩顆直流馬達、控制電壓、PWM、步進馬達。
+English | [中文](讀我.md)
 
-全部的檔案現在都是 `.bak`，要跑哪個就留下哪個：
+Tests of the L298N motor driver ([lib/L298N](../../lib/L298N/README.md)): one and two DC motors, voltage control, PWM, a stepper, a two-wheeled car.
+
+Every file is `.bak` now; keep the one to run:
 
 ```bash
-python src/hide.py week_7_L298N/tests/1_one_motor     # 只留下這個（拿掉 .bak），其他改成 .bak
+python src/hide.py week_7_L298N/tests/1_one_motor     # keep only this one (drop its .bak), the others become .bak
 pio run -t upload
-pio device monitor                      # 1 Mbaud
+pio device monitor                      # at BAUD (= monitor_speed of platformio.ini)
 ```
 
-| 檔案 | 內容 | 需要的硬體 |
+| File | Contents | Hardware needed |
 |---|---|---|
-| `tests/1_one_motor.cpp` | **一顆**馬達：漸變、滑行和煞車的差別、反轉、速度階梯 | L298N + 直流馬達（OUT1、OUT2） |
-| `tests/2_two_motors.cpp` | **兩顆**馬達（兩輪車）：各自確認、直走、後退、轉彎、原地旋轉 | L298N + 2 顆直流馬達 |
-| `tests/3_voltage.cpp` | **控制電壓**：在串口打 `a 4.5`，馬達 A 就拿到約 4.5 V | L298N + 1 ～ 2 顆直流馬達 |
-| `tests/4_pwm.cpp` | **PWM**：工作週期由小到大（從哪裡開始轉）、由大到小（在哪裡停）、起動的「踢一下」、PWM 煞車 | L298N + 直流馬達 |
-| `tests/5_stepper.cpp` | **步進馬達**：FULL、HALF、WAVE 各轉一圈來回，速度階梯找上限 | L298N + 雙極步進馬達（4 條線） |
-| `tests/6_car.cpp` | **兩輪車**（`TwoWheelCar`）：直走、後退、原地旋轉、單輪旋轉、弧線、正方形、8 字、之字 | L298N（**EN 跳線帽接著**，IN1、IN3 接 PWM 腳，IN2、IN4 接 GND）+ 2 顆直流馬達 |
-| `tests/7_background_remote.cpp` | **背景遙控**：車在背景跑（`UnoBackground`），用鍵盤操作；沒有時間的動作、`until`、失聯自動停 | L298N（**EN 跳線帽接著**，IN1 ～ IN4 都接 PWM 腳）+ 2 顆直流馬達 |
+| `tests/1_one_motor.cpp` | **one** motor: ramps, coasting compared with braking, reversing, a speed ladder | L298N + DC motor (OUT1, OUT2) |
+| `tests/2_two_motors.cpp` | **two** motors (a two-wheeled car): each checked alone, straight, backward, turning, spinning in place | L298N + 2 DC motors |
+| `tests/3_voltage.cpp` | **voltage control**: type `a 4.5` on the serial and motor A gets about 4.5 V | L298N + 1 ~ 2 DC motors |
+| `tests/4_pwm.cpp` | **PWM**: duty cycle from small to large (where it starts turning), from large to small (where it stops), the start-up "kick", PWM braking | L298N + DC motor |
+| `tests/5_stepper.cpp` | **stepper**: FULL, HALF, WAVE each a turn there and back, a speed ladder for the limit | L298N + bipolar stepper (4 wires) |
+| `tests/6_car.cpp` | **two-wheeled car** (`TwoWheelCar`): straight, backward, spinning in place, pivoting, arcs, a square, a figure 8, a zigzag | L298N (**EN jumpers on**, IN1, IN3 on PWM pins, IN2, IN4 on GND) + 2 DC motors |
+| `tests/7_background_remote.cpp` | **background remote**: the car runs in the background (`UnoBackground`), driven by the keyboard; moves without a time, `until`, stopping when the link is lost | L298N (**EN jumpers on**, IN1 ~ IN4 all on PWM pins) + 2 DC motors |
+| `tests/8_car_enable.cpp` | **a two-wheeled car with speed on EN**: ENA, ENB on PWM pins: real coasting, slow speeds, every move | L298N (**EN jumpers removed**, wired as `tests/1_one_motor`) + 2 DC motors |
 
-## 接線
+## Wiring
 
-`tests/1_one_motor` ～ `tests/5_stepper` 的接法一樣（只接一顆馬達的測試，通道 B 就空著）；`tests/6_car`、`tests/7_background_remote` 不同，見 [tests/6_car](#tests6_carcpp兩輪車)。
+`tests/1_one_motor` ~ `tests/5_stepper` and `tests/8_car_enable` share the wiring (tests with one motor leave channel B empty); `tests/6_car`, `tests/7_background_remote` differ, see [tests/6_car](#tests6_carcpp-two-wheeled-car).
 
-| 零件 | 腳 | UNO / 其他 |
+| Part | Pin | UNO / elsewhere |
 |---|---|---|
-| L298N | ENA（**拔掉跳線帽**） | **D5** |
-| | IN1 | **A0** |
-| | IN2 | **A1** |
-| | IN3 | **A2** |
-| | IN4 | **A3** |
-| | ENB（**拔掉跳線帽**） | **D6** |
-| | +12V | 電池 / 變壓器的 +（6 ～ 12 V，看馬達） |
-| | GND | 電池的 - **和** UNO 的 GND |
-| | +5V | 不接（5V-EN 跳線接著） |
-| | OUT1、OUT2 | 馬達 A（步進：線圈 A） |
-| | OUT3、OUT4 | 馬達 B（步進：線圈 B） |
-| USB | D0、D1 | 串口 |
+| L298N | ENA (**jumper removed**) | **`ENA_PIN`** (a PWM pin) |
+| | IN1 | **`IN1_PIN`** |
+| | IN2 | **`IN2_PIN`** |
+| | IN3 | **`IN3_PIN`** |
+| | IN4 | **`IN4_PIN`** |
+| | ENB (**jumper removed**) | **`ENB_PIN`** (a PWM pin) |
+| | +12V | the battery / adapter's + (6 ~ 12 V, depending on the motors) |
+| | GND | the battery's - **and** the UNO's GND |
+| | +5V | nothing (5V-EN jumper on) |
+| | OUT1, OUT2 | motor A (stepper: coil A) |
+| | OUT3, OUT4 | motor B (stepper: coil B) |
+| USB | D0, D1 | serial |
 
-| 腳 | 為什麼選它 |
+| Pin | The rule |
 |---|---|
-| D5、D6 | PWM 腳裡不跟蜂鳴器（D9、Timer1）、OLED（D11）衝突的 |
-| A0 ～ A3 | 類比腳當數位腳用，D2、D4、D7 ～ D13 都留給其他週的零件 |
+| `ENA_PIN`, `ENB_PIN` | PWM pins that clash with neither the buzzer (D9 / D10, Timer1) nor the OLED's `SDA_PIN` (D11 in the other weeks) |
+| `IN1_PIN` ~ `IN4_PIN` | any pins; the analog pins used as digital pins keep the digital ones free for the parts of other weeks |
 
-- **馬達不要用 UNO 的 5V 供電**：馬達起動電流很大，會讓 UNO 重開機或燒壞 USB。
-- **第一次測試**：車子架高，輪子懸空。
+- **Never power the motors from the UNO's 5V**: motors draw a big current when starting, which resets the UNO or burns its USB.
+- **The first test**: lift the car, wheels in the air.
 
-# tests/1_one_motor.cpp：一顆馬達
+# tests/1_one_motor.cpp: one motor
 
 ```
 1 forward 255: ramps up in 1 s
@@ -60,66 +63,66 @@ pio device monitor                      # 1 Mbaud
 ...
 ```
 
-- **2 和 4 比一比**：滑行是慢慢停，煞車是馬上停。
-- **5**：從反轉直接設成正轉，漸變會先減到 0 再加上去，不會猛然反轉。
-- **6**：速度 40、80 時可能只會嗡嗡叫，那是死區，用 `MIN_DUTY` 補（見 `tests/4_pwm`）。
-- 轉的方向反了：交換馬達的兩條線，或 `REVERSED = true`。
+- **Compare 2 and 4**: coasting stops slowly, braking stops at once.
+- **5**: set straight from backward to forward, the ramp first goes down to 0 and then up, never reversing abruptly.
+- **6**: at speeds 40, 80 it may only hum: that is the dead zone, made up for by `MIN_DUTY` (see `tests/4_pwm`).
+- Turning the wrong way: swap the motor's two wires, or `REVERSED = true`.
 
-# tests/2_two_motors.cpp：兩顆馬達
+# tests/2_two_motors.cpp: two motors
 
-A 是左輪、B 是右輪。先看 1、2：只有一個輪子轉、而且往前，確認哪個是哪個。
+A is the left wheel, B the right. Watch 1 and 2 first: only one wheel turns, forward, to check which is which.
 
-| 步驟 | 左 | 右 | 車子 |
+| Step | Left | Right | The car |
 |---|---|---|---|
-| 3 | 200 | 200 | 直走 |
-| 4 | -200 | -200 | 後退 |
-| 5 | 200 | 100 | 往右的弧線 |
-| 6 | 100 | 200 | 往左的弧線 |
-| 7 | 200 | 煞車 | 以右輪為中心轉 |
-| 8 | 200 | -200 | 原地右轉 |
-| 9 | -200 | 200 | 原地左轉 |
-| 10 | 255 | 255 | 看兩顆馬達一不一樣快（通常有點不同，用速度微調） |
+| 3 | 200 | 200 | straight |
+| 4 | -200 | -200 | backward |
+| 5 | 200 | 100 | arc to the right |
+| 6 | 100 | 200 | arc to the left |
+| 7 | 200 | brake | turns around the right wheel |
+| 8 | 200 | -200 | spins right in place |
+| 9 | -200 | 200 | spins left in place |
+| 10 | 255 | 255 | are the two motors equally fast (usually a little different: trim with the speeds) |
 
-- 車上的兩顆馬達是面對面裝的，所以通常有一顆要反過來：`LEFT_REVERSED` 或 `RIGHT_REVERSED = true`。
+- The two motors of a car face each other, so usually one must be reversed: `LEFT_REVERSED` or `RIGHT_REVERSED = true`.
 
-# tests/3_voltage.cpp：控制電壓
+# tests/3_voltage.cpp: voltage control
 
-在 `pio device monitor` 打一行再按 Enter：
+Type a line in `pio device monitor` and press Enter:
 
-| 輸入 | 做什麼 |
+| Input | What it does |
 |---|---|
-| `a 4.5` | 馬達 A 正轉，約 4.5 V |
-| `a -3` | 馬達 A 反轉，約 3 V |
-| `b 6` | 馬達 B，約 6 V |
-| `x 5` | 兩顆都 5 V |
-| `a 0` | 馬達 A 滑行 |
-| `s` | 兩顆都煞車 |
-| `?` | 印出設定 |
+| `a 4.5` | motor A forward, about 4.5 V |
+| `a -3` | motor A backward, about 3 V |
+| `b 6` | motor B, about 6 V |
+| `x 5` | both 5 V |
+| `a 0` | motor A coasts |
+| `s` | both brake |
+| `?` | prints the settings |
 
 ```
 > a 4.5
 A: duty 115 / 255 (45 %) -> about 4.51 V
 ```
 
-- **L298N 不能真的降壓**：它把電源開開關關（PWM），馬達平均起來拿到 `工作週期 × (電源 - 壓降)`。
-- 設定要改成你的：`SUPPLY_V`（電源，用電錶量；9 V 電池接上馬達後常常只剩約 7 V）、`DROP_V`（L298N 吃掉的，約 2 V）、`MOTOR_MAX_V`（馬達的額定電壓，超過的會被限制）。
-- 用電錶的直流電壓量 OUT1、OUT2，大約就是印出來的值（PWM 會讓有些電錶不太準）。
+- **The L298N cannot really lower the voltage**: it switches the supply on and off (PWM), and on average the motor gets `duty cycle × (supply - drop)`.
+- Set the settings to yours: `SUPPLY_V` (the supply, measured with a multimeter; a 9 V battery often has only about 7 V left with motors on it), `DROP_V` (what the L298N takes, about 2 V), `MOTOR_MAX_V` (the motor's rated voltage; anything above is limited).
+- The DC voltage measured with a multimeter on OUT1, OUT2 is about the value printed (PWM makes some multimeters less accurate).
 
-# tests/4_pwm.cpp：PWM
+# tests/4_pwm.cpp: PWM
 
-只用馬達 A，四個部分一直重複：
+Only motor A, four parts repeated forever:
 
-1. **工作週期 0 → 255**（每 0.4 秒加 5）：記下**開始轉**的工作週期。
-2. **255 → 0**：記下**停下來**的工作週期，會比 1 低（已經在轉的馬達比較容易繼續轉）。
-3. **踢一下**：低工作週期（`LOW_DUTY`，設成比 1 的值低一點）直接起動可能只會嗡嗡叫；先 255 跑 100 ms 再降下來，就能起動而且繼續轉。
-4. **PWM 煞車**：全速後分別滑行、`brake(64)`、`brake(128)`、`brake(255)`，停下來的距離越來越短。
+1. **Duty cycle 0 → 255** (`SWEEP_STEP` more every `SWEEP_MS`): note the duty cycle where it **starts turning**.
+2. **255 → 0**: note the duty cycle where it **stops**: lower than in 1 (a motor already turning keeps turning more easily).
+3. **A kick**: started straight at a low duty cycle (`LOW_DUTY`, set a bit below the value of 1) it may only hum; 255 for `KICK_MS` first, then down, and it starts and keeps turning.
+4. **PWM braking**: from full speed, `brake()` with each of `BRAKE_STRENGTHS` in turn (0 = coasting): the stronger, the shorter the stopping distance.
 
-- 1 的值就是 `DCMotor::setMinDuty` 該設的值（`tests/1_one_motor`、`tests/2_two_motors` 的 `MIN_DUTY`）。
-- **嗡嗡聲**：UNO 的 PWM 是 976 Hz，在人耳聽得到的範圍，正常。
+- The value of 1 is what `DCMotor::setMinDuty` should be set to (`MIN_DUTY` of `tests/1_one_motor`, `tests/2_two_motors`).
+- **Humming**: the UNO's PWM is 976 Hz, within hearing: normal.
 
-# tests/5_stepper.cpp：步進馬達
+# tests/5_stepper.cpp: stepper
 
-雙極步進馬達（4 條線）：用電錶找出兩個線圈（有幾 Ω 的兩條是一組），線圈 A 接 OUT1、OUT2，線圈 B 接 OUT3、OUT4。
+A bipolar stepper (4 wires): find the two coils with a multimeter (two wires with a few Ω are a pair); coil A on OUT1, OUT2, coil B on OUT3, OUT4.
 
 ```
 FULL (2 coils, most torque): a turn forward, then back (200 steps at 100 steps/s)
@@ -131,76 +134,98 @@ speed ladder (FULL): the last speed that turns is the limit
   ...
 ```
 
-- **一直抖、不轉**：一個線圈接反，交換 OUT3、OUT4。
-- **速度階梯**：最後還在轉的速度就是這個電源下的上限；超過會失步（嗡嗡叫不轉）。
-- **很燙**：降低 `RUN_DUTY`。L298N 不限流，低電阻的步進馬達（例如 1.5 Ω 的 NEMA 17）接 12 V 電流會太大，見 [lib/L298N](../../lib/L298N/README.md#步進馬達要注意)。
-- `STEPS_PER_TURN`：1.8° 的馬達是 200；28BYJ-48 約 2048。
+- **Shaking, not turning**: one coil is reversed: swap OUT3 and OUT4.
+- **Speed ladder**: the last speed still turning is the limit at this supply; beyond it, it loses steps (hums without turning).
+- **Very hot**: lower `RUN_DUTY`. The L298N does not limit current: a low-resistance stepper (e.g. a 1.5 Ω NEMA 17) on 12 V draws too much, see [lib/L298N](../../lib/L298N/README.md#steppers-take-care).
+- `STEPS_PER_TURN`: 200 for a 1.8° motor; about 2048 for the 28BYJ-48.
 
-# tests/6_car.cpp：兩輪車
+# tests/6_car.cpp: two-wheeled car
 
-**接法跟其他測試不同**：只接 IN、OUT1 ～ OUT4、+12V、GND，**ENA、ENB 的跳線帽接著**。速度改由 IN 腳的 PWM 控制，所以接到 UNO 的 IN 都要是 PWM 腳。
+**Wired differently from the other tests**: only IN, OUT1 ~ OUT4, +12V, GND, with **the ENA, ENB jumpers on**. The speed comes from PWM on the IN pins instead, so every IN on the UNO must be a PWM pin.
 
-| L298N | 目前的設定（只會往前） | 四隻都接（能後退、原地旋轉） |
+| L298N | Two INs on GND (forward only) | All four connected (backward and spinning possible) |
 |---|---|---|
-| IN1 | **D5**（`IN1_PIN = 5`） | D5（`IN1_PIN = 5`） |
-| IN2 | **GND**（`IN2_PIN = GROUND`） | D6（`IN2_PIN = 6`） |
-| IN3 | **D6**（`IN3_PIN = 6`） | D3（`IN3_PIN = 3`） |
-| IN4 | **GND**（`IN4_PIN = GROUND`） | D11（`IN4_PIN = 11`） |
-| ENA、ENB | 不接（跳線帽接著） | 同左 |
-| OUT1、OUT2 | 右馬達 | 同左 |
-| OUT3、OUT4 | 左馬達 | 同左 |
-| +12V | 電池的 + | 同左 |
-| GND | 電池的 - **和** UNO 的 GND | 同左 |
+| IN1 | a PWM pin (`IN1_PIN`) | a PWM pin (`IN1_PIN`) |
+| IN2 | GND (`IN2_PIN = GROUND`) | a PWM pin (`IN2_PIN`) |
+| IN3 | a PWM pin (`IN3_PIN`) | a PWM pin (`IN3_PIN`) |
+| IN4 | GND (`IN4_PIN = GROUND`) | a PWM pin (`IN4_PIN`) |
+| ENA, ENB | nothing (jumpers on) | the same |
+| OUT1, OUT2 | right motor | the same |
+| OUT3, OUT4 | left motor | the same |
+| +12V | the battery's + | the same |
+| GND | the battery's - **and** the UNO's GND | the same |
 
-- **為什麼是 D3、D5、D6、D11**：UNO 只有 6 隻 PWM 腳；D9、D10（Timer1）留給蜂鳴器。D11 跟 OLED 的 SDA 是同一隻，所以四隻都接時不能同時接 OLED。
+- **Which PWM pins**: the UNO has only 6 (3, 5, 6, 9, 10, 11); D9, D10 (Timer1) are kept for the buzzer, so four INs need D11 too, the OLED's SDA in the other weeks: then the OLED cannot be connected too.
 
-接線方式寫成型態，一行就說完：
+The wiring is written as a type, all in one line, e.g.:
 
 ```cpp
 //                                    IN1 / IN2     IN1 - IN2 > 0    IN3 - IN4 > 0
 using Car = L298N::TwoWheelCar<Board, L298N::RIGHT, L298N::FORWARD, L298N::FORWARD>;
 ```
 
-- **IN1 - IN2 為正**（IN1 HIGH、IN2 LOW）：右馬達向前。
-- **IN3 - IN4 為正**：左馬達向前。
-- 輪子方向相反：把那一對的 `FORWARD` 改成 `BACKWARD`。左右相反：`RIGHT` 改成 `LEFT`。
-- **IN 接 GND**（目前的設定）：IN2、IN4 直接接 GND，只用兩隻 PWM 腳（`IN2_PIN = GROUND`、`IN4_PIN = GROUND`）。輪子只能往前：後退和原地旋轉（動作 2、3、4、9）會變成煞車。要全部動作就照上表右欄接四隻腳、改四個 `IN*_PIN`。
+- **IN1 - IN2 positive** (IN1 HIGH, IN2 LOW): here the right motor goes forward.
+- **IN3 - IN4 positive**: here the left motor goes forward.
+- A wheel turning the wrong way: change that pair's `FORWARD` to `BACKWARD`. Left and right swapped: `RIGHT` to `LEFT`.
+- **INs on GND**: IN2, IN4 straight on GND, using only two PWM pins (`IN2_PIN = GROUND`, `IN4_PIN = GROUND`). The wheels only go forward: backward and spinning in place (moves 2, 3, 4, 9) become braking. For every move, wire four pins as in the right column above and change the four `IN*_PIN`.
 
-| 動作 | 內容 |
+| Move | Contents |
 |---|---|
-| 1、2 | 直走、後退 1.5 秒：**先架高確認兩輪都往前、都往後** |
-| 3、4 | 原地右轉、左轉 90° |
-| 5、6 | 單輪旋轉：右輪不動 / 左輪不動 |
-| 7、8 | 弧線：左快右慢（往右）、右快左慢（往左），各半圈 |
-| 9 | 正方形：4 ×（直走 1 秒、右轉 90°），一次排進佇列 |
-| 10 | 8 字：往右一圈、往左一圈 |
-| 11 | 之字：兩輪速度每 0.6 秒交換 |
-| 12 | 直走後滑行（跳線帽接著，會變成煞車） |
+| 1, 2 | straight, backward 1.5 seconds: **lift it first to check both wheels go forward, both backward** |
+| 3, 4 | spin right, left 90° in place |
+| 5, 6 | pivoting: the right wheel still / the left wheel still |
+| 7, 8 | arcs: left fast right slow (to the right), right fast left slow (to the left), half a circle each |
+| 9 | a square: 4 × (straight 1 second, right 90°), queued at once |
+| 10 | a figure 8: a circle to the right, a circle to the left |
+| 11 | a zigzag: the two wheels' speeds swapped every 0.6 seconds |
+| 12 | straight, then coasting (with the jumpers on it becomes braking) |
 
-設定裡的參數，要在地上量：
+The parameters in the settings, to be measured on the floor:
 
-| 參數 | 預設 | 說明 |
-|---|---|---|
-| `SPEED` | 180 | 所有動作的速度 |
-| `SPIN_90_MS` | 450 | 原地轉 90° 要幾 ms：看 3 轉了多少再調，正方形才會閉合 |
-| `ARC_360_MS` | 3000 | 弧線轉一整圈要幾 ms：8 字才會閉合 |
-| `ARC_DIFFERENCE` | 120 | 弧線兩輪的速差，越大彎越急 |
-| `LEFT_TRIM`、`RIGHT_TRIM` | 100、100 | 直走會偏：把快的那邊調低（%） |
-| `MIN_DUTY` | 0 | 馬達的死區（`tests/4_pwm`） |
-
-# tests/7_background_remote.cpp：背景遙控
-
-接法是 `tests/6_car` 接線表的右欄（EN 跳線帽接著，IN1 ～ IN4 = D5、D6、D3、D11）：要後退和原地旋轉。`pio device monitor` 打開後直接按鍵（不用 Enter）：
-
-| 鍵 | 動作 |
+| Parameter | Explanation |
 |---|---|
-| `w` / `s` | 前進 / 後退 |
-| `a` / `d` | 原地左轉 / 右轉 |
-| `q` / `e` | 往左 / 往右的弧線 |
-| 空白、`x` | 停 |
-| `f` | 前進，直到走了 2 秒（`until`） |
-| `t` | 前進 1 秒、再右轉 0.5 秒（有時間、排隊） |
+| `SPEED` | the speed of every move |
+| `SPIN_90_MS` | how many ms a 90° spin in place takes: adjust after seeing how far 3 turns, so the square closes |
+| `ARC_360_MS` | how many ms a full circle of the arc takes: so the figure 8 closes |
+| `ARC_DIFFERENCE` | the speed difference of the two wheels in an arc: the bigger, the sharper the turn |
+| `LEFT_TRIM`, `RIGHT_TRIM` | it drifts going straight: lower the faster side (%) |
+| `MIN_DUTY` | the motors' dead zone (`tests/4_pwm`) |
 
-- **背景**：`Uno::UnoBackground::add([] { car.update(); })`，`loop()` 只讀鍵盤、印速度，還有 `delay(500)`，車子照樣加減速、換動作。
-- **沒有時間的動作**：`w`、`a` 這些一直做。
-- **失聯自動停**（`setFailsafeMs(600)`）：放開鍵 0.6 秒後自動煞車。按住鍵時終端機會一直重送，所以會繼續走，就像遙控器。
+# tests/7_background_remote.cpp: background remote
+
+Wired as the right column of the wiring table of `tests/6_car` (EN jumpers on, IN1 ~ IN4 all on PWM pins): backward and spinning in place are needed. Open `pio device monitor` and press keys (no Enter needed):
+
+| Key | Move |
+|---|---|
+| `w` / `s` | forward / backward |
+| `a` / `d` | spin left / right in place |
+| `q` / `e` | arc to the left / right |
+| space, `x` | stop |
+| `f` | forward, until it has gone `UNTIL_MS` (`until`) |
+| `t` | forward `TIMED_FORWARD_MS`, then right `TIMED_SPIN_MS` (with times, queued) |
+
+- **Background**: `Uno::UnoBackground::add([] { car.update(); })`; `loop()` only reads the keyboard, prints the speeds, and has a `delay(PRINT_MS)`, yet the car still ramps and changes moves.
+- **Moves without a time**: `w`, `a` and the like go on and on.
+- **Stopping when the link is lost** (`setFailsafeMs(FAILSAFE_MS)`): it brakes by itself `FAILSAFE_MS` after the key is released. While a key is held the terminal keeps resending it, so it keeps going, like a remote.
+
+# tests/8_car_enable.cpp: a two-wheeled car with speed on EN
+
+Wired like `tests/1_one_motor` ([Wiring](#wiring)): **remove the ENA, ENB jumpers**, ENA, ENB on PWM pins (`ENA_PIN`, `ENB_PIN`), IN1 ~ IN4 on `IN1_PIN` ~ `IN4_PIN`. The same car as `tests/6_car` (`TwoWheelCar`), only the speed comes from EN, so:
+
+- **It really coasts**: with EN LOW the outputs are open. Compare move 3 (coasting) with 4 (braking): 3 stops slowly, 4 at once; with the jumpers of `tests/6_car` both are braking.
+- **Smoother at slow speeds**: PWM on EN alternates "drive / coast", PWM on IN alternates "drive / brake".
+- **Takes 6 pins** (`tests/6_car` takes 4).
+
+| Move | Contents |
+|---|---|
+| 1, 2 | straight, backward 1.5 seconds: **lift it first to check both wheels go forward, both backward** |
+| 3 | straight 1 second, then coasting 2 seconds: stops slowly |
+| 4 | straight 1 second, then braking 2 seconds: stops at once |
+| 5 | straight at a slow speed (`SLOW_SPEED`): not turning, raise `SLOW_SPEED` or `MIN_DUTY` |
+| 6, 7 | spin right, left 90° in place |
+| 8 | pivoting: the right wheel braked, the left turning |
+| 9 | an arc to the right, then to the left |
+
+- At power-on it prints what this wiring can do: `both ways, coasts, brakes`.
+- **Forward only, with only 2 pins**: IN1, IN3 on +5V, IN2, IN4 on GND, and `Board` changed to the `L298NBoard<…, L298N::Supply, L298N::Ground, …>` in the comment. Then it cannot brake (every stop coasts), and backward and spinning in place are impossible too (power-on prints `forward only, coasts, cannot brake`).
+- `SUPPLY_MV`: the battery's voltage (mV); when given, the 5V-EN jumper is checked when compiling (see [the supply and the 5V-EN jumper of lib/L298N](../../lib/L298N/README.md#supply-and-the-5v-en-jumper)).

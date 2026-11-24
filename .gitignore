@@ -1,6 +1,5 @@
 .env
-/.pio/
-/.vscode/
-/include/
-/test/
-**/.DS_Store
+.pio
+.vscode
+.DS_Store
+/NOTE.md

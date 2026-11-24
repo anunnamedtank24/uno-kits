@@ -250,20 +250,21 @@ void testStartLine() {
 
 // 11. setSegmentRemap / setComScanRemap: mirror left-right, up-down, both (= 180°)
 //     expected: "mirror" mirrored left-right, then up-down, then upside down, then normal
+// (init() sets both remaps to !FLIP: the other value mirrors)
 void testMirror() {
     screen.drawTexts(24, 20, ON, "mirror");
     screen.drawFilledRectSize(0, 0, 10, 10, ON);
     screen.display();
     delay(700);
-    screen.setSegmentRemap(false);
+    screen.setSegmentRemap(FLIP);
     delay(1000);
-    screen.setSegmentRemap(true);
-    screen.setComScanRemap(false);
+    screen.setSegmentRemap(!FLIP);
+    screen.setComScanRemap(FLIP);
     delay(1000);
-    screen.setSegmentRemap(false);
+    screen.setSegmentRemap(FLIP);
     delay(1000);
-    screen.setSegmentRemap(true);
-    screen.setComScanRemap(true);
+    screen.setSegmentRemap(!FLIP);
+    screen.setComScanRemap(!FLIP);
 }
 
 // 12. setFadeBlink: blinking, then fading out

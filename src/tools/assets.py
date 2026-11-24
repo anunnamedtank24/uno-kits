@@ -1,6 +1,7 @@
 import sys
 sys.dont_write_bytecode = True  # never leave __pycache__
 import hashlib
+import json
 import os
 import re
 import shlex
@@ -17,10 +18,10 @@ Func: before PlatformIO compiles, converts the fonts, pictures, animations and s
       the options are those of lib/<kind>/source/convert.py, and the output is the same as running it by hand:
       lib/<kind>/output/<name>.h (one file per conversion, --target stream too)
 Usage:
-    automatic: platformio.ini  extra_scripts = pre:tools/assets.py   (runs before every build: the Build button, pio run)
-    by hand:   python tools/assets.py            (the same, prints what it does)
-               python tools/assets.py --force    (converts the program's files again, e.g. after editing a picture)
-               python tools/assets.py --unused   (lists the outputs no program in src/ uses, .bak ones included)
+    automatic: platformio.ini  extra_scripts = pre:src/tools/assets.py   (runs before every build: the Build button, pio run)
+    by hand:   python src/tools/assets.py            (the same, prints what it does)
+               python src/tools/assets.py --force    (converts the program's files again, e.g. after editing a picture)
+               python src/tools/assets.py --unused   (lists the outputs no program in src/ uses, .bak ones included)
 What it does:
     1. reads every .cpp / .c / .h / .hpp / .ino in src/ (not .bak), comments removed,
        and finds FONT / PICTURE / ANIMATION / MELODY ("path", "options")
@@ -35,8 +36,15 @@ What it does:
     5. writes lib/<kind>/output/selected.h: every .h of output/ (what is not used is not compiled in)
     files are written only when they change: nothing is recompiled for nothing
 The converters need their packages (Pillow, numpy, ...): the python that runs them is
-    platformio.ini  custom_asset_python = /path/to/python   or   the ASSET_PYTHON environment variable,
-    else python3 on the PATH
+    1. the ASSET_PYTHON environment variable
+    2. ASSET_PYTHON=/path/to/python in the project's .env (this computer's own python, not in git)
+    3. platformio.ini  custom_asset_python = python3
+    4. python3 on the PATH
+The board's numbers (flash size and attribute, clock, drawing cycles, tone and sample clock ...) are not the
+converters': platformio.ini (of the env being built)
+    custom_board = lib/Uno/board.json
+    passed to convert.py as --board; an output made for another board, or before board.json changed (the hash of
+    its "// board: ..." line), is converted again
 """
 
 
@@ -54,10 +62,12 @@ MACRO_PATTERN = re.compile(r"\b(FONT|PICTURE|ANIMATION|MELODY)\s*\(\s*" + STRING
 REFERENCE_PATTERN = re.compile(r"\b(font|picture|animation|melody)\s*::\s*(\w+)")
 SOURCE_PATTERN = re.compile(r"^// source: (.+) sha256 ([0-9a-f]{64})$", re.MULTILINE)
 OPTIONS_PATTERN = re.compile(r"^// options: (.*)$", re.MULTILINE)
+BOARD_PATTERN = re.compile(r"^// board: (.+) sha256 ([0-9a-f]{64})$", re.MULTILINE)
 REGISTRY_NAME = "registry.h"
 SELECTED_NAME = "selected.h"
 NOT_ASSETS = {REGISTRY_NAME, SELECTED_NAME}
-IGNORED_OPTIONS = ("--name", "--preview")  # each with a value; they do not change the output
+# each with a value; not part of what an output is made from (--board: compared on its own, "// board: ...")
+IGNORED_OPTIONS = ("--name", "--preview", "--board")
 HEAD_BYTES = 4096  # the lines that say how a .h was made are at its start
 
 
@@ -192,8 +202,45 @@ def get_sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def get_board_values(data):
+    # the values without the "note"s (the same as check.get_board_values of each lib)
+    if isinstance(data, dict):
+        return {key: get_board_values(value) for key, value in data.items() if key != "note"}
+    if isinstance(data, list):
+        return [get_board_values(value) for value in data]
+    return data
+
+
+def get_board_hash(board_path: Path) -> str:
+    data = json.loads(board_path.read_text())
+    return hashlib.sha256(json.dumps(get_board_values(data), sort_keys=True).encode()).hexdigest()
+
+
+def get_ini_board_path(project_dir_path: Path) -> Path | None:
+    # platformio.ini custom_board (the first one), relative to the project; None if not there
+    ini_path = project_dir_path/"platformio.ini"
+    if not ini_path.exists():
+        return None
+    match = re.search(r"^custom_board[ \t]*=[ \t]*(.*?)[ \t]*(?:[ \t];.*)?$", ini_path.read_text(), re.MULTILINE)
+    return get_board_path(project_dir_path, match.group(1)) if match and match.group(1) else None
+
+
+def get_ini_python(project_dir_path: Path) -> str | None:
+    # platformio.ini custom_asset_python (the first one); None if not there
+    ini_path = project_dir_path/"platformio.ini"
+    if not ini_path.exists():
+        return None
+    match = re.search(r"^custom_asset_python[ \t]*=[ \t]*(.*?)[ \t]*(?:[ \t];.*)?$", ini_path.read_text(), re.MULTILINE)
+    return match.group(1) if match and match.group(1) else None
+
+
+def get_board_path(project_dir_path: Path, value: str) -> Path:
+    path = Path(value).expanduser()
+    return path if path.is_absolute() else project_dir_path/path
+
+
 def get_index(lib_dir_path: Path) -> dict:
-    # (source file, options) -> (name, sha256 of the source when converted), from the first lines of output/*.h
+    # (source file, options) -> (name, sha256 of the source when converted, board hash), from the first lines of output/*.h
     index = {}
     for header_path in sorted((lib_dir_path/"output").glob("*.h")):
         if header_path.name in NOT_ASSETS:
@@ -211,12 +258,14 @@ def get_index(lib_dir_path: Path) -> dict:
             options = get_match_options(shlex.split(options_match.group(1)))
         except ValueError:
             continue
-        index[(str(source_path.resolve()), options)] = (header_path.stem, source_match.group(2))
+        board_match = BOARD_PATTERN.search(head)
+        board_hash = board_match.group(2) if board_match else None
+        index[(str(source_path.resolve()), options)] = (header_path.stem, source_match.group(2), board_hash)
     return index
 
 
-def find(use: dict, index: dict, project_dir_path: Path, lib_dir_path: Path) -> tuple[Path | None, str | None, str | None]:
-    # the file the macro names (None: not there), and the output made from it (name, sha256) if there is one
+def find(use: dict, index: dict, project_dir_path: Path, lib_dir_path: Path) -> tuple:
+    # the file the macro names (None: not there), and the output made from it (name, sha256, board hash) if there is one
     args = shlex.split(use["options"])
     options = get_match_options(args)
     given_name = get_given_name(args)
@@ -225,8 +274,8 @@ def find(use: dict, index: dict, project_dir_path: Path, lib_dir_path: Path) -> 
     for path in [file_path] if file_path else candidates:
         entry = index.get((str(path), options))
         if entry and (given_name is None or entry[0] == given_name):
-            return file_path, entry[0], entry[1]
-    return file_path, None, None
+            return file_path, entry[0], entry[1], entry[2]
+    return file_path, None, None, None
 
 
 def write_if_changed(path: Path, text: str) -> bool:
@@ -238,16 +287,35 @@ def write_if_changed(path: Path, text: str) -> bool:
 
 # ---------- converting ----------
 
-def get_python(project_option: str | None) -> str:
-    for candidate in (project_option, os.environ.get("ASSET_PYTHON"), shutil.which("python3"), sys.executable):
+def get_dotenv(project_dir_path: Path) -> dict[str, str]:
+    # KEY=VALUE lines of the project's .env (this computer's settings, not in git); # comments, quotes removed
+    values = {}
+    path = project_dir_path/".env"
+    if not path.exists():
+        return values
+    for line in path.read_text().splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.removeprefix("export ").split("=", 1)
+        values[key.strip()] = value.strip().strip("'\"")
+    return values
+
+
+def get_python(project_dir_path: Path, given: str | None = None, ini_option: str | None = None) -> str:
+    # --python, else ASSET_PYTHON (environment, then .env), else custom_asset_python, else python3
+    for candidate in (given, os.environ.get("ASSET_PYTHON"), get_dotenv(project_dir_path).get("ASSET_PYTHON"),
+                      ini_option, shutil.which("python3"), sys.executable):
         if candidate:
             return str(Path(candidate).expanduser())
     return "python3"
 
 
-def convert(python: str, lib_dir_path: Path, file_path: Path, args: list[str]) -> str:
-    # runs convert.py exactly like by hand; its log (the result is looked up in output/ afterwards)
-    command = [python, str(lib_dir_path/"source"/"convert.py"), str(file_path), "output", *args]
+def convert(python: str, lib_dir_path: Path, file_path: Path, args: list[str], board_path: Path | None) -> str:
+    # runs convert.py exactly like by hand, with the project's board; its log (the result is looked up in output/
+    # afterwards)
+    board_args = ["--board", str(board_path.resolve())] if board_path is not None else []  # convert.py runs in lib/<kind>
+    command = [python, str(lib_dir_path/"source"/"convert.py"), str(file_path), "output", *args, *board_args]
     result = subprocess.run(command, cwd=lib_dir_path, capture_output=True, text=True)
     return (result.stdout + result.stderr).strip()
 
@@ -261,7 +329,7 @@ def get_registry_str(lib: str, namespace: str, macro: str, entries: dict) -> str
         f"#ifndef {guard}",
         f"#define {guard}",
         "",
-        "// written by tools/assets.py before every build (do not edit): each",
+        "// written by src/tools/assets.py before every build (do not edit): each",
         f"// {macro}(path, options) of the program in src/ -> {namespace}::Asset<key>::Type, the struct it was converted to",
         "",
     ]
@@ -279,7 +347,7 @@ def get_selected_str(output_dir_path: Path, guard: str, namespace: str) -> str:
         f"#ifndef {guard}",
         f"#define {guard}",
         "",
-        "// written by tools/assets.py before every build and by convert.py (do not edit): every .h of output/,",
+        "// written by src/tools/assets.py before every build and by convert.py (do not edit): every .h of output/,",
         f"// so a program can use any of them as {namespace}::name; what a program does not use is not compiled in",
         "",
         *[f"#include \"{name}\"" for name in names],
@@ -300,8 +368,13 @@ def update_selected(output_dir_path: Path, namespace: str) -> bool:
 
 # ---------- entry points ----------
 
-def run(project_dir_path: Path, python: str, force: bool = False) -> bool:
-    # True if every macro has its output
+def run(project_dir_path: Path, python: str, force: bool = False, board_path: Path | None = None) -> bool:
+    # True if every macro has its output; board_path: the project's board.json (None: convert.py finds none, an error)
+    project_dir_path = project_dir_path.resolve()
+    if board_path is not None and not board_path.exists():
+        print(f"[ERROR] src/tools/assets.py: the board file {board_path} (custom_board of platformio.ini) does not exist")
+        return False
+    board_hash = get_board_hash(board_path) if board_path is not None else None
     uses = get_uses(project_dir_path/"src")
     ok = True
     for macro, (lib, namespace) in KINDS.items():
@@ -321,13 +394,22 @@ def run(project_dir_path: Path, python: str, force: bool = False) -> bool:
                 print(f"[ERROR] {where}: {label}: the options cannot be read ({e})")
                 ok = False
                 continue
-            file_path, name, sha256 = find(use, index, project_dir_path, lib_dir_path)
+            file_path, name, sha256, made_board = find(use, index, project_dir_path, lib_dir_path)
+            if name is not None and not force and board_hash is not None and made_board != board_hash:
+                if file_path is None:
+                    print(f"[ERROR] {where}: {label}: lib/{lib}/output/{name}.h was made for another board "
+                          f"(or before {board_path.name} changed), and the file is gone: it cannot be converted again")
+                    ok = False
+                    continue
+                print(f"[INFO] {where}: {label}: lib/{lib}/output/{name}.h was made for another board "
+                      f"(or before {board_path.name} changed), converting it again")
+                name = None
             if name is not None and not force:
                 if file_path is None:
                     print(f"[INFO] {where}: {label}: the file is gone, using lib/{lib}/output/{name}.h made from it")
                 elif get_sha256(file_path) != sha256:
                     print(f"[WARNING] {where}: {label}: the file changed since lib/{lib}/output/{name}.h was made from it; "
-                          f"python tools/assets.py --force converts it again")
+                          f"python src/tools/assets.py --force converts it again")
                 entries[get_key(use["path"], use["options"])] = (use, name)
                 continue
             if file_path is None:
@@ -337,10 +419,11 @@ def run(project_dir_path: Path, python: str, force: bool = False) -> bool:
                 continue
             print(f"---------- {label} ----------")
             print(f"[INFO] {where}: {label}: converting into lib/{lib}/output/")
-            log = convert(python, lib_dir_path, file_path, args)
+            log = convert(python, lib_dir_path, file_path, args, board_path)
             index = get_index(lib_dir_path)
-            name = find(use, index, project_dir_path, lib_dir_path)[1]
-            if name is None:
+            _, name, _, made_board = find(use, index, project_dir_path, lib_dir_path)
+            # an old output still there is no success: it must be made for this board now
+            if name is None or (board_hash is not None and made_board != board_hash):
                 print(f"[ERROR] {where}: convert.py failed:\n" + "\n".join(" "*4 + line for line in log.splitlines()))
                 ok = False
                 continue
@@ -380,8 +463,13 @@ def run_in_platformio():
         project_option = env.GetProjectOption("custom_asset_python", "")  # noqa: F821
     except Exception:
         project_option = ""
-    if not run(project_dir_path, get_python(project_option)):
-        print("[ERROR] tools/assets.py: some files could not be converted (see above)")
+    try:
+        board_option = env.GetProjectOption("custom_board", "")  # noqa: F821
+    except Exception:
+        board_option = ""
+    board_path = get_board_path(project_dir_path, board_option) if board_option else None
+    if not run(project_dir_path, get_python(project_dir_path, ini_option=project_option), board_path=board_path):
+        print("[ERROR] src/tools/assets.py: some files could not be converted (see above)")
         env.Exit(1)  # noqa: F821
 
 
@@ -391,20 +479,22 @@ def main():
     parser.add_argument("--force", action="store_true", help="convert the files of the program in src/ again")
     parser.add_argument("--unused", action="store_true",
                         help="list the outputs no program in src/ uses (.bak programs count); nothing is deleted")
-    parser.add_argument("--python", help="the python that runs the converters (default: ASSET_PYTHON, python3)")
+    parser.add_argument("--python", help="the python that runs the converters (default: ASSET_PYTHON of the environment or .env, custom_asset_python, python3)")
     args = parser.parse_args()
-    project_dir_path = Path(__file__).resolve().parent.parent
+    project_dir_path = Path(__file__).resolve().parents[2]
     if args.unused:
         print_unused(project_dir_path)
         return
-    sys.exit(0 if run(project_dir_path, get_python(args.python), args.force) else 1)
+    sys.exit(0 if run(project_dir_path, get_python(project_dir_path, args.python, get_ini_python(project_dir_path)), args.force, get_ini_board_path(project_dir_path)) else 1)
 
 
 if __name__ == "__main__":
     main()
 else:
+    # inside SCons (extra_scripts) Import is given; a NameError inside run_in_platformio() is a real error, not this
     try:
         Import  # noqa: F821 (only inside SCons)
-        run_in_platformio()
     except NameError:
         pass
+    else:
+        run_in_platformio()

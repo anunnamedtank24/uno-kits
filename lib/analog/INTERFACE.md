@@ -4,7 +4,7 @@
 |---|---|
 | `AnalogPin`：`init()`、`readAnalog()`…（`Uno::UnoAnalogPin<A0>`）；搖桿的按鈕另外要一個 `Pin`（`Uno::UnoInputPin<PIN, true>`） | `analog::Potentiometer`、`Photoresistor`、`KY023`（搖桿）、`KY013`（溫度）、`KY037`（聲音）：平滑後的值、百分比或任意範圍、像開關的門檻、溫度、音量和拍手 |
 
-給要寫新套件、換主板或換零件的人；用法、接線、注意事項見 [README.md](README.md)。
+給要寫新套件、換主板或換零件的人；用法、接線、注意事項見 [讀我.md](讀我.md)。
 
 ## 前提條件
 

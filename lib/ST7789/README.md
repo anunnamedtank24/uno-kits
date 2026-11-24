@@ -1,80 +1,82 @@
 # ST7789
 
-| 需要 | 得到 |
+English | [中文](讀我.md)
+
+| Needs | Gives |
 |---|---|
-| 一個 `Bus`（SPI）：`init(blk)`、`cmdMode()`、`dataMode()`、`write8()`、`write16()`…（`Uno::UnoST7789<DC, RES, CS, BLK>`）；一個 `ColorFormat`（`color::RGB565`、`RGB888`、`RGB444`…） | `ST7789::M130T`：一個 Screen（`graphics`、`image`、`video` 都能畫），12 / 16 / 18 bit 顏色，`fillWindow`、`writeWindow`、背光 |
+| a `Bus` (SPI): `init(blk)`, `cmdMode()`, `dataMode()`, `write8()`, `write16()`… (`Uno::UnoST7789<DC, RES, CS, BLK>`); a `ColorFormat` (`color::RGB565`, `RGB888`, `RGB444`…) | `ST7789::M130T`: a Screen (`graphics`, `image`, `video` all draw on it), 12 / 16 / 18 bit colors, `fillWindow`, `writeWindow`, backlight |
 
-「需要」是介面（duck typing），括號裡是這個專案現成的實作，換主板只要換它們。開發者看的細節（前提條件、介面需求、每個函式、參數、資源）在 [INTERFACE.md](INTERFACE.md)。
+"Needs" are interfaces (duck typing); in parentheses the ready implementations of this project, and another board only replaces them. The details for developers (prerequisites, interface requirements, every function, parameters, resources) are in [INTERFACE.md](INTERFACE.md).
 
-ST7789 彩色螢幕控制器的驅動，`namespace ST7789`。它本身就是 Screen，`graphics`、`image`、`video` 都畫在它上面。
+The driver of the ST7789 color screen controller, `namespace ST7789`. It is a Screen itself; `graphics`, `image` and `video` all draw on it.
 
-## 用法
+## Usage
 
 ```cpp
 #include "Uno_ST7789.h"
-#include "ST7789.h"          // 只 include 入口，它包含 basic/、tool/ 和所有模組
+#include "ST7789.h"          // include only the entry: it includes basic/, tool/ and every module
 #include "color.h"
 
 constexpr uint8_t DC_PIN = 8;
 constexpr uint8_t RES_PIN = 10;
 constexpr uint8_t BLK_PIN = 9;
-using Bus = Uno::UnoST7789<DC_PIN, RES_PIN, Uno::NONE, BLK_PIN>;   // M130T 沒有 CS
-using ScreenColor = color::RGB565;               // 16 bit，最快；RGB888 / RGB666 = 18 bit，RGB444 = 12 bit
+using Bus = Uno::UnoST7789<DC_PIN, RES_PIN, Uno::NONE, BLK_PIN>;   // the M130T has no CS
+using ScreenColor = color::RGB565;               // 16 bit, fastest; RGB888 / RGB666 = 18 bit, RGB444 = 12 bit
 ST7789::M130T<Bus, ScreenColor> screen;
 
 void setup() {
-    screen.init();                                         // Bus init + 重置 + 初始化（依 ScreenColor 設 COLMOD）
-    screen.fillWindow(0, 0, 240, 240, ScreenColor::RED);   // 整個螢幕填紅色
+    screen.init();                                         // Bus init + reset + initialization (COLMOD from ScreenColor)
+    screen.fillWindow(0, 0, 240, 240, ScreenColor::RED);   // fill the whole screen with red
 }
 ```
 
-### 顏色模式
+### Color modes
 
-| `ScreenColor` | 面板模式 | 一個像素送 | 速度 |
+| `ScreenColor` | Panel mode | Sent a pixel | Speed |
 |---|---|---|---|
-| `color::RGB565`、`BGR565` | 16 bit（COLMOD 0x55；BGR 由 MADCTL 對調） | 2 bytes | 最快（約 44 週期一個像素） |
-| `color::RGB666`、`RGB888`、`BGR888`… | 18 bit（COLMOD 0x66） | 3 bytes | 約慢 1.5 倍；顏色最細（每色 64 階） |
-| `color::RGB444` | 12 bit（COLMOD 0x53） | 1.5 bytes（兩個像素 3 bytes） | 傳的最少；顏色最粗（每色 16 階） |
-| 其他（`RGB332`、`BW`） | 沒有 | — | 編譯錯誤 |
+| `color::RGB565`, `BGR565` | 16 bit (COLMOD 0x55; BGR swapped by MADCTL) | 2 bytes | fastest (about 44 cycles a pixel) |
+| `color::RGB666`, `RGB888`, `BGR888`… | 18 bit (COLMOD 0x66) | 3 bytes | about 1.5 times slower; the finest colors (64 levels each) |
+| `color::RGB444` | 12 bit (COLMOD 0x53) | 1.5 bytes (3 bytes for two pixels) | the least sent; the coarsest colors (16 levels each) |
+| others (`RGB332`, `BW`) | none | — | compile error |
 
-`graphics`、`font`、`image`、`video` 都從螢幕拿顏色格式（`Screen::ColorFormat`），不用另外給。
+`graphics`, `font`, `image` and `video` all take the color format from the screen (`Screen::ColorFormat`); nothing else to give.
 
-完整的例子：`src/week_3_ST7789_DS18B20_graphics_color_font_image_video/tests/1_screen.cpp`。
+Complete example: `src/week_3_ST7789_DS18B20_graphics_color_font_image_video/tests/1_screen.cpp`.
 
-## 接線
+## Wiring
 
-M130T（沒有 CS）接 UNO：
+The M130T (no CS) on the UNO:
 
-| 模組 | UNO |
+| Module | UNO |
 |---|---|
 | GND | GND |
 | VCC | 3.3V |
-| SCL | D13（SPI SCK，固定） |
-| SDA | D11（SPI MOSI，固定） |
+| SCL | D13 (SPI SCK, fixed) |
+| SDA | D11 (SPI MOSI, fixed) |
 | RES | D10 |
 | DC | D8 |
-| BLK | D9（PWM，可以調亮度） |
+| BLK | D9 (PWM, brightness can be set) |
 
-## 輸入限制
+## Input limits
 
-| 項目 | 範圍 | 超出時 |
+| Item | Range | Beyond it |
 |---|---|---|
-| `fillWindow`、`writeWindow` 的 x、y | 任意 `int16_t`，可以在螢幕外 | 裁切 |
-| 寬、高 | > 0 | 不畫 |
-| `writeWindow` 的陣列 | 至少 w×h 個，一列一列 | 不檢查：讀到別的 RAM |
-| `setWindow(x0, y0, x1, y1)` | 0 ≤ x0 ≤ x1 < width，0 ≤ y0 ≤ y1 < height | 不檢查：畫面錯誤 |
-| `init(blk)` | 背光 0 ～ 255 | — |
-| `setOffset(x, y)` | 面板在 240×320 記憶體裡的位置 | 不檢查：畫面錯誤 |
-| 顏色 | `ColorFormat` 是 12 bit（R4 G4 B4）、16 bit（R5 G6 B5，RGB 或 BGR）、18 / 24 bit（每色 ≤ 8 bit） | 編譯錯誤 |
-| `Datasheet` 的指令參數 | 見 datasheet 第 9 章 | 不檢查：照原樣送出 |
+| x, y of `fillWindow`, `writeWindow` | any `int16_t`, may be off the screen | clipped |
+| width, height | > 0 | not drawn |
+| the array of `writeWindow` | at least w×h, row by row | not checked: other RAM is read |
+| `setWindow(x0, y0, x1, y1)` | 0 ≤ x0 ≤ x1 < width, 0 ≤ y0 ≤ y1 < height | not checked: a broken picture |
+| `init(blk)` | backlight 0 ~ 255 | — |
+| `setOffset(x, y)` | the panel's place in the 240×320 memory | not checked: a broken picture |
+| colors | `ColorFormat` of 12 bit (R4 G4 B4), 16 bit (R5 G6 B5, RGB or BGR), 18 / 24 bit (≤ 8 bit a color) | compile error |
+| command arguments of `Datasheet` | see chapter 9 of the datasheet | not checked: sent as they are |
 
-## 注意事項
+## Caveats
 
-| 情況 | 結果 | 做法 |
+| Situation | Result | What to do |
 |---|---|---|
-| `madctl()` 旋轉畫面（MV、MX、MY） | `width()`、`height()`、偏移量不會跟著變，裁切和座標會錯 | 旋轉 90° 時自己交換寬高、重設 `setOffset` |
-| 自己呼叫 `colmod()` 或 `madctl()` | 跟 `ColorFormat` 不一致，顏色錯亂 | 換顏色模式就換 `ColorFormat`；`madctl` 要保留 `MADCTL_ORDER`（BGR565 的 0x08） |
-| NVM 指令（`nvmSet` 等） | **燒錄面板的一次性記憶體，改不回來** | 除非確定，否則不要呼叫（宣告旁有警告） |
-| 讀取指令（`ramRd()`、`rddid()`…） | UNO 的 Bus 沒有讀取線，回傳 0 | — |
-| 大面積變化 | 可能看到畫面撕裂：M130T 沒有拉出 TE 腳，沒辦法跟刷新同步 | 每次只改小範圍 |
-| 換別的模組 | `M130T` 固定 240×240 | 在 `module/` 加一個檔案，見 [module/README.md](module/README.md) |
+| `madctl()` rotating the picture (MV, MX, MY) | `width()`, `height()` and the offsets do not follow, clipping and coordinates go wrong | when rotating by 90°, swap width and height yourself and set `setOffset` again |
+| calling `colmod()` or `madctl()` yourself | no longer matches the `ColorFormat`, the colors go wrong | for another color mode, change the `ColorFormat`; `madctl` must keep `MADCTL_ORDER` (0x08 for BGR565) |
+| NVM commands (`nvmSet` and others) | **burn the panel's one-time memory, cannot be undone** | never call them unless you are sure (warnings next to their declarations) |
+| read commands (`ramRd()`, `rddid()`…) | the UNO's Bus has no read line, they return 0 | — |
+| changing large areas | tearing may show: the M130T has no TE pin, so there is no way to sync with the refresh | change only small areas at a time |
+| another module | `M130T` is fixed at 240×240 | add a file in `module/`, see [module/README.md](module/README.md) |

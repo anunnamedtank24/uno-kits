@@ -1,191 +1,274 @@
 # L298N
 
-| 需要 | 得到 |
+English | [中文](讀我.md)
+
+| Needs | Gives |
 |---|---|
-| EN 拔掉跳線帽：IN 用輸出腳（`Uno::UnoOutputPin<PIN>`）、EN 用 PWM 腳（`Uno::UnoPwmPin<PIN>`） | `L298N::L298NBoard`：兩個 H 橋 `Board::A`、`Board::B` |
-| EN 接著跳線帽：IN 用 PWM 腳（`Uno::UnoPwmPin<PIN>`），或 `L298N::Ground`（接 GND） | `L298N::L298NBoardJumpers`：同上，速度用 IN 的 PWM |
-| 上面的 `Board::A`、`Board::B` | `L298N::DCMotor`（速度、漸變、煞車、死區）、`Stepper`（步進馬達）、`TwoWheelCar`（兩輪車，動作排隊執行） |
+| each IN and EN: a PWM pin (`Uno::UnoPwmPin<PIN>`), an output pin (`Uno::UnoOutputPin<PIN>`), or not on the UNO: `L298N::Ground` (on GND), `L298N::Supply` (on +5V; the EN jumper is `L298N::EnableJumper`) | `L298N::L298NBoard`: two H-bridges `Board::A`, `Board::B`, what they can do decided by the wiring (at compile time); `L298NBoardJumpers` (EN jumpers on), `L298NBoardParallel` (both channels in parallel as one) |
+| the `Board::A`, `Board::B` above | `L298N::DCMotor` (speed, ramp, brake, dead zone), `Stepper` (stepper motors), `TwoWheelCar` (two-wheeled car, moves queued) |
 
-「需要」是介面（duck typing），括號裡是這個專案現成的實作，換主板只要換它們。開發者看的細節（前提條件、介面需求、每個函式、參數、資源）在 [INTERFACE.md](INTERFACE.md)。
+"Needs" are interfaces (duck typing); in parentheses the ready implementations of this project, and another board only replaces them. The details for developers (prerequisites, interface requirements, every function, parameters, resources) are in [INTERFACE.md](INTERFACE.md).
 
-L298N 雙 H 橋馬達驅動，`namespace L298N`。可以接兩顆直流馬達，或一顆雙極步進馬達。
+The L298N dual H-bridge motor driver, `namespace L298N`. It drives two DC motors, or one bipolar stepper.
 
-## 用法
+## Usage
 
 ```cpp
 #include "Uno_pin.h"
 #include "L298N.h"
 
-constexpr uint8_t ENA_PIN = 5;      // PWM 腳
+constexpr uint8_t ENA_PIN = 5;      // a PWM pin
 constexpr uint8_t IN1_PIN = A0;
 constexpr uint8_t IN2_PIN = A1;
 constexpr uint8_t IN3_PIN = A2;
 constexpr uint8_t IN4_PIN = A3;
-constexpr uint8_t ENB_PIN = 6;      // PWM 腳
+constexpr uint8_t ENB_PIN = 6;      // a PWM pin
 
 using Board = L298N::L298NBoard<Uno::UnoPwmPin<ENA_PIN>,
                                 Uno::UnoOutputPin<IN1_PIN>, Uno::UnoOutputPin<IN2_PIN>,
                                 Uno::UnoOutputPin<IN3_PIN>, Uno::UnoOutputPin<IN4_PIN>,
                                 Uno::UnoPwmPin<ENB_PIN>>;
-L298N::DCMotor<Board::A> left;      // OUT1、OUT2
-L298N::DCMotor<Board::B> right;     // OUT3、OUT4
+L298N::DCMotor<Board::A> left;      // OUT1, OUT2
+L298N::DCMotor<Board::B> right;     // OUT3, OUT4
 
 void setup() {
     left.init();
     right.init();
-    left.setSpeed(200);             // 正轉，經過漸變（預設 300 ms 從 0 到 255）
+    left.setSpeed(200);             // forward, through the ramp (by default 300 ms from 0 to 255)
 }
 
 void loop() {
-    left.update();                  // 每次 loop 都要呼叫，不會等
+    left.update();                  // call it every loop, it never waits
     right.update();
 }
 ```
 
-步進馬達：
+A stepper:
 
 ```cpp
-L298N::Stepper<Board::A, Board::B> motor;   // 線圈 A 接 OUT1、OUT2，線圈 B 接 OUT3、OUT4
+L298N::Stepper<Board::A, Board::B> motor;   // coil A on OUT1, OUT2, coil B on OUT3, OUT4
 
 motor.init();
-motor.setSpeed(200);                // 步 / 秒
-motor.move(400);                    // 往前 400 步；loop 裡呼叫 motor.update()
+motor.setSpeed(200);                // steps / s
+motor.move(400);                    // 400 steps forward; call motor.update() in loop
 ```
 
-完整的例子：`src/week_7_L298N/tests/1_one_motor.cpp`（一顆）、`2_two_motors.cpp`（兩顆）、`3_voltage.cpp`（給馬達幾伏特）、`4_pwm.cpp`（PWM 是什麼）、`5_stepper.cpp`（步進）、`6_car.cpp`（兩輪車）、`7_background_remote.cpp`（遙控 + 背景執行）。
+Complete examples: `src/week_7_L298N/tests/1_one_motor.cpp` (one), `2_two_motors.cpp` (two), `3_voltage.cpp` (how many volts the motor gets), `4_pwm.cpp` (what PWM is), `5_stepper.cpp` (stepper), `6_car.cpp` (two-wheeled car, jumpers on), `7_background_remote.cpp` (remote + background), `8_car_enable.cpp` (two-wheeled car, speed on ENA, ENB).
 
-跳線帽不拔（EN 一直開）：
+## Every wiring
 
-| 接法 | 用 | 能做的 |
+Each channel has three inputs: IN1, IN2 (direction) and EN (on / off). Each can go to a PWM pin of the UNO, a plain pin, or not to the UNO at all but straight to GND / +5V; each position of `L298NBoard` takes the matching type, what can be done is decided at compile time, and what cannot be done is replaced by the closest thing (see the last column below).
+
+| This input | Type | Takes no pin |
 |---|---|---|
-| ENA、ENB 跳線帽接著，IN 接普通數位腳 | `L298NBoard<L298N::EnableJumper, IN1, IN2, IN3, IN4, L298N::EnableJumper>` | 只有全速、正反轉、煞車；**不能滑行**（`coast()` 會變成煞車） |
-| ENA、ENB 跳線帽接著，IN1 ～ IN4 都接 PWM 腳 | `L298NBoardJumpers<IN1, IN2, IN3, IN4>`（4 個 `UnoPwmPin`） | 可以調速度（「驅動 / 煞車」交替的 PWM），**不能滑行** |
+| a PWM pin (3, 5, 6, 9, 10, 11) | `Uno::UnoPwmPin<PIN>` | |
+| a plain pin | `Uno::UnoOutputPin<PIN>` | |
+| on GND (IN only) | `L298N::Ground` | ✅ |
+| on +5V | `L298N::Supply`; the EN jumper on is the same thing: `L298N::EnableJumper` | ✅ |
 
-### IN 接 GND（`L298N::Ground`）
+Common wirings of one channel (the other channel may be the same or different):
 
-IN 不接 UNO、直接接 GND 時，在那個位置放 `L298N::Ground`：一直是 LOW，不佔腳位。
+| EN | IN1, IN2 | Pins | Can | Type |
+|---|---|---|---|---|
+| PWM pin | pin, pin | 3 | both ways, speed, brake, coast | `L298NBoard<UnoPwmPin, UnoOutputPin, UnoOutputPin, …>` |
+| PWM pin | +5V, GND | 1 | one way, speed, coast (no brake) | `L298NBoard<UnoPwmPin, Supply, Ground, …>` |
+| PWM pin | pin, GND | 2 | one way, speed, brake, coast | `L298NBoard<UnoPwmPin, UnoOutputPin, Ground, …>` |
+| pin | pin, pin | 3 | both ways, full speed only, brake, coast | `L298NBoard<UnoOutputPin, UnoOutputPin, UnoOutputPin, …>` |
+| jumper | PWM pin, PWM pin | 2 | both ways, speed, brake (no coast) | `L298NBoardJumpers<UnoPwmPin, UnoPwmPin, …>` |
+| jumper | PWM pin, GND | 1 | one way, speed, brake | `L298NBoardJumpers<UnoPwmPin, Ground, …>` |
+| jumper | pin, pin | 2 | both ways, full speed only, brake | `L298NBoardJumpers<UnoOutputPin, UnoOutputPin, …>` |
+
+| Cannot do | Becomes |
+|---|---|
+| the other way (an IN on GND or +5V) | brake; coast when braking is not possible either |
+| coast (EN on +5V or the jumper) | brake |
+| brake (one IN on +5V, the other on GND) | coast |
+| speed (no PWM pin) | full speed: any speed that is not 0 is 255 |
+
+- **Which pin sets the speed**: EN when it is a PWM pin ("drive / coast" alternating, the smoothest, and coasting works); else the IN that goes HIGH ("drive / brake" alternating); else the IN that goes LOW, with the duty inverted.
+- **Known at compile time**: `Board::A::CAN_FORWARD`, `CAN_BACKWARD`, `BOTH_WAYS`, `CAN_BRAKE`, `CAN_COAST`, `HAS_SPEED`, `PIN_COUNT` (how many pins it takes).
+- **Compile errors**: EN on GND (the channel is always off), IN1 and IN2 both on GND or both on +5V (the motor never turns), none of the three on the UNO (nothing to control).
+- The time (`nowMs`, `nowUs`) comes by itself from the first pin connected to the UNO.
+
+### IN on GND (`L298N::Ground`)
 
 ```cpp
-// IN2、IN4 接 GND，只用兩隻 PWM 腳（跳線帽接著）
+// IN2, IN4 on GND, only two PWM pins (jumpers on)
 constexpr uint8_t IN1_PIN = 5;
 constexpr uint8_t IN3_PIN = 3;
 using Board = L298N::L298NBoardJumpers<Uno::UnoPwmPin<IN1_PIN>, L298N::Ground, Uno::UnoPwmPin<IN3_PIN>, L298N::Ground>;
 ```
 
-| 接 GND 的 | 馬達能 | 反方向時 |
+| On GND | The motor can | The other way |
 |---|---|---|
-| IN2（或 IN4） | 只能 IN1 - IN2 為正的方向 | 煞車 |
-| IN1（或 IN3） | 只能 IN1 - IN2 為負的方向 | 煞車 |
-| IN1 和 IN2 都接 | 不能轉 | 編譯錯誤 |
+| IN2 (or IN4) | only the way where IN1 - IN2 is positive | brakes |
+| IN1 (or IN3) | only the way where IN1 - IN2 is negative | brakes |
+| both IN1 and IN2 | not turn | compile error |
 
-- **省腳位**：每顆馬達少一隻腳。只會往前的車（不倒車、不原地旋轉）兩顆馬達只要 2 隻 PWM 腳。
-- **兩輪車**：`forward`、`pivotLeft` / `pivotRight`、往前的 `arc` 都可以；`backward`、`spin` 會讓要反轉的輪子煞車。
-- `Board::A::BOTH_WAYS`：兩個方向都能轉時是 true（編譯期常數）。
-- 時間（`nowMs`、`nowUs`）會自動改從沒接 GND 的那隻腳拿。
+- **Saves pins**: one pin less a motor. A car that only goes forward (no backing up, no spinning in place) needs only 2 PWM pins for two motors.
+- **Two-wheeled car**: `forward`, `pivotLeft` / `pivotRight` and forward `arc`s all work; `backward` and `spin` brake the wheel that would have to go backward.
 
-## 接線
+### IN on +5V (`L298N::Supply`)
 
-| L298N | UNO | 說明 |
+```cpp
+// IN1, IN3 on +5V, IN2, IN4 on GND, jumpers off: only one PWM pin (EN) a motor
+constexpr uint8_t ENA_PIN = 5;
+constexpr uint8_t ENB_PIN = 6;
+using Board = L298N::L298NBoard<Uno::UnoPwmPin<ENA_PIN>, L298N::Supply, L298N::Ground,
+                                L298N::Supply, L298N::Ground, Uno::UnoPwmPin<ENB_PIN>>;
+```
+
+- The direction is fixed, EN sets the speed and coasting works; but the two INs are never equal, so it **cannot brake** (every stop rolls out).
+- One IN on +5V, the other on a pin of the UNO: that pin LOW is forward, HIGH is a brake (both ends on the supply); no backward.
+
+### Both channels in parallel (`L298NBoardParallel`)
+
+A bigger motor (over 2 A) can be driven by both channels together, up to about 3 A. Wired as the L298N datasheet says, half-bridge 1 with 4 and 2 with 3:
+
+| Joined | To |
+|---|---|
+| OUT1 + OUT4 | one wire of the motor |
+| OUT2 + OUT3 | the other wire of the motor |
+| IN1 + IN4 | the `In1` pin |
+| IN2 + IN3 | the `In2` pin |
+| ENA + ENB | the `Enable` pin (or both jumpers on: `EnableJumper`) |
+
+```cpp
+using Board = L298N::L298NBoardParallel<Uno::UnoPwmPin<ENA_PIN>, Uno::UnoOutputPin<IN1_PIN>, Uno::UnoOutputPin<IN2_PIN>>;
+L298N::DCMotor<Board::Motor> motor;
+```
+
+### Supply and the 5V-EN jumper
+
+The last two parameters of `L298NBoard`, `L298NBoardJumpers`, `L298NBoardParallel` can give the supply, checked at compile time:
+
+```cpp
+constexpr uint16_t SUPPLY_MV = 7400;    // the voltage on +12V (e.g. two lithium cells); 0 = not checked
+constexpr bool JUMPER_5V = true;        // the 5V-EN jumper on
+using Board = L298N::L298NBoard<…, Uno::UnoPwmPin<ENB_PIN>, SUPPLY_MV, JUMPER_5V>;
+```
+
+| 5V-EN jumper | +5V terminal | When |
 |---|---|---|
-| ENA | **D5** | Timer0 PWM，976 Hz（跳線帽拔掉） |
-| IN1 | **A0** | 當數位腳用（`UnoOutputPin<14>`） |
+| **on** (`JUMPER_5V = true`, the default) | the board's regulator (78M05) **outputs** 5 V, which may feed the UNO's 5V pin (about 0.5 A at most) | VS about 7 ~ 12 V |
+| **off** (`JUMPER_5V = false`) | 5 V **input**: connect the UNO's 5V; the chip's logic needs 5 V | VS above 12 V, or below about 7 V |
+
+| Situation | Result |
+|---|---|
+| `SUPPLY_MV` above 35000 | compile error: the board's capacitors are 35 V parts |
+| jumper on, `SUPPLY_MV` above 12000 | compile warning: the regulator gets too hot |
+| jumper on, `SUPPLY_MV` below 7000 | compile warning: the regulator cannot make 5 V |
+| `SUPPLY_MV` below 5000 | compile warning: after the drop of about 2 V the motors get almost nothing |
+
+`Board::FIVE_V_IS_OUTPUT`: whether +5V is an output (the jumper on).
+
+## Wiring
+
+| L298N | UNO | Explanation |
+|---|---|---|
+| ENA | **D5** | Timer0 PWM, 976 Hz (jumper removed) |
+| IN1 | **A0** | used as a digital pin (`UnoOutputPin<14>`) |
 | IN2 | **A1** | `UnoOutputPin<15>` |
 | IN3 | **A2** | `UnoOutputPin<16>` |
 | IN4 | **A3** | `UnoOutputPin<17>` |
-| ENB | **D6** | Timer0 PWM（跳線帽拔掉） |
-| GND | GND | 跟電池的 - 接在一起 |
-| +12V | — | 電池的 +（6 ～ 12 V） |
-| +5V | 不接，或接 UNO 的 5V 供電 | 5V-EN 跳線接著 |
+| ENB | **D6** | Timer0 PWM (jumper removed) |
+| GND | GND | joined with the battery's - |
+| +12V | — | the battery's + (6 ~ 12 V) |
+| +5V | nothing, or feeding the UNO's 5V | 5V-EN jumper on |
 
-- **為什麼是 D5、D6**：D9、D10 留給蜂鳴器（Timer1）、D3、D11 是 Timer2（D11 被 OLED 用了）。D5、D6 的 Timer0 也管 `millis()`，但只是讀它，不會改頻率，所以沒問題。
-- **為什麼 IN 用 A0 ～ A3**：類比腳也能當數位腳，這樣 D2（紅外線）、D4（HW-006）、D7、D8（HC-SR04）、D9（蜂鳴器）、D11、D13（OLED）都還空著，以後可以一起接。
+- **Why D5, D6**: D9, D10 are kept for the buzzer (Timer1), D3, D11 are Timer2 (D11 is taken by the OLED). Timer0 of D5, D6 also runs `millis()`, but it is only read, its frequency is never changed, so that is fine.
+- **Why the INs on A0 ~ A3**: analog pins also work as digital pins, so D2 (infrared), D4 (HW-006), D7, D8 (HC-SR04), D9 (buzzer), D11, D13 (OLED) all stay free to be connected together later.
 
-## 名稱
+## Names
 
-| 名稱 | 是什麼 |
+| Name | What it is |
 |---|---|
-| **L298N** | 晶片：ST 的雙 H 橋（Multiwatt15 封裝，15 隻腳），放在板子的大散熱片上。用晶片命名，所以叫 `L298N/` |
-| **H 橋** | 4 個開關圍著馬達排成 H 形，交叉導通就能讓電流往兩個方向流，馬達可以正轉、反轉 |
-| **紅色 L298N 模組** | 實際買到的板子（常印 HW-095，不一定有），放在 `module/L298N_board.h` |
-| 不是這個函式庫的 | 「L298N mini」小藍板其實是 MX1508 / L9110S 等別的晶片，腳位和用法不同 |
+| **L298N** | the chip: ST's dual H-bridge (Multiwatt15 package, 15 pins), on the board's big heat sink. Named after the chip, so the folder is `L298N/` |
+| **H-bridge** | 4 switches around the motor in an H shape; closing them crosswise lets the current flow either way, so the motor turns forward or backward |
+| **the red L298N module** | the board you actually buy (often printed HW-095, not always), in `module/L298N_board.h` |
+| not this library | the small blue "L298N mini" boards are really other chips such as the MX1508 / L9110S, with different pins and usage |
 
-## 板子的腳位
+## The board's pins
 
 ```
         ┌──────────────────────────────────────┐
  OUT1 ──┤                                      ├── OUT4
- OUT2 ──┤             L298N 晶片               ├── OUT3
-        │             （散熱片）                │
-        │  [5V-EN 跳線]                         │
+ OUT2 ──┤             L298N chip               ├── OUT3
+        │             (heat sink)              │
+        │  [5V-EN jumper]                       │
         │  +12V   GND   +5V      ENA IN1 IN2 IN3 IN4 ENB
         └───┬──────┬─────┬────────┬───┬───┬───┬───┬───┬──┘
-          螺絲端子（電源）          排針（ENA、ENB 上有跳線帽）
+          screw terminals (power)   header pins (jumpers on ENA, ENB)
 ```
 
-（板子的排列各家不同，以上只是常見的樣子；**照板子上印的字接**。）
+(The layout differs between makers; the above is only a common one. **Wire by what is printed on the board.**)
 
-| 腳 | 種類 | 功能 | 接到 |
+| Pin | Kind | Function | Goes to |
 |---|---|---|---|
-| **OUT1、OUT2** | 螺絲端子 | 通道 A 的輸出 | 馬達 A 的兩條線（步進：線圈 A） |
-| **OUT3、OUT4** | 螺絲端子 | 通道 B 的輸出 | 馬達 B 的兩條線（步進：線圈 B） |
-| **+12V**（VS） | 螺絲端子 | 馬達的電源，**5 ～ 35 V**（名字叫 12V，但不一定要 12 V） | 電池 / 變壓器的 +。**不要接 UNO 的 5V** |
-| **GND** | 螺絲端子 | 共同的地 | 電池的 - **和 UNO 的 GND，兩個都要接** |
-| **+5V** | 螺絲端子 | 5V-EN 跳線**接著**、VS ≤ 12 V：板上穩壓（78M05）**輸出** 5 V | 可以接 UNO 的 5V 腳供電（最多約 0.5 A；UNO 同時接 USB 也沒關係） |
-| | | 5V-EN 跳線**拔掉**（VS > 12 V 時一定要拔）：5 V **輸入** | 從 UNO 的 5V 接過來，晶片的邏輯電路要 5 V |
-| **ENA** | 排針 | 通道 A 開 / 關，用 PWM 調速度 | 跳線帽接著：一直開（全速）；拔掉：接 PWM 腳，例如 **D5** |
-| **IN1、IN2** | 排針 | 通道 A 的方向 | 數位腳，例如 **A0、A1** |
-| **IN3、IN4** | 排針 | 通道 B 的方向 | 數位腳，例如 **A2、A3** |
-| **ENB** | 排針 | 通道 B 開 / 關，用 PWM 調速度 | 跳線帽接著：一直開；拔掉：接 PWM 腳，例如 **D6** |
+| **OUT1, OUT2** | screw terminal | output of channel A | the two wires of motor A (stepper: coil A) |
+| **OUT3, OUT4** | screw terminal | output of channel B | the two wires of motor B (stepper: coil B) |
+| **+12V** (VS) | screw terminal | the motors' supply, **5 ~ 35 V** (named 12V, but 12 V is not required) | the battery / adapter's +. **Not the UNO's 5V** |
+| **GND** | screw terminal | common ground | the battery's - **and the UNO's GND, both** |
+| **+5V** | screw terminal | 5V-EN jumper **on**, VS ≤ 12 V: the board's regulator (78M05) **outputs** 5 V | may feed the UNO's 5V pin (about 0.5 A at most; fine with the UNO on USB at the same time) |
+| | | 5V-EN jumper **off** (always off when VS > 12 V): 5 V **input** | brought from the UNO's 5V; the chip's logic needs 5 V |
+| **ENA** | header pin | channel A on / off, speed by PWM | jumper on: always on; removed: a PWM pin (e.g. **D5**) or a plain pin (on / off only) |
+| **IN1, IN2** | header pin | direction of channel A | pins (e.g. **A0, A1**; PWM pins work too), or GND / +5V |
+| **IN3, IN4** | header pin | direction of channel B | pins (e.g. **A2, A3**), or GND / +5V |
+| **ENB** | header pin | channel B on / off, speed by PWM | jumper on: always on; removed: a PWM pin (e.g. **D6**) or a plain pin |
 
-- **一定要共地**：IN 和 EN 的 HIGH / LOW 是相對 GND 量的，沒有共地，L298N 看不懂 UNO 的訊號。
-- **跳線帽**：ENA、ENB 上的跳線帽把 EN 接到 5 V。要調速度就拔掉，接 PWM 腳；拔下來的帽子收好。
-- **電流檢測（SENSE A、SENSE B）**：晶片有，但這塊板子直接接到 GND，所以量不到電流。
-- **保護二極體**：板上有 8 顆，馬達斷電時的反衝電壓不會打壞晶片。
-- **邏輯電位**：IN、EN 的 HIGH 只要 2.3 V 以上，3.3 V 和 5 V 的板子都能用。
+- **The grounds must be joined**: the HIGH / LOW of IN and EN are measured against GND; without a common ground the L298N cannot read the UNO's signals.
+- **Jumpers**: the jumpers on ENA, ENB connect EN to 5 V. Remove them for speed control or coasting and connect pins of the UNO; keep the removed caps.
+- **Current sensing (SENSE A, SENSE B)**: the chip has it, but this board connects them straight to GND, so the current cannot be measured.
+- **Protection diodes**: the board has 8, so the kickback voltage when a motor is switched off does not damage the chip.
+- **Logic levels**: HIGH on IN and EN needs only 2.3 V or more, so 3.3 V and 5 V boards both work.
 
-## 真值表
+## Truth table
 
-| EN | IN1 | IN2 | OUT1 | OUT2 | 馬達 | 函式 |
+| EN | IN1 | IN2 | OUT1 | OUT2 | Motor | Function |
 |---|---|---|---|---|---|---|
-| HIGH | HIGH | LOW | + | - | **正轉** | `drive(> 0)` |
-| HIGH | LOW | HIGH | - | + | **反轉** | `drive(< 0)` |
-| HIGH | LOW | LOW | - | - | **煞車**：兩端短路，馬達自己的發電把自己擋住，停得快 | `brake()` |
-| HIGH | HIGH | HIGH | + | + | 煞車（一樣） | — |
-| LOW | 任意 | 任意 | 斷開 | 斷開 | **滑行**：什麼都不接，慢慢停 | `coast()`、`drive(0)` |
-| PWM | HIGH | LOW | | | 正轉，速度 = 工作週期 | `drive(duty)` |
+| HIGH | HIGH | LOW | + | - | **forward** | `drive(> 0)` |
+| HIGH | LOW | HIGH | - | + | **backward** | `drive(< 0)` |
+| HIGH | LOW | LOW | - | - | **brake**: both ends shorted, the motor's own generated voltage holds it back, it stops fast | `brake()` |
+| HIGH | HIGH | HIGH | + | + | brake (the same) | `brake()` (with an IN on +5V) |
+| LOW | any | any | open | open | **coast**: nothing connected, it slows down by itself | `coast()`, `drive(0)` |
+| PWM | HIGH | LOW | | | forward, speed = duty cycle (drive / coast) | `drive(duty)` (EN is a PWM pin) |
+| HIGH | PWM | LOW | | | forward, speed = duty cycle (drive / brake) | `drive(duty)` (IN1 is a PWM pin) |
 
-通道 B 一樣：ENB、IN3、IN4、OUT3、OUT4。
+Channel B is the same: ENB, IN3, IN4, OUT3, OUT4.
 
-## 規格和極限
+## Ratings and limits
 
-| 項目 | 數值 | 說明 |
+| Item | Value | Explanation |
 |---|---|---|
-| 馬達電源 VS | 5 ～ 35 V（板子的電容常是 35 V 的，建議 ≤ 24 V） | 低於約 7 V 時，扣掉壓降後剩不多 |
-| 每個通道的電流 | 持續 **2 A**（有散熱片），瞬間 3 A | 馬達卡住（堵轉）時電流最大，要看馬達的堵轉電流 |
-| 總功率 | 25 W（晶片） | 很燙就是超過了 |
-| **壓降** | 約 1.5 V（0.3 A）～ 2.5 V（1 A），兩個電晶體加起來 | 12 V 電源，馬達最多只拿到約 10 V；變成熱 |
-| PWM 頻率 | 晶片可到約 40 kHz；UNO 的 PWM 腳約 976 Hz（D5、D6）/ 490 Hz | 976 Hz 聽得到，馬達會有嗡嗡聲，正常 |
-| 邏輯電源 | 5 V，約 36 mA | 板上穩壓或 UNO 的 5V |
-| 沒有的功能 | 不會限流、不會量電流、沒有過熱以外的保護 | 步進馬達特別要注意，見下面 |
+| motor supply VS | 5 ~ 35 V (the board's capacitors are often 35 V parts; ≤ 24 V recommended) | below about 7 V, little is left after the drop |
+| current a channel | **2 A** continuous (with the heat sink), 3 A peak; both channels in parallel about 3 A | the current is highest when the motor is stuck (stalled): check the motor's stall current |
+| total power | 25 W (the chip) | very hot means it is over |
+| **voltage drop** | about 1.5 V (0.3 A) ~ 2.5 V (1 A), two transistors together | with a 12 V supply the motor gets at most about 10 V; the rest becomes heat |
+| PWM frequency | the chip goes up to about 40 kHz; the UNO's PWM pins about 976 Hz (D5, D6) / 490 Hz | 976 Hz is audible, the motor hums, normal |
+| logic supply | 5 V, about 36 mA | the board's regulator or the UNO's 5V |
+| missing features | no current limiting, no current measuring, no protection except overheating | take special care with steppers, see below |
 
-## 步進馬達要注意
+## Steppers: take care
 
-- **怎麼分線圈**：用三用電錶量電阻，有幾 Ω 的兩條是同一個線圈，不通的是不同線圈。線圈 A 接 OUT1、OUT2，線圈 B 接 OUT3、OUT4。接反只會反轉或抖動，不會壞，交換 OUT3、OUT4 就好。
-- **L298N 不限流**：線圈的電流 = 電源電壓 ÷ 線圈電阻。常見的 NEMA 17（1.5 Ω、額定 1.7 A）接 12 V 會想吃 8 A，L298N 和馬達都會過熱。
-  - 用額定電壓接近電源的馬達（例如 12 V、約 30 Ω 的）。
-  - 或用 `setRunDuty` 降低平均電流：約 duty ÷ 255 × 電壓 ÷ 電阻。
-  - 真的要用低電阻的步進馬達，換成有限流的驅動（A4988、DRV8825）。
-- **28BYJ-48**（5 線的小步進馬達）：不接紅色的中間線，剩下 4 條當雙極馬達接到 L298N 也可以，一圈約 2048 步（FULL），速度上限約 500 步 / 秒。
-- **沒有加速**：`setSpeed` 是一開始就用這個速度。要跑快，先用慢的速度起動，再一步步調快（`src/week_7_L298N/tests/5_stepper.cpp` 的速度階梯就是這樣）。
+- **Telling the coils apart**: measure the resistance with a multimeter: two wires with a few Ω are one coil, no connection means different coils. Coil A goes to OUT1, OUT2, coil B to OUT3, OUT4. Wired the other way it only turns backward or shakes, nothing breaks: swap OUT3 and OUT4.
+- **The L298N does not limit current**: the coil current = supply voltage ÷ coil resistance. A common NEMA 17 (1.5 Ω, rated 1.7 A) on 12 V would want 8 A, overheating both the L298N and the motor.
+  - Use a motor rated near the supply voltage (e.g. 12 V, about 30 Ω).
+  - Or lower the average current with `setRunDuty`: about duty ÷ 255 × voltage ÷ resistance.
+  - For low-resistance steppers, use a driver that limits current (A4988, DRV8825).
+- **A stepper needs both directions**: both channels must turn both ways (no IN on GND / +5V).
+- **28BYJ-48** (the small 5-wire stepper): leaving out the red middle wire, the other 4 work as a bipolar motor on the L298N, about 2048 steps a turn (FULL), at most about 500 steps / s.
+- **No acceleration**: `setSpeed` uses that speed from the start. To go fast, start slow and raise the speed step by step (the speed ladder of `src/week_7_L298N/tests/5_stepper.cpp` does this).
 
-## 輸入限制
+## Input limits
 
-| 項目 | 範圍 | 超出時 |
+| Item | Range | Beyond it |
 |---|---|---|
-| `drive`、`setSpeed` | -255 ～ 255 | 夾到範圍內 |
-| `setMinDuty` | 0 ～ 254 | 大於 254 當成 254 |
-| `setRampMs` | 0 ～ 65535 ms | — |
-| `Stepper::setSpeed` | 1 ～ 2000 步 / 秒 | 夾到範圍內 |
-| `Stepper` 的位置 | ±21 億步 | 之後繞回 |
-| EN 的腳位 | PWM 腳（3、5、6、9、10、11） | 編譯錯誤（`UnoPwmPin`） |
-| `update()` 的間隔 | 越常越好 | 步進馬達：比步的間隔久時會變慢（`delay` 會讓它停） |
+| `drive`, `setSpeed` | -255 ~ 255 | clamped |
+| `setMinDuty` | 0 ~ 254 | above 254 taken as 254 |
+| `setRampMs` | 0 ~ 65535 ms | — |
+| `Stepper::setSpeed` | 1 ~ 2000 steps / s | clamped |
+| position of `Stepper` | ±2.1 billion steps | wraps around after that |
+| pins of `UnoPwmPin` | PWM pins (3, 5, 6, 9, 10, 11) | compile error |
+| wiring | EN never on GND; IN1, IN2 never both on GND or both on +5V; at least one on the UNO | compile error |
+| `SUPPLY_MV` | 0 ~ 35000; 7000 ~ 12000 recommended with the jumper on | compile error; compile warning |
+| interval of `update()` | the more often the better | steppers: slower when longer than a step's interval (`delay` stops it) |

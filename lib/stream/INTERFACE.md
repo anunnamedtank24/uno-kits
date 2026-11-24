@@ -5,7 +5,7 @@
 | 一個 `Link`：`init()`、`available()`、`read8(byte, timeoutMs)`、`write8()`、`clearInput()`、`readFlash8()`（`Uno::UnoSerial<BAUD>`） | `stream::Puller<Link, CHUNK>`：跟電腦要檔案、一塊一塊拉回來；`image::StreamImage`、`video::StreamPlayer`、`audio::StreamPlayer`、`audio::StreamSamplePlayer` 的 `Stream` 參數 |
 | 電腦：Python 3、`pip install pyserial` | `source/stream.py`：一個程式同時送圖片、動畫、聲音，板子要什麼就送什麼 |
 
-給要寫新套件、換主板或換零件的人；用法、接線、注意事項見 [README.md](README.md)。
+給要寫新套件、換主板或換零件的人；用法、接線、注意事項見 [讀我.md](讀我.md)。
 
 ## 前提條件
 
@@ -105,12 +105,12 @@ image、video、audio 對 `Stream` 的需求（`Puller` 都有）：
 
 | 函式庫 | 回答 | 詳細 |
 |---|---|---|
-| image | `'H'` 尺寸、顏色模式、調色盤、像素 | [image/source/README.md](../image/source/README.md#stream_handlerpy) |
-| video | `'G'` 標頭、`'F'` 幀、`'K'` 沒有新幀、`'A'` 指令完成 | [video/source/README.md](../video/source/README.md#stream_handlerpy) |
-| audio | `'H'` 種類、編碼、取樣率、數量、資料 | [audio/README.md](../audio/INTERFACE.md#串流) |
+| image | `'H'` 尺寸、顏色模式、調色盤、像素 | [image/source/讀我.md](../image/source/讀我.md#stream_handlerpy) |
+| video | `'G'` 標頭、`'F'` 幀、`'K'` 沒有新幀、`'A'` 指令完成 | [video/source/讀我.md](../video/source/讀我.md#stream_handlerpy) |
+| audio | `'H'` 種類、編碼、取樣率、數量、資料 | [audio/讀我.md](../audio/INTERFACE.md#串流) |
 
-- **顏色**：串流的顏色跟檔案一樣是 RGB565，板子再換成螢幕的顏色格式（`Screen::ColorFormat`，見 [lib/color](../color/README.md)）。
-- **256 色**：調色盤跟著標頭先傳，板子在執行時配置 RAM 放它（編譯時會警告，見 [image](../image/README.md#串流-256-色調色盤先傳放在執行時配置的-ram)）。
+- **顏色**：串流的顏色跟檔案一樣是 RGB565，板子再換成螢幕的顏色格式（`Screen::ColorFormat`，見 [lib/color](../color/讀我.md)）。
+- **256 色**：調色盤跟著標頭先傳，板子在執行時配置 RAM 放它（編譯時會警告，見 [image](../image/讀我.md#串流-256-色調色盤先傳放在執行時配置的-ram)）。
 
 ## 輸入限制
 

@@ -1,15 +1,17 @@
 # font/source
 
-在電腦上跑的工具。需要 Python 3、`pip install pillow`。都在 `lib/font` 裡執行。
+English | [中文](讀我.md)
 
-## 檔案
+Tools that run on the computer. Needs Python 3, `pip install pillow`. All run inside `lib/font`.
 
-| 檔案 | 作用 |
+## Files
+
+| File | What it does |
 |---|---|
-| `convert.py` | 字型 → `output/*.h`，並把新產生的那個加進 `output/selected.h` |
-| `check.py` | 檢查 `output/` 的每個檔案：目前的格式、原始檔沒變（`convert.py` 每次轉完會自動跑） |
+| `convert.py` | font → `output/*.h`, and adds the new one to `output/selected.h` |
+| `check.py` | checks every file of `output/`: the current format, an unchanged source (`convert.py` runs it after every conversion) |
 
-## 用法
+## Usage
 
 ```bash
 cd lib/font
@@ -20,52 +22,54 @@ python source/check.py
 
 ## convert.py
 
-### 支援的檔案
+### Files supported
 
-| 副檔名 | 怎麼讀 |
+| Extension | Read by |
 |---|---|
-| `.ttf`、`.otf` | Pillow（FreeType） |
+| `.ttf`, `.otf` | Pillow (FreeType) |
 
-### 參數
+### Parameters
 
-| 參數 | 預設 | 說明 |
+| Parameter | Default | Explanation |
 |---|---|---|
-| `--height` / `--width` / `--size` | `--height 16` | 最多選一個：格子高度、最寬字元的寬度，或 FreeType 的字型大小 |
-| `--first` / `--last` | 32 / 126 | 字元碼範圍 |
-| `--default` | `?` | 範圍外的字元畫成哪個字 |
-| `--name` | `{字型}_{參數名}_{值}_first_{f}_last_{l}_default_{碼}`（見下面的檔名） | 檔名和 struct 名稱 |
+| `--height` / `--width` / `--size` | `--height 16` | one at most: the grid height, the width of the widest character, or FreeType's font size |
+| `--first` / `--last` | 32 / 126 | the range of character codes |
+| `--default` | `?` | the character drawn for characters outside the range |
+| `--name` | `{font}_{parameter}_{value}_first_{f}_last_{l}_default_{code}` (see the file names below) | the file and struct name |
+| `--board FILE` | `custom_board` of `platformio.ini` (UNO: `lib/Uno/board.json`) | the board's numbers: flash size and how constants are kept there (UNO: `PROGMEM`, `avr/pgmspace.h`), clock, drawing cycles… Not counted in `// options:`, recorded in `// board:` |
 
-- **檔名**：`{字型}_{參數名}_{值}_first_{f}_last_{l}_default_{碼}.h`，struct 同名。`assets/` 外面的檔案前面加上資料夾；撞名加 `_2`、`_3`，不蓋掉別的（見 [output/README.md](../output/README.md#名稱和來源)）。
+- **File names**: `{font}_{parameter}_{value}_first_{f}_last_{l}_default_{code}.h`, the struct named the same. Files outside `assets/` get their folders in front; equal names get `_2`, `_3`, never replacing another (see [output/README.md](../output/README.md#names-and-sources)).
 
-### 流程
+### Steps
 
-每個字存成一組形狀（點、橫線、直線、矩形）。形狀剛好蓋住字的像素，可以互相重疊，但不畫到字外面。用畫圖時間找最便宜的組合：
+Each character is stored as a set of shapes (points, horizontal lines, vertical lines, rectangles). The shapes cover exactly the character's pixels; they may overlap, but never draw outside the character. The cheapest set is found by drawing time:
 
-1. 找出所有最大矩形（上下左右都不能再長）。
-2. 用分支定界找成本最低的組合。
-3. 把重疊的部分盡量縮掉。
-4. 依大小分成點、橫線、直線、矩形。
+1. find every maximal rectangle (cannot grow up, down, left or right).
+2. find the cheapest set by branch and bound.
+3. shrink the overlaps as much as possible.
+4. sort them by size into points, horizontal lines, vertical lines, rectangles.
 
-**畫圖時間**（UNO，估計）：每個形狀約 480 週期、每個像素約 44 週期、每個儲存 byte 約 6 週期。跟一個一個點畫比，小字只要約 30% 的時間、大字約 21%。
+**Drawing time** (the board's `board.json`, estimated for the UNO): about 480 cycles a shape, about 44 cycles a pixel, about 6 cycles a stored byte. Compared with drawing point by point, small text takes only about 30% of the time, large text about 21%.
 
-### 錯誤和警告
+### Errors and warnings
 
-| 情況 | 處理 |
+| Situation | Handling |
 |---|---|
-| 字型檔不存在、副檔名不支援 | 錯誤，不產生檔案 |
-| 範圍或大小超過格式上限（見 [README.md](../README.md#輸入限制)） | 錯誤，不產生檔案 |
-| 預設字元不在字型裡 | 錯誤 |
+| the font file does not exist, the extension is not supported | error, no file made |
+| a range or size beyond the format's limits (see [README.md](../README.md#input-limits)) | error, no file made |
+| the default character is not in the font | error |
 
 ## check.py
 
-| 類型 | 項目 |
+| Kind | Item |
 |---|---|
-| 錯誤 | `selected.h` 不存在或沒有 include guard |
-| 錯誤 | include 的檔案不存在、不在 `output/` 裡、include 自己、重複 include |
-| 錯誤 | 檔案是舊版 `convert.py` 產生的（沒有 `// format:`，或不是目前的 `FORMAT_VERSION`） |
-| 錯誤 | 檔案裡沒有 `struct font::{檔名}`（例如被改過名字） |
-| 錯誤 | 原始字型跟產生時不一樣（比對 sha256） |
-| 警告 | 原始字型找不到（沒辦法確認有沒有變） |
-| 警告 | `output/` 裡有沒被選的 .h |
+| error | `selected.h` missing or without an include guard |
+| error | an included file missing, not in `output/`, including itself, included twice |
+| error | a file made by an old `convert.py` (no `// format:`, or not the current `FORMAT_VERSION`) |
+| error | no `struct font::{file name}` in the file (e.g. it was renamed) |
+| error | the source font differs from when it was made (sha256 compared) |
+| error | the `// board:` of a file is not the board of `custom_board` in `platformio.ini` (or its numbers changed): `python src/clean.py --rebuild` |
+| warning | the source font not found (cannot tell if it changed) |
+| warning | a .h in `output/` that is not selected |
 
-檢查不通過時結束碼是 1。
+The exit code is 1 when the check fails.

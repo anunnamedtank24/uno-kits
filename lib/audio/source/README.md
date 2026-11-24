@@ -1,16 +1,18 @@
 # audio/source
 
-在電腦上跑的工具。需要 Python 3、`pip install numpy pyserial`，以及 `brew install ffmpeg`（解碼音檔；沒有時 macOS 的 `afconvert` 也能讀大部分格式）。都在 `lib/audio` 裡執行。
+English | [中文](讀我.md)
 
-## 檔案
+Tools that run on the computer. Needs Python 3, `pip install numpy pyserial`, and `brew install ffmpeg` (decodes sound files; without it, macOS's `afconvert` reads most formats too). All run inside `lib/audio`.
 
-| 檔案 | 作用 |
+## Files
+
+| File | What it does |
 |---|---|
-| `convert.py` | 音檔 → `output/*.h`（`--target stream` 的資料在同一個檔案的 `#if 0` 裡），並把新產生的那個加進 `output/selected.h` |
-| `check.py` | 檢查 `output/` 的每個檔案：目前的格式、原始檔沒變（`convert.py` 每次轉完會自動跑） |
-| `stream_handler.py` | [lib/stream](../../stream/README.md) 的 `stream.py` 用它讀聲音、回答板子的 `'A'`（`StreamPlayer`、`StreamSamplePlayer`）；不單獨執行 |
+| `convert.py` | sound file → `output/*.h` (the data of `--target stream` is in the `#if 0` of the same file), and adds the new one to `output/selected.h` |
+| `check.py` | checks every file of `output/`: the current format, an unchanged source (`convert.py` runs it after every conversion) |
+| `stream_handler.py` | used by `stream.py` of [lib/stream](../../stream/README.md) to read sounds and answer the board's `'A'` (`StreamPlayer`, `StreamSamplePlayer`); not run on its own |
 
-## 用法
+## Usage
 
 ```bash
 cd lib/audio
@@ -20,101 +22,104 @@ python source/convert.py assets/sos.webm output --sound active
 python source/convert.py assets/hello.aiff output --sound pcm --quality low --preview hello.wav
 python source/convert.py assets/ode_to_joy.flac output --target stream --sound pcm --quality high
 python source/check.py
-cd ../.. && python lib/stream/source/stream.py     # 串流：圖片、動畫、聲音都是它
+cd ../.. && python lib/stream/source/stream.py     # streaming: it serves pictures, animations and sounds
 ```
 
 ## convert.py
 
-### 支援的檔案
+### Files supported
 
-| 格式 | 副檔名 | 怎麼解碼 |
+| Kind | Extensions | Decoded by |
 |---|---|---|
-| 無損 | `.wav` `.flac` `.aiff` `.aif` `.caf` | ffmpeg；沒有 ffmpeg 時用 macOS 的 `afconvert`；`.wav` 連兩個都沒有也能讀（整數 PCM） |
-| 有損 | `.mp3` `.aac` `.m4a` `.m4r`（鈴聲）`.mp4` `.mov` | ffmpeg 或 `afconvert` |
-| 有損 | `.ogg` `.oga` `.opus` `.webm` | 只有 ffmpeg |
+| lossless | `.wav` `.flac` `.aiff` `.aif` `.caf` | ffmpeg; without ffmpeg, macOS's `afconvert`; `.wav` reads even without both (integer PCM) |
+| lossy | `.mp3` `.aac` `.m4a` `.m4r` (ringtones) `.mp4` `.mov` | ffmpeg or `afconvert` |
+| lossy | `.ogg` `.oga` `.opus` `.webm` | ffmpeg only |
 
-- 立體聲會混成單聲道；影片檔只取聲音。
-- 實測：同一段音階存成上面每一種格式，轉出來的 15 個音都一樣。
+- Stereo is mixed into mono; video files give only their sound.
+- Measured: the same scale saved in each format above gives the same 15 notes.
 
-### 流程
+### Steps
 
-蜂鳴器一次只能發一個音，所以只找「每一刻最明顯的那個音高」：
+A buzzer makes only one note at a time, so only "the most noticeable pitch at each moment" is looked for:
 
-1. **解碼**：轉成單聲道 22050 Hz。
-2. **音高**：每 10 ms 一格，用 YIN（de Cheveigné & Kawahara, 2002）找基頻，抓得到 43 Hz ～ 5 kHz；不夠明確的格子當作沒有音高。
-3. **平滑**：每格取前後 5 格的中位數，去掉偶爾跳八度的錯。
-4. **安靜**：比最大聲小 `--silence` dB 以上的格子是休止。
-5. **切音**：音高（四捨五入到半音）改變就是新的音；同一個音高但音量在 40 ms 內突然升高 `--onset` dB，也是新的音（連續兩個相同的音）。
-6. **整理**：
-   - 短於 `--min-note` 的音，併進比較長的鄰居。
-   - 短於 `--min-rest` 的休止，給前一個音。
-   - 頭尾的休止去掉。
-7. **音高**：`--transpose` 移調，超出 `--range` 的音以八度移進範圍。
-8. **時間**：除以 `--speed`，每個音的長度用「四捨五入後的起點、終點」相減，所以整首的總長不會因為四捨五入而飄掉。
+1. **Decoding**: to mono at 22050 Hz.
+2. **Pitch**: a cell every 10 ms, the fundamental found with YIN (de Cheveigné & Kawahara, 2002), from 43 Hz to 5 kHz; cells not clear enough count as having no pitch.
+3. **Smoothing**: each cell takes the median of the 5 cells before and after, removing occasional octave jumps.
+4. **Silence**: cells more than `--silence` dB quieter than the loudest are rests.
+5. **Cutting notes**: a change of pitch (rounded to a semitone) is a new note; the same pitch with the volume jumping up by `--onset` dB within 40 ms is a new note too (two equal notes in a row).
+6. **Tidying**:
+   - notes shorter than `--min-note` merge into the longer neighbor.
+   - rests shorter than `--min-rest` go to the note before.
+   - rests at the start and end are removed.
+7. **Pitch**: transposed by `--transpose`; notes outside `--range` move by octaves into the range.
+8. **Time**: divided by `--speed`; each note's length is "the rounded end minus the rounded start", so the total never drifts from rounding.
 
-- **和弦、有伴奏的歌**：得到的是每一刻最強的那條線，不一定是主旋律。挑一段主旋律單獨或最大聲的地方（`--start`、`--duration`）。
-- **試聽**：`--preview x.wav` 把結果合成成無源蜂鳴器的方波（含 `GAP_MS` 20 ms 的間隔），在電腦上就能聽，不用燒錄。
+- **Chords, songs with accompaniment**: what you get is the strongest line at each moment, not always the main melody. Pick a passage where the main melody is alone or loudest (`--start`, `--duration`).
+- **Listening first**: `--preview x.wav` synthesizes the result as the passive buzzer's square wave (with the 20 ms gaps of `GAP_MS`), to listen to on the computer without uploading.
 
-### 參數
+### Parameters
 
-| 參數 | 預設 | 說明 |
+| Parameter | Default | Explanation |
 |---|---|---|
-| `--target flash / stream` | `flash` | `flash`：資料燒進 Flash；`stream`：資料留在電腦（`output/x.h` 的 `#if 0` 裡），`stream.py` 串流；兩個都寫：Flash 有資料，也能串流 |
-| `--sound passive / active / pcm` | `passive` | 誰播：無源蜂鳴器（音符）、有源蜂鳴器（節奏）、取樣（真正的波形） |
-| `--quality low / medium / high` | `medium` | 預設組合，見 [audio 的格式和品質](../README.md#格式和品質)；下面的單一參數可以蓋過它 |
-| `--name` | `{檔名}_{target}_{sound}_{quality}`；取樣：`{檔名}_{target}_pcm_{rate}_{encoding}`（`assets/` 外面的檔案前面加上資料夾；撞名，例如只差 `--transpose`，加 `_2`、`_3`，不蓋掉別的；見 [output/README.md](../output/README.md#名稱和來源)） | 檔名和 struct 名稱 |
-| `--preview F.wav` | — | 存一個試聽用的 wav：音符、節奏是方波；取樣是板子實際播的值 |
-| `--start S`、`--duration S` | 0、到結尾 | 取哪一段（秒） |
-| `--speed F` | 1 | > 1 變快、< 1 變慢，音高不變；0.1 ～ 10（取樣要 ffmpeg） |
-| `--min-note MS`、`--min-rest MS` | 看 `--quality` | 更短的音併進鄰居、更短的休止給前一個音（音符、節奏） |
-| `--quantize semitone / raw` | 看 `--quality` | 對齊半音，或量到的頻率（音符；`--quality low` 只能 semitone） |
-| `--transpose N` | 0 | 移調幾個半音（音符） |
-| `--range LOW HIGH` | 200 4000 | Hz；範圍外的音移八度進來，至少一個八度寬（音符） |
-| `--hz` | 量到的音高中位數，沒有就 2000 | 節奏在無源蜂鳴器上播的音高（節奏） |
-| `--rate HZ` | 看 `--quality` | 取樣率 2000 ～ 32000；轉換時用板子實際做得到的頻率（`Uno::UnoPcmOut` 的整數 tick） |
-| `--encoding u8 / u4 / adpcm` | 看 `--quality` | 每個取樣 8 bits、4 bits、IMA ADPCM 4 bits |
-| `--gain DB` | 0 | 最大的取樣拉到滿格之後再加幾 dB；> 0 比較大聲，但峰值會被切掉 |
-| `--silence DB` | 35 | 比最大聲小這麼多就是休止（音符、節奏） |
-| `--voicing F` | 0.2 | YIN 的門檻，0.05 ～ 0.5（音符、節奏） |
-| `--onset DB` | 6 | 音量突然升高多少 dB 算新的音；0 = 不用 |
+| `--target flash / stream` | `flash` | `flash`: the data is burned into Flash; `stream`: the data stays on the computer (in the `#if 0` of `output/x.h`) and `stream.py` streams it; both: data in Flash, streamable too |
+| `--sound passive / active / pcm` | `passive` | who plays it: a passive buzzer (notes), an active buzzer (rhythm), samples (the real waveform) |
+| `--quality low / medium / high` | `medium` | a preset, see [the formats and quality of audio](../README.md#formats-and-quality); the single parameters below override it |
+| `--name` | `{file name}_{target}_{sound}_{quality}`; samples: `{file name}_{target}_pcm_{rate}_{encoding}` (files outside `assets/` get their folders in front; equal names, e.g. differing only by `--transpose`, get `_2`, `_3`, never replacing another; see [output/README.md](../output/README.md#names-and-sources)) | the file and struct name |
+| `--board FILE` | `custom_board` of `platformio.ini` (UNO: `lib/Uno/board.json`) | the board's numbers: flash size and how constants are kept there (UNO: `PROGMEM`, `avr/pgmspace.h`), clock, drawing cycles… Not counted in `// options:`, recorded in `// board:` |
+| `--preview F.wav` | — | saves a wav to listen to: notes and rhythms as square waves; samples as the values the board really plays |
+| `--start S`, `--duration S` | 0, to the end | which part (seconds) |
+| `--speed F` | 1 | > 1 faster, < 1 slower, the pitch unchanged; 0.1 ~ 10 (samples need ffmpeg) |
+| `--min-note MS`, `--min-rest MS` | by `--quality` | shorter notes merge into a neighbor, shorter rests go to the note before (notes, rhythms) |
+| `--quantize semitone / raw` | by `--quality` | snapped to semitones, or the frequencies measured (notes; `--quality low` only semitone) |
+| `--transpose N` | 0 | transposed by N semitones (notes) |
+| `--range LOW HIGH` | 200 4000 | Hz; notes outside move by octaves into it, at least an octave wide (notes) |
+| `--hz` | the median pitch measured, else 2000 | the pitch of the rhythm on a passive buzzer (rhythms) |
+| `--rate HZ` | by `--quality` | the sample rate, within the board's `pcmOut.minRate` ~ `maxRate` (UNO: 2000 ~ 32000); converted at the frequency the board can really make (`pcmOut` of `board.json`: whole ticks) |
+| `--encoding u8 / u4 / adpcm` | by `--quality` | 8 bits, 4 bits, IMA ADPCM 4 bits a sample |
+| `--gain DB` | 0 | dB added after the largest sample is brought to full scale; > 0 is louder, but the peaks are clipped |
+| `--silence DB` | 35 | this much quieter than the loudest is a rest (notes, rhythms) |
+| `--voicing F` | 0.2 | the threshold of YIN, 0.05 ~ 0.5 (notes, rhythms) |
+| `--onset DB` | 6 | how many dB the volume must jump up to count as a new note; 0 = not used |
 
-- 不屬於這個 `--sound` 的參數（例如 `--rate` 配 `--sound passive`）是錯誤。
+- The limits of `--range` and the range of `--hz` are the frequency range of the board's buzzer (`tone` of `board.json`, UNO: 16 ~ 20000 Hz).
+- Parameters that do not belong to this `--sound` (e.g. `--rate` with `--sound passive`) are an error.
 
-### 取樣的流程
+### The steps of samples
 
-1. **解碼**：ffmpeg 直接轉成單聲道、板子實際的取樣率（8000 → 8000 Hz、11025 → 11050 Hz、22050 → 21978 Hz）；`--speed` 用 ffmpeg 的 atempo（音高不變）。
-2. **音量**：最大的取樣拉到 0.98，再加 `--gain`。
-3. **編碼**：u8、u4，或 IMA ADPCM。ADPCM 的編碼器邊編邊用板子的解碼法解回來，所以誤差不會累積；最後再整段解一次確認跟板子一樣。
-4. **報告**：訊號 / 誤差（dB）、每秒幾個 byte、切掉的比例。
+1. **Decoding**: ffmpeg turns it straight into mono at the board's real sample rate (8000 → 8000 Hz, 11025 → 11050 Hz, 22050 → 21978 Hz); `--speed` uses ffmpeg's atempo (the pitch unchanged).
+2. **Volume**: the largest sample is brought to 0.98, then `--gain` is added.
+3. **Encoding**: u8, u4, or IMA ADPCM. The ADPCM encoder decodes back with the board's decoder as it encodes, so errors never add up; at the end the whole is decoded once more to make sure it matches the board.
+4. **Report**: signal / error (dB), bytes a second, the share clipped.
 
-### 錯誤和警告
+### Errors and warnings
 
-| 情況 | 處理 |
+| Situation | Handling |
 |---|---|
-| 檔案不存在、副檔名不支援、參數超出範圍 | 錯誤，不產生檔案 |
-| 解碼失敗、少於 46 ms、一個音都找不到 | 錯誤，並提示可以調哪個參數 |
-| `--target flash` 時超過 65535 步，或超過 UNO 的 Flash（32256 bytes） | 錯誤：剪短、降低 `--quality`，或 `--target stream` |
-| `--target flash` 時音符、節奏超過 8192 bytes，取樣超過 20000 bytes | 警告：留給程式的 Flash 不多 |
-| `--target stream` 的取樣每秒超過 12000 bytes | 警告：串流可能跟不上（實測 16000 在邊緣；`underruns()` 會算） |
-| 取樣率高於 22050 / 低於 4000 | 警告：中斷佔很多 CPU / 聲音很悶 |
-| 超過 1% 的取樣被切掉 | 警告：`--gain` 調小 |
-| 有短於 40 ms 的音 | 警告：`GAP_MS` 20 會讓它一半時間是安靜的 |
-| `--range` 低於 100 Hz 或高於 8 kHz | 警告 |
-| 輸出的資料夾不是 `lib/audio/output` | 警告：`audio.h` 只 include `output/selected.h` |
+| the file does not exist, the extension is not supported, a parameter out of range | error, no file made |
+| decoding fails, shorter than 46 ms, not a single note found | error, with a hint on which parameter to change |
+| over 65535 steps, or over the board's flash (`flash.bytes`, UNO: 32256 bytes), with `--target flash` | error: cut it shorter, a lower `--quality`, or `--target stream` |
+| notes or rhythms over 25% of the board's flash, samples over 62.5% (UNO: 8064, 20160 bytes), with `--target flash` | warning: little Flash left for the program |
+| samples of `--target stream` over the board's `serial.maxStreamBytesPerSecond` a second (UNO: 12000 bytes) | warning: streaming may not keep up (measured: 16000 is at the edge; `underruns()` counts) |
+| a sample rate above 22050 / below 4000 | warning: the interrupt takes much CPU / the sound is dull |
+| over 1% of the samples clipped | warning: lower `--gain` |
+| notes shorter than 40 ms | warning: `GAP_MS` 20 keeps them silent half the time |
+| `--range` below 100 Hz or above 8 kHz | warning |
+| the output folder is not `lib/audio/output` | warning: `audio.h` includes only `output/selected.h` |
 
 ## check.py
 
-- `selected.h` 存在，而且有 include guard。
-- 每個 `#include` 都是 `output/` 裡的檔案，只列一次。
-- 每個檔案都是目前的格式（`// format: 2`），有 `struct melody::{檔名}`、`getPath()`；給 UNO 的（`--target flash`）還要有資料：`getNotes()`（音符、節奏）或 `getSamples()`（取樣）。
-- 原始音檔（記錄的路徑和 sha256）沒有變過；找不到原始檔時只警告。
-- `output/` 裡沒被選的 .h 只警告。
+- `selected.h` exists and has its include guard.
+- Every `#include` is a file of `output/`, listed once.
+- Every file has the current format (`// format: 2`), `struct melody::{file name}` and `getPath()`; those for the UNO (`--target flash`) also need their data: `getNotes()` (notes, rhythms) or `getSamples()` (samples).
+- The source sound (the recorded path and sha256) has not changed; a source not found is only a warning.
+- The `// board:` of every file is the board of `custom_board` in `platformio.ini` (the same hash of the numbers); when it differs, `python src/clean.py --rebuild`.
+- A .h in `output/` that is not selected is only a warning.
 
 ## stream_handler.py
 
-[lib/stream](../../stream/README.md) 的 `stream.py`（找板子、燒錄時放開串口、印出板子的 `'M'` 訊息）收到 `'A'` 時交給它：
+`stream.py` of [lib/stream](../../stream/README.md) (finds the board, lets go of the port while uploading, prints the board's `'M'` messages) hands it each `'A'`:
 
-- **板子說要哪個檔**：路徑是 struct 的 `getPath()`（相對於 `lib/audio`），只開 `lib/audio` 裡的 .h；`--target flash` 和 `--target stream`（資料在 `#if 0` 裡）的都可以串流。
-- **檔案改了會重讀**（看修改時間），不用重開。
-- **印出**：每個聲音的格式、大小，傳完的時間和速度。
-- 協定見 [audio 的串流](../INTERFACE.md#串流)。
+- **The board says which file**: the path is the struct's `getPath()` (relative to `lib/audio`); only `.h` files inside `lib/audio` are opened; those of `--target flash` and `--target stream` (data in `#if 0`) can both be streamed.
+- **Changed files are read again** (by their modification time), no restart needed.
+- **Prints**: the format and size of each sound, and the time and speed when sent.
+- The protocol: see [audio's streaming](../INTERFACE.md#串流).

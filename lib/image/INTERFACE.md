@@ -6,7 +6,7 @@
 | 串流：再加一個 `Stream`（`stream::Puller<Uno::UnoSerial<BAUD>, CHUNK>`） | `image::StreamImage`：圖片留在電腦，畫的時候才送過來 |
 | 圖片檔（png、jpg、webp、heic…） | `picture::*`：`PICTURE("檔案")` 或 `source/convert.py` 轉出來的圖片 |
 
-給要寫新套件、換主板或換零件的人；用法、接線、注意事項見 [README.md](README.md)。
+給要寫新套件、換主板或換零件的人；用法、接線、注意事項見 [讀我.md](讀我.md)。
 
 ## 前提條件
 
@@ -23,13 +23,13 @@
 ```
 lib/image/
 ├── image.h            入口：兩個類別 + asset.h + output/selected.h
-├── asset.h            PICTURE(路徑, 選項) 巨集：編譯前自動轉換（tools/assets.py）
+├── asset.h            PICTURE(路徑, 選項) 巨集：編譯前自動轉換（src/tools/assets.py）
 ├── decoder.h          Decoder<Screen, SEGMENT>：像素格式，畫一張圖；HeapPalette：執行時配置的調色盤
 ├── flash_image.h      FlashImage<Screen, SEGMENT>：畫 Flash 裡的圖（--target flash）
 ├── stream_image.h     StreamImage<Screen, Stream, SEGMENT>：畫電腦傳來的圖（--target stream）
 ├── assets/            原始圖片（sunset.jpg / .png / .webp / .heic、logo.png、moon.jpg、city.png、treble_clef.png）
-├── source/            config.json、convert.py、check.py、stream_handler.py（lib/stream 的 stream.py 用它讀圖片），見 source/README.md
-└── output/            產生的圖片和 selected.h，見 output/README.md
+├── source/            config.json、convert.py、check.py、stream_handler.py（lib/stream 的 stream.py 用它讀圖片），見 source/讀我.md
+└── output/            產生的圖片和 selected.h，見 output/讀我.md
 ```
 
 ## 介面需求
@@ -37,8 +37,8 @@ lib/image/
 | 參數 | 需要的函式 | 現成的實作 |
 |---|---|---|
 | `Screen` | `writeWindow(x, y, w, h, colors)`（會裁切）；型別 `BusType`，它有 `readFlash8/16`（讀 Flash 裡的圖）、`nowMs`（`StreamImage` 計時） | `ST7789::M130T`、`SSD1306::OLED128x64` |
-| `Stream`（`StreamImage`） | `CHUNK_SIZE`、`OK`、`ERROR_*`、`begin()`、`write8()`、`writePath()`、`waitAnswer()`，和 `Answer` 類別（`begin()`、`read8/16/32()`、`failed()`） | `stream::Puller<Uno::UnoSerial<BAUD>, CHUNK>`（[lib/stream](../stream/README.md)） |
-| `Picture` | `output/selected.h` 裡的 struct（見 [output/README.md](output/README.md#產生的-struct)） | `picture::*` |
+| `Stream`（`StreamImage`） | `CHUNK_SIZE`、`OK`、`ERROR_*`、`begin()`、`write8()`、`writePath()`、`waitAnswer()`，和 `Answer` 類別（`begin()`、`read8/16/32()`、`failed()`） | `stream::Puller<Uno::UnoSerial<BAUD>, CHUNK>`（[lib/stream](../stream/讀我.md)） |
+| `Picture` | `output/selected.h` 裡的 struct（見 [output/讀我.md](output/讀我.md#產生的-struct)） | `picture::*` |
 
 ## 函式
 
@@ -67,7 +67,7 @@ lib/image/
 | `setArea(x, y, width, height, scaleX, scaleY)` | 位置、存的大小、放大倍數 |
 | `setFormat(colorMode, encoding)` | `COLORS_2` / `16` / `256` / `565`、`ENCODING_RAW` / `RUNS` |
 | `setColor(index, rgb565)` | 2、16 色：一個一個設定調色盤（檔案的 RGB565，這裡換成螢幕的格式） |
-| `setFlashPalette(palette)` | 256 色：Flash 裡的 RGB565 調色盤（`PROGMEM`），每個像素換一次 |
+| `setFlashPalette(palette)` | 256 色：Flash 裡的 RGB565 調色盤，每個像素換一次 |
 | `setRamPalette(colors)` | 256 色：已經是螢幕格式的調色盤（例如 `HeapPalette`），`draw()` 回來前不能釋放 |
 | `draw(reader)` | 讀完 width × height 個像素並畫出來 |
 | `HeapPalette<Color>::take(count)` | `malloc` count 個顏色（1 ～ 256），先放掉舊的；RAM 不夠回傳 false（avr-libc 會留 128 bytes 給堆疊） |

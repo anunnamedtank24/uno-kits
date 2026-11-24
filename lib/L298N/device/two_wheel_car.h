@@ -26,6 +26,19 @@ namespace L298N {
     //     TwoWheelCar<Board, RIGHT, FORWARD, FORWARD>
     //   (the two motors of a car face opposite ways, so often one pair is BACKWARD: try it with the wheels up)
     //
+    // any wiring of the board works (module/L298N_board.h); what the car can do follows from it:
+    //   EN jumpers off, ENA / ENB on PWM pins, IN1 ~ IN4 on any pins (6 pins):
+    //     L298NBoard<UnoPwmPin<ENA>, UnoOutputPin<IN1>, UnoOutputPin<IN2>, UnoOutputPin<IN3>, UnoOutputPin<IN4>, UnoPwmPin<ENB>>
+    //     every move, speed by EN, and coast() really rolls out
+    //   EN jumpers off, ENA / ENB on PWM pins, IN1 / IN3 on +5V, IN2 / IN4 on GND (2 pins):
+    //     L298NBoard<UnoPwmPin<ENA>, Supply, Ground, Supply, Ground, UnoPwmPin<ENB>>
+    //     forward only, speed by EN; a wheel cannot brake (it coasts): pivot and stop roll out
+    //   EN jumpers on, IN1 ~ IN4 on PWM pins (4 pins): L298NBoardJumpers<UnoPwmPin<IN1>, ...>
+    //     every move, speed by IN; coast() brakes
+    //   EN jumpers on, IN1 / IN3 on PWM pins, IN2 / IN4 on GND (2 pins): L298NBoardJumpers<UnoPwmPin<IN1>, Ground, ...>
+    //     forward only, speed by IN; coast() brakes
+    //   (LEFT_BOTH_WAYS ... below say it at compile time; a move a wheel cannot do brakes it, or coasts it)
+    //
     // a move: speeds 0 ~ 255 (signed where a wheel can go both ways) and ms, how long it lasts
     //   ms > 0:  then the next move; after the last one both wheels brake
     //   ms = 0:  no time: on and on, until a next move is given, stop(), until() comes true, or the failsafe
@@ -59,6 +72,15 @@ namespace L298N {
         // brake it instead
         static constexpr bool LEFT_BOTH_WAYS = LeftBridge::BOTH_WAYS;
         static constexpr bool RIGHT_BOTH_WAYS = RightBridge::BOTH_WAYS;
+
+        // true: coast() rolls out (EN on a pin); false: it brakes (EN jumper on)
+        static constexpr bool CAN_COAST = LeftBridge::CAN_COAST && RightBridge::CAN_COAST;
+
+        // true: a wheel can be braked (else stop() and the braked wheel of a pivot coast)
+        static constexpr bool CAN_BRAKE = LeftBridge::CAN_BRAKE && RightBridge::CAN_BRAKE;
+
+        // true: the speed can be set (PWM on EN or IN); false: full speed only
+        static constexpr bool HAS_SPEED = LeftBridge::HAS_SPEED && RightBridge::HAS_SPEED;
 
         // both wheels braked, nothing queued, ramp 200 ms, no failsafe
         inline void init();

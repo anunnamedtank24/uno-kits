@@ -1,83 +1,85 @@
 # stream
 
-| 需要 | 得到 |
+English | [中文](讀我.md)
+
+| Needs | Gives |
 |---|---|
-| 一個 `Link`：`init()`、`available()`、`read8(byte, timeoutMs)`、`write8()`、`clearInput()`、`readFlash8()`（`Uno::UnoSerial<BAUD>`） | `stream::Puller<Link, CHUNK>`：跟電腦要檔案、一塊一塊拉回來；`image::StreamImage`、`video::StreamPlayer`、`audio::StreamPlayer`、`audio::StreamSamplePlayer` 的 `Stream` 參數 |
-| 電腦：Python 3、`pip install pyserial` | `source/stream.py`：一個程式同時送圖片、動畫、聲音，板子要什麼就送什麼 |
+| a `Link`: `init()`, `available()`, `read8(byte, timeoutMs)`, `write8()`, `clearInput()`, `readFlash8()` (`Uno::UnoSerial<BAUD>`) | `stream::Puller<Link, CHUNK>`: asks the computer for a file and pulls it back piece by piece; the `Stream` parameter of `image::StreamImage`, `video::StreamPlayer`, `audio::StreamPlayer`, `audio::StreamSamplePlayer` |
+| the computer: Python 3, `pip install pyserial` | `source/stream.py`: one program sending pictures, animations and sounds, whatever the board asks for |
 
-「需要」是介面（duck typing），括號裡是這個專案現成的實作，換主板只要換它們。開發者看的細節（前提條件、介面需求、每個函式、參數、資源）在 [INTERFACE.md](INTERFACE.md)。
+"Needs" are interfaces (duck typing); in parentheses the ready implementations of this project, and another board only replaces them. The details for developers (prerequisites, interface requirements, every function, parameters, resources) are in [INTERFACE.md](INTERFACE.md).
 
-把電腦上的檔案送給板子的協定，`namespace stream`。板子這邊只負責「要」和「拉」，檔案的內容（圖片的像素、動畫的幀、聲音的音符）由 image、video、audio 自己讀，所以：
+The protocol that sends files on the computer to the board, `namespace stream`. The board side only "asks" and "pulls"; the content of a file (a picture's pixels, an animation's frames, a sound's notes) is read by image, video, audio themselves, so:
 
-- **image、video、audio 不 include 這個函式庫**：`Stream` 是它們的 template 參數（duck typing），跟 `Screen` 一樣，還是不依賴別的函式庫。
-- **電腦只要開一個 `stream.py`**：以前三個函式庫各有一個，一次只能開一個（同一個串口）；現在同一個程式都處理。
-- **不會變慢**：`Puller` 全是 template 和 inline，編譯後跟以前寫在各自類別裡的程式一樣。
+- **image, video, audio do not include this library**: `Stream` is their template parameter (duck typing), like `Screen`, so they still depend on no other library.
+- **The computer runs a single `stream.py`**: there used to be one for each of the three libraries, and only one could run at a time (the same serial port); now one program handles them all.
+- **No slower**: `Puller` is all templates and inline; compiled, it is the same as the code that used to be in each class.
 
-## 用法
+## Usage
 
-**電腦**：開著就好，不用參數。它會自動找板子，燒錄時也會自動放開串口。
+**The computer**: just keep it running, no arguments. It finds the board by itself, and lets go of the port while uploading.
 
 ```bash
 pip install pyserial
 python lib/stream/source/stream.py
 ```
 
-**UNO**：
+**The UNO**:
 
 ```cpp
 #include "Uno_serial.h"
 #include "stream.h"
 #include "image.h"
 
-constexpr uint32_t BAUD = 1000000;          // 跟 stream.py 的 --baud 一樣
-constexpr uint8_t STREAM_CHUNK = 64;        // 一次收幾個 byte（RAM）
+constexpr uint32_t BAUD = 1000000;          // the same as --baud of stream.py
+constexpr uint8_t STREAM_CHUNK = 64;        // bytes received at a time (RAM)
 
 using Link = Uno::UnoSerial<BAUD>;
 using StreamLink = stream::Puller<Link, STREAM_CHUNK>;
-image::StreamImage<Screen, StreamLink> pictures(screen);   // 顏色格式跟著 Screen
+image::StreamImage<Screen, StreamLink> pictures(screen);   // the color format follows Screen
 
 uint8_t result = pictures.draw<picture::sunset_stream_240x240_palette_565>(0, 0);
 ```
 
-- **名稱**：不要取名 `Stream`，那是 Arduino 自己的類別（`Arduino.h` 已經有了），所以例子都用 `StreamLink`。
-- **CHUNK 可以不同**：同一個程式可以有好幾個 `Puller`，例如音符用 32、取樣用 255（`src/week_5_NEC/tests/2_sound_formats.cpp`）；它們共用同一個串口。
+- **Name**: never call it `Stream`, which is Arduino's own class (`Arduino.h` already has it), so the examples all use `StreamLink`.
+- **CHUNKs may differ**: one program may have several `Puller`s, e.g. 32 for notes and 255 for samples (`src/week_5_NEC/tests/2_sound_formats.cpp`); they share the same serial.
 
-完整的例子：`src/week_3_ST7789_DS18B20_graphics_color_font_image_video/tests/3_pictures.cpp`（圖片）、`tests/1_screen.cpp` 的 `tests[19]`（動畫）、`src/week_5_NEC/tests/2_sound_formats.cpp`（聲音）。
+Complete examples: `src/week_3_ST7789_DS18B20_graphics_color_font_image_video/tests/3_pictures.cpp` (pictures), `tests[19]` of `tests/1_screen.cpp` (animation), `src/week_5_NEC/tests/2_sound_formats.cpp` (sounds).
 
 ## stream.py
 
 ```bash
-python lib/stream/source/stream.py                                # 自己找板子
-python lib/stream/source/stream.py --port /dev/cu.usbmodem1101    # 指定串口：Windows 是 COM3，Linux 是 /dev/ttyACM0
-python lib/stream/source/stream.py --baud 1000000                 # 跟程式的 BAUD 一樣（預設 1000000）
-python lib/stream/source/stream.py --tile 8                       # 動畫：找變化區域的格子大小（預設 8）
+python lib/stream/source/stream.py                                # finds the board by itself
+python lib/stream/source/stream.py --port /dev/cu.usbmodem1101    # a given port: COM3 on Windows, /dev/ttyACM0 on Linux
+python lib/stream/source/stream.py --baud 1000000                 # the same as the program's BAUD (default 1000000)
+python lib/stream/source/stream.py --tile 8                       # animations: the grid size for finding changed areas (default 8)
 ```
 
-- **任何系統都能用**（macOS、Windows、Linux）：用 USB 晶片的 ID 找板子（Arduino、CH340、FTDI、CP210x、PL2303）；沒插板子就等，拔掉、重插、板子重置都會自己接回。
-- **一個程式處理全部**：啟動時載入每個 `lib/*/source/stream_handler.py`，指令交給對應的那個（`'I'` 圖片、`'A'` 聲音、`'O'` 等是動畫）。新的種類只要加一個 `stream_handler.py`，`stream.py` 不用改。
-- **安全**：每個種類只開自己資料夾（`lib/image`、`lib/video`、`lib/audio`）裡的 `.h`。
-- **檔案改了會重讀**（看修改時間），不用重開。
-- **先關監看視窗**：PlatformIO 的序列監看視窗也會佔用串口。
-- **燒錄時自動放開串口**：另一個執行緒每 0.3 秒檢查有沒有 avrdude 或 `pio run -t upload` 在跑；有的話立刻關掉串口，燒錄結束後再接回來，所以 `stream.py` 可以一直開著。
-- **打開串口會讓板子重置**：打開串口時一定會動到 DTR，UNO 就會重置，軟體沒辦法避免。
-  - 板子正在跑程式時才啟動 `stream.py`，程式會從頭開始。
-  - **建議先開 `stream.py`**，再燒錄或按 reset。`stream.py` 一直開著時只有第一次會重置。
-  - 硬體上要完全避免，只能在 RESET 和 GND 之間接 10 µF 電容；但之後每次燒錄都要手動按 reset。
+- **Works on any system** (macOS, Windows, Linux): finds the board by the ID of its USB chip (Arduino, CH340, FTDI, CP210x, PL2303); without a board it waits, and reconnects by itself after unplugging, replugging or a board reset.
+- **One program for everything**: at start it loads every `lib/*/source/stream_handler.py` and hands each command to the right one (`'I'` pictures, `'A'` sounds, `'O'` and others animations). A new kind only needs a `stream_handler.py`; `stream.py` stays as it is.
+- **Safe**: each kind opens only `.h` files inside its own folder (`lib/image`, `lib/video`, `lib/audio`).
+- **Changed files are read again** (by their modification time), no restart needed.
+- **Close the monitor first**: PlatformIO's serial monitor also takes the port.
+- **Lets go of the port while uploading**: another thread checks every 0.3 seconds whether avrdude or `pio run -t upload` is running; if so it closes the port at once and reconnects after the upload, so `stream.py` can stay running.
+- **Opening the port resets the board**: opening a port always touches DTR, which resets the UNO; software cannot avoid it.
+  - starting `stream.py` while the board runs a program starts the program over.
+  - **start `stream.py` first**, then upload or press reset. With `stream.py` kept running, only the first time resets.
+  - to avoid it completely in hardware, put a 10 µF capacitor between RESET and GND; but then every upload needs a manual press of reset.
 
-## 輸入限制
+## Input limits
 
-| 項目 | 範圍 | 超出時 |
+| Item | Range | Beyond it |
 |---|---|---|
-| `CHUNK` | 1 ～ 255 | 編譯錯誤；各播放器另有下限（`video::StreamPlayer` ≥ 16、`audio::StreamPlayer` ≥ 4、`StreamSamplePlayer` ≤ BUFFER / 2） |
-| 路徑 | 最多 255 個字元 | 截斷 |
-| `message` 的文字 | 最多 255 個字元，在 RAM | 截斷 |
+| `CHUNK` | 1 ~ 255 | compile error; each player has its own limit too (`video::StreamPlayer` ≥ 16, `audio::StreamPlayer` ≥ 4, `StreamSamplePlayer` ≤ BUFFER / 2) |
+| path | at most 255 characters | cut |
+| text of `message` | at most 255 characters, in RAM | cut |
 
-## 注意事項
+## Caveats
 
-| 情況 | 結果 | 做法 |
+| Situation | Result | What to do |
 |---|---|---|
-| 沒開 `stream.py` | 3 秒後 `ERROR_NO_ANSWER` | 先開 `stream.py` 再燒錄 |
-| 開著 `pio device monitor` | `stream.py` 打不開串口 | 串流時關掉監看視窗；要看訊息用 `message()` |
-| 同時用 Arduino 的 `Serial` | 也用 D0 / D1 | 不能同時用 |
-| 型別取名 `Stream` | 跟 Arduino 的 `Stream` 類別衝突 | 取別的名字，例如 `StreamLink` |
-| 同時串流兩種（例如動畫播著又畫串流圖） | 回答會交錯，板子可能讀錯 | 一次只串流一種 |
+| `stream.py` not running | `ERROR_NO_ANSWER` after 3 seconds | start `stream.py` first, then upload |
+| `pio device monitor` open | `stream.py` cannot open the port | close the monitor while streaming; for messages use `message()` |
+| Arduino's `Serial` at the same time | it uses D0 / D1 too | they cannot be used together |
+| a type named `Stream` | clashes with Arduino's `Stream` class | give it another name, e.g. `StreamLink` |
+| streaming two kinds at once (e.g. an animation playing while drawing a streamed picture) | the answers interleave and the board may read wrong | stream one kind at a time |

@@ -1,0 +1,39 @@
+{
+    "note": "every number of this board the tools on the computer use (convert.py, check.py, src/tools/assets.py, stream.py); another board: its own board.json in its folder, and custom_board in platformio.ini; every output records the name and a hash of the values (notes left out): a change converts them again",
+    "name": "Arduino UNO (ATmega328P, 16 MHz)",
+    "cpuHz": 16000000,
+    "flash": {
+        "note": "program flash (32 KB minus the 512-byte bootloader); how constants are kept there: the attribute after every array and the header that defines it ('' = none, for boards whose constants stay in flash); bytes read a cycle count by readFlash8 (pgm_read_byte)",
+        "bytes": 32256,
+        "attribute": "PROGMEM",
+        "header": "avr/pgmspace.h",
+        "byteCycles": 6
+    },
+    "serial": {
+        "note": "Uno::UnoSerial over the USB chip, used by stream.py: the default baud, the USB vendor ids that find the board (Arduino x2, WCH CH340, FTDI, Silicon Labs CP210x, Prolific PL2303), what a stream keeps up with (measured: 16000 is at the edge)",
+        "baud": 1000000,
+        "usbVendorIds": ["0x2341", "0x2A03", "0x1A86", "0x0403", "0x10C4", "0x067B"],
+        "maxStreamBytesPerSecond": 12000
+    },
+    "screenBus": {
+        "note": "Uno::UnoST7789 (8 MHz SPI), cycles counted from the avr-gcc output of Window::fillWindow(): a window (call + clip + CASET / RASET / RAMWR), a pixel (2 SPI bytes), a run of the video decoder; a segment and a pixel of image::Decoder (decoding included)",
+        "windowCycles": 480,
+        "pixelCycles": 44,
+        "runCycles": 30,
+        "segmentCycles": 900,
+        "segmentPixelCycles": 60
+    },
+    "tone": {
+        "note": "Uno::UnoTone: the frequencies a square wave can have",
+        "minHz": 16,
+        "maxHz": 20000
+    },
+    "pcmOut": {
+        "note": "Uno::UnoPcmOut: the sample clock is whole ticks (at most maxTicks) of Timer2 at one of clocksHz, tried in order; the rates convert.py takes; above recommendedMaxRate the interrupt takes much of the CPU",
+        "clocksHz": [2000000, 500000],
+        "maxTicks": 256,
+        "minRate": 2000,
+        "maxRate": 32000,
+        "recommendedMaxRate": 22050
+    }
+}

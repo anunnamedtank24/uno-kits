@@ -34,7 +34,7 @@ namespace audio {
         static constexpr uint8_t OK = Stream::OK;
         static constexpr uint8_t ERROR_NOT_FOUND = Stream::ERROR_NOT_FOUND;
         static constexpr uint8_t ERROR_UNREADABLE = Stream::ERROR_UNREADABLE;
-        static constexpr uint8_t ERROR_WRONG_KIND = Stream::ERROR_NOT_STREAMABLE;   // notes or a rhythm
+        static constexpr uint8_t ERROR_WRONG_KIND = Stream::ERROR_NOT_STREAMABLE;   // notes or a rhythm; ADPCM for a non-ADPCM struct
         static constexpr uint8_t ERROR_NO_ANSWER = Stream::ERROR_NO_ANSWER;
         static constexpr uint8_t ERROR_BROKEN = Stream::ERROR_BROKEN;
 
@@ -130,6 +130,7 @@ namespace audio {
                       "audio::StreamSamplePlayer: not a PCM sound (--sound pcm): use audio::StreamPlayer");
         static_assert(warn::NotForStream<!(Clip::target & TARGET_STREAM)>::ok, "");
         _path = Clip::getPath();
+        _adpcm.reset(stepsOf<Clip>());      // PCM_ADPCM: the sound's getSteps(), else nullptr
         _repeat = repeat;
         return request();
     }
@@ -182,6 +183,11 @@ namespace audio {
             _error = ERROR_BROKEN;
             return _error;
         }
+        if (_encoding == PCM_ADPCM && _adpcm.steps() == nullptr) {
+            // the struct on the board is not ADPCM, the file on the computer is (converted again since?)
+            _error = ERROR_WRONG_KIND;
+            return _error;
+        }
         // the data already pulled with the header counts
         uint16_t got = used();
         _bytesLeft = size > got ? size - got : 0;
@@ -190,7 +196,7 @@ namespace audio {
         _underruns = 0;
         _highNibble = false;
         _last = PCM_SILENCE;
-        _adpcm.reset();
+        _adpcm.restart();
         // fill up first: the sound starts with a full buffer
         while (_bytesLeft > 0 && BUFFER - used() >= CHUNK) {
             if (!pull()) {

@@ -12,7 +12,7 @@
 //
 // tools (lib/video/source):
 //   config.json ranges and defaults of the two targets
-//   convert.py  .gif -> output/*.h, added to output/selected.h
+//   convert.py  .gif / .webp / .png, videos (.mp4 / .mov / .webm ..., ffmpeg) -> output/*.h, added to output/selected.h
 //               --target flash: frames in the .h (FlashPlayer)
 //               --target stream: size + path for the board, the frames after it in #if 0 (never compiled in; StreamPlayer)
 //               --target flash stream: frames in the .h, within the ranges of both (both players)

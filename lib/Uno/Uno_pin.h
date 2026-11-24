@@ -20,7 +20,7 @@ namespace Uno {
     // the base of every pin: its number and what it can do
     template <uint8_t PIN>
     struct UnoBasicPin : UnoBoard {
-        static_assert(exists(PIN), "Uno::UnoInputPin: PIN must be 0 ~ 19 (D0 ~ D13 = 0 ~ 13, A0 ~ A5 = 14 ~ 19)");
+        static_assert(exists(PIN), "Uno pin: PIN must be 0 ~ 19 (D0 ~ D13 = 0 ~ 13, A0 ~ A5 = 14 ~ 19)");
         static_assert(warn::SerialPin<(PIN == 0 || PIN == 1)>::ok, "");
 
         // the Arduino pin number

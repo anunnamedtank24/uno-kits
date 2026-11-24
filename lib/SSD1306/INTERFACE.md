@@ -4,7 +4,7 @@
 |---|---|
 | 一個 `Bus`（I2C）：`init()`、`start(address, read)`、`write8()`、`stop()`…（`Uno::UnoI2C<SCL, SDA>`） | `SSD1306::OLED128x64`、`OLED128x32`：一個 Screen（`graphics`、`image`、`video` 都能畫），RAM 裡一整張畫面，`display()` 只送改變的部分；面板自己的指令（對比、捲動、淡出…） |
 
-給要寫新套件、換主板或換零件的人；用法、接線、注意事項見 [README.md](README.md)。
+給要寫新套件、換主板或換零件的人；用法、接線、注意事項見 [讀我.md](讀我.md)。
 
 ## 前提條件
 

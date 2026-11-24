@@ -1,12 +1,5 @@
 {
-    "note": "ranges and defaults of convert.py / stream.py; hard limits (the format or the board cannot do it) stop with an error, recommended ranges only warn",
-    "board": {
-        "note": "UNO 16 MHz, ST7789 on 8 MHz SPI; cycles counted from the avr-gcc output (see lib/font/source/convert.py)",
-        "cpuHz": 16000000,
-        "windowCycles": 480,
-        "pixelCycles": 44,
-        "runCycles": 30
-    },
+    "note": "ranges and defaults of convert.py / stream.py; hard limits (the format or the board cannot do it) stop with an error, recommended ranges only warn; the board's numbers (clock, flash, drawing cycles) are in its board.json (--board)",
     "screen": {
         "note": "hard: the players refuse anything bigger",
         "width": 240,
@@ -19,22 +12,34 @@
     "targets": {
         "flash": {
             "note": "frames in flash (output/*.h), played by video::FlashPlayer",
-            "palettes": [16, 256, 565],
-            "recommendedPalettes": [16, 256],
+            "palettes": [
+                16,
+                256,
+                565
+            ],
+            "recommendedPalettes": [
+                16,
+                256
+            ],
             "defaultPalette": 16,
-            "byteCycles": 6,
-            "recommendedMaxBytes": 12000,
-            "useKeyframe": true
+            "useKeyframe": true,
+            "recommendedMaxFlashShare": 0.375
         },
         "stream": {
             "note": "frames stay on the computer (in output/*.h, after #if 0), stream.py sends them to video::StreamPlayer; the board only has the size and the path (output/*.h); palette 256 works (the board keeps it in RAM taken at run time, 2 bytes a color), but warns",
-            "palettes": [16, 256, 565],
-            "recommendedPalettes": [16, 565],
+            "palettes": [
+                16,
+                256,
+                565
+            ],
+            "recommendedPalettes": [
+                16,
+                565
+            ],
             "defaultPalette": 565,
             "baud": 1000000,
-            "byteCycles": 176,
-            "recommendedMaxBytes": null,
-            "useKeyframe": false
+            "useKeyframe": false,
+            "recommendedMaxFlashShare": null
         }
     }
 }

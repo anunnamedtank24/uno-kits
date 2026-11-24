@@ -1,0 +1,125 @@
+#include <Arduino.h>
+#include "Uno_serial.h"
+#include "Uno_pin.h"
+#include "L298N.h"
+
+// UNO + L298N board + 2 DC motors as a two-wheeled car, the speed on ENA / ENB (EN jumpers removed):
+// coast really rolls out, slow speeds, every move; told on the USB serial
+//   pio device monitor        (platformio.ini: monitor_speed = BAUD)
+//
+// the same wiring as tests/1_one_motor ~ tests/5_stepper (6 pins); tests/6_car is the same car with the jumpers on
+// the first time: lift the car up (wheels in the air); forward must turn both wheels forward
+// SPIN_90_MS depends on the car, the floor and the battery: measure it on the floor
+
+// ---------- settings ----------
+
+// wiring: L298N with both EN jumpers REMOVED
+//   OUT1, OUT2 -> one motor   OUT3, OUT4 -> the other (which is which: IN12_SIDE)
+//   +12V -> battery + (the motors' voltage)   GND -> battery - AND the UNO's GND   +5V: nothing (5V-EN jumper on)
+constexpr uint8_t ENA_PIN = 5;              // ENA: a PWM pin (3, 5, 6, 9, 10, 11): the speed of OUT1, OUT2
+constexpr uint8_t IN1_PIN = A0;             // IN1: any pin
+constexpr uint8_t IN2_PIN = A1;             // IN2
+constexpr uint8_t IN3_PIN = A2;             // IN3
+constexpr uint8_t IN4_PIN = A3;             // IN4
+constexpr uint8_t ENB_PIN = 6;              // ENB: a PWM pin: the speed of OUT3, OUT4
+// what the wiring does
+//   a wheel going backward when it should go forward: change its FORWARD to BACKWARD (or swap its two wires)
+//   the left and right swapped: LEFT -> RIGHT
+constexpr L298N::Side IN12_SIDE = L298N::LEFT;          // the wheel on IN1 / IN2 (OUT1, OUT2)
+constexpr L298N::Turn IN12_POSITIVE = L298N::FORWARD;   // how it turns when IN1 - IN2 > 0 (IN1 HIGH, IN2 LOW)
+constexpr L298N::Turn IN34_POSITIVE = L298N::FORWARD;   // how the other turns when IN3 - IN4 > 0
+constexpr uint16_t SUPPLY_MV = 0;           // the voltage on +12V, mV (0 = not checked); e.g. 7400 for 2 Li-ion cells
+constexpr bool JUMPER_5V = true;            // the 5V-EN jumper on (VS <= 12 V)
+constexpr uint32_t BAUD = 1000000;          // USB serial: the same as monitor_speed in platformio.ini
+
+constexpr uint8_t SPEED = 160;              // 0 ~ 255
+constexpr uint8_t SLOW_SPEED = 60;          // the slowest that still turns (with MIN_DUTY)
+constexpr uint16_t SPIN_90_MS = 450;        // a quarter turn in place at SPEED (measure it)
+constexpr int16_t ARC_DIFFERENCE = 120;     // the speed difference of the arcs
+constexpr uint16_t PAUSE_MS = 800;          // braked between the moves
+constexpr uint16_t RAMP_MS = 200;           // 0 -> 255 takes this long; 0 = at once
+constexpr uint8_t MIN_DUTY = 0;             // the motors' dead zone (tests/4_pwm)
+constexpr uint8_t LEFT_TRIM = 100;          // the car drifts on "forward": lower the faster side (%)
+constexpr uint8_t RIGHT_TRIM = 100;
+constexpr uint16_t START_MS = 2000;         // after the reset, before the first move
+
+// ---------- parts ----------
+
+using Board = L298N::L298NBoard<Uno::UnoPwmPin<ENA_PIN>,
+                                Uno::UnoOutputPin<IN1_PIN>, Uno::UnoOutputPin<IN2_PIN>,
+                                Uno::UnoOutputPin<IN3_PIN>, Uno::UnoOutputPin<IN4_PIN>,
+                                Uno::UnoPwmPin<ENB_PIN>, SUPPLY_MV, JUMPER_5V>;
+// forward only on 2 pins (IN1, IN3 on +5V; IN2, IN4 on GND): no brake, the stops roll out
+//   L298N::L298NBoard<Uno::UnoPwmPin<ENA_PIN>, L298N::Supply, L298N::Ground,
+//                     L298N::Supply, L298N::Ground, Uno::UnoPwmPin<ENB_PIN>>
+using Car = L298N::TwoWheelCar<Board, IN12_SIDE, IN12_POSITIVE, IN34_POSITIVE>;
+using Link = Uno::UnoSerial<BAUD>;
+
+Car car;
+
+// ---------- test ----------
+
+// the move just queued: tell it, wait for it, then brake PAUSE_MS
+void done(const char *text) {
+    Link::printText(text);
+    Link::printText("\r\n");
+    car.wait();
+    car.brake(PAUSE_MS);
+    car.wait();
+}
+
+// what this wiring can do
+void printWiring() {
+    Link::printText("ENA ");
+    Link::printPin(ENA_PIN);
+    Link::printText(", ENB ");
+    Link::printPin(ENB_PIN);
+    Link::printText(Car::LEFT_BOTH_WAYS && Car::RIGHT_BOTH_WAYS ? ": both ways" : ": forward only");
+    Link::printText(Car::CAN_COAST ? ", coasts" : ", coast brakes");
+    Link::printText(Car::CAN_BRAKE ? ", brakes\r\n" : ", cannot brake (rolls out)\r\n");
+}
+
+// ---------- main ----------
+
+void setup() {
+    Link::init();
+    car.init();
+    car.setRampMs(RAMP_MS);
+    car.setMinDuty(MIN_DUTY);
+    car.setTrim(LEFT_TRIM, RIGHT_TRIM);
+    Link::printText("\r\ncar on ENA / ENB: ");
+    printWiring();
+    delay(START_MS);
+}
+
+void loop() {
+    car.forward(SPEED, 1500);
+    done("1 forward 1.5 s");
+    car.backward(SPEED, 1500);
+    done("2 backward 1.5 s");
+
+    car.forward(SPEED, 1000);
+    car.coast(2000);
+    done("3 forward, then coast: rolls out slowly (EN LOW)");
+    car.forward(SPEED, 1000);
+    car.brake(2000);
+    done("4 forward, then brake: stops at once (compare with 3)");
+
+    car.forward(SLOW_SPEED, 2000);
+    done("5 forward slowly: drive / coast on EN (not turning: raise SLOW_SPEED or MIN_DUTY)");
+
+    car.spin(SPEED, SPIN_90_MS);
+    done("6 spin right 90 degrees");
+    car.spin(-SPEED, SPIN_90_MS);
+    done("7 spin left 90 degrees");
+
+    car.pivotRight(SPEED, 2 * SPIN_90_MS);
+    done("8 pivot right: the right wheel braked, the left drives");
+
+    car.arc(SPEED, ARC_DIFFERENCE, 2000);
+    car.arc(SPEED, -ARC_DIFFERENCE, 2000);
+    done("9 arc right, then left");
+
+    Link::printText("again in 3 s\r\n\r\n");
+    delay(3000);
+}

@@ -1,69 +1,71 @@
 # color
 
-| 需要 | 得到 |
+English | [中文](讀我.md)
+
+| Needs | Gives |
 |---|---|
-| （不需要） | 顏色格式：`color::RGB565`、`BGR565`、`RGB666`、`RGB888`、`BGR888`、`GBR888`、`RGB444`、`RGB332`、`BW<門檻>`，以及任何位元數、任何順序的 `color::Packed<R, G, B, 順序>` |
-| （不需要） | 每個格式都有一樣的東西：常用顏色（`RED`、`BLACK`…）、`color(r, g, b)`、`red(c)` / `green(c)` / `blue(c)`、互相換算 |
-| （不需要） | 每個格式都能當螢幕的 `ColorFormat`：`ST7789::M130T<Bus, color::RGB565>`，graphics、font、image、video 就都用它畫 |
+| (nothing) | color formats: `color::RGB565`, `BGR565`, `RGB666`, `RGB888`, `BGR888`, `GBR888`, `RGB444`, `RGB332`, `BW<threshold>`, and `color::Packed<R, G, B, order>` with any bits and any order |
+| (nothing) | every format has the same things: common colors (`RED`, `BLACK`…), `color(r, g, b)`, `red(c)` / `green(c)` / `blue(c)`, conversions between them |
+| (nothing) | every format can be a screen's `ColorFormat`: `ST7789::M130T<Bus, color::RGB565>`, and graphics, font, image, video all draw with it |
 
-不需要任何介面，任何主板都能用。開發者看的細節（每個函式、怎麼寫新的格式、前提條件）在 [INTERFACE.md](INTERFACE.md)。
+Needs no interface: works on any board. The details for developers (every function, how to write a new format, prerequisites) are in [INTERFACE.md](INTERFACE.md).
 
-## 用法
+## Usage
 
 ```cpp
 #include "color.h"
 
-using ScreenColor = color::RGB565;                                   // 螢幕的顏色格式
+using ScreenColor = color::RGB565;                                   // the screen's color format
 using Screen = graphics::Canvas<ST7789::M130T<Bus, ScreenColor>>;
 Screen screen;
 
 screen.drawFilledScreen(ScreenColor::BLUE);
-screen.drawTexts(0, 0, ScreenColor::color(255, 128, 0), "orange");   // 0 ～ 255 的紅、綠、藍
-image::FlashImage<Screen> pictures(screen);                          // 圖片也用 ScreenColor，不用再給一次
+screen.drawTexts(0, 0, ScreenColor::color(255, 128, 0), "orange");   // red, green, blue 0 ~ 255
+image::FlashImage<Screen> pictures(screen);                          // pictures use ScreenColor too, no need to give it again
 ```
 
-完整的例子：`src/week_3_ST7789_DS18B20_graphics_color_font_image_video/tests/1_screen.cpp`（RGB565）、`src/week_4_SSD1306_switch_buzzer_audio/tests/1_oled.cpp`（`BW`）。
+Complete examples: `src/week_3_ST7789_DS18B20_graphics_color_font_image_video/tests/1_screen.cpp` (RGB565), `src/week_4_SSD1306_switch_buzzer_audio/tests/1_oled.cpp` (`BW`).
 
-- **顏色格式寫在螢幕上，一個地方就好**：graphics（圖形）、font（文字）、image（圖片）、video（動畫）都從螢幕拿，不會給錯。
-- **圖片、動畫的檔案**：`convert.py` 轉出來的顏色一律存成 RGB565（串流也是），畫的時候自動換成螢幕的格式。
+- **The color format is written on the screen, in one place**: graphics (shapes), font (text), image (pictures) and video (animations) all take it from the screen, so it cannot be given wrong.
+- **Files of pictures and animations**: the colors `convert.py` makes are always stored as RGB565 (streams too), and turned into the screen's format when drawn.
 
-## 有哪些格式、用在哪
+## The formats and where they are used
 
-| 格式 | 每個顏色 | 用在 |
+| Format | Each color | Used for |
 |---|---|---|
-| `color::RGB565` | 16 bit（紅 5、綠 6、藍 5） | ST7789 最快的模式；也是圖片、動畫檔案的格式 |
-| `color::BGR565` | 16 bit，紅藍對調 | 紅色顯示成藍色的 ST7789 面板 |
-| `color::RGB666` | 18 bit（每色 6） | ST7789 的 18 bit 模式：顏色比較細，畫圖約慢 1.5 倍 |
-| `color::RGB888` | 24 bit（每色 8，`0xRRGGBB`） | 電腦常用的寫法；ST7789 用 18 bit 模式送（每色只用前 6 bit） |
-| `color::RGB444` | 12 bit（每色 4） | ST7789 的 12 bit 模式：資料最少，顏色最粗 |
-| `color::BGR888`、`GBR888` | 24 bit，順序不同 | 其他順序的資料；ST7789 也能用（18 bit 模式，一個一個色送） |
-| `color::RGB332` | 8 bit（紅 3、綠 3、藍 2） | 1 byte 一個顏色的資料（調色盤、LED 矩陣）；**ST7789 沒有這個模式**，給 ST7789 會編譯錯誤 |
-| `color::BW<門檻>` | 1 bit：黑或白 | SSD1306 OLED：亮度 ≥ 門檻（0 ～ 255，預設 128）的點亮 |
-| `color::Packed<R, G, B, 順序>` | 自己定：每色 1 ～ 8 bit，順序 RGB / RBG / GRB / GBR / BRG / BGR | 上面沒有的格式 |
+| `color::RGB565` | 16 bit (red 5, green 6, blue 5) | the fastest mode of the ST7789; also the format of picture and animation files |
+| `color::BGR565` | 16 bit, red and blue swapped | ST7789 panels that show red as blue |
+| `color::RGB666` | 18 bit (6 each) | the ST7789's 18-bit mode: finer colors, drawing about 1.5 times slower |
+| `color::RGB888` | 24 bit (8 each, `0xRRGGBB`) | the usual way on computers; the ST7789 sends it in 18-bit mode (only the top 6 bits of each) |
+| `color::RGB444` | 12 bit (4 each) | the ST7789's 12-bit mode: the least data, the coarsest colors |
+| `color::BGR888`, `GBR888` | 24 bit, other orders | data in other orders; the ST7789 takes them too (18-bit mode, one color at a time) |
+| `color::RGB332` | 8 bit (red 3, green 3, blue 2) | data with 1 byte a color (palettes, LED matrices); **the ST7789 has no such mode**: a compile error on the ST7789 |
+| `color::BW<threshold>` | 1 bit: black or white | the SSD1306 OLED: points with brightness ≥ threshold (0 ~ 255, default 128) are lit |
+| `color::Packed<R, G, B, order>` | your own: 1 ~ 8 bits each, order RGB / RBG / GRB / GBR / BRG / BGR | formats not above |
 
-## 換算
+## Conversions
 
 ```cpp
 uint32_t web = color::RGB888::toRGB888(color::RGB888::ORANGE);          // 0xFFA500
 uint16_t c = color::convert<color::RGB565, color::RGB888>(0x336699);     // RGB888 → RGB565
-uint8_t gray = color::RGB565::green(color::RGB565::GRAY);                // 0 ～ 255
+uint8_t gray = color::RGB565::green(color::RGB565::GRAY);                // 0 ~ 255
 ```
 
-## 輸入限制
+## Input limits
 
-| 項目 | 範圍 | 超出時 |
+| Item | Range | Beyond it |
 |---|---|---|
-| `color(r, g, b)` | 各 0 ～ 255 | —（低位被丟掉：例如 RGB565 的紅、藍留 5 bit，綠留 6 bit） |
-| `red/green/blue(c)`、`fromRGB565(c)` | 任意值 | —（多的高位被忽略） |
-| `Packed` 每個顏色的位元 | 1 ～ 8 | 編譯錯誤 |
-| `BW` 的門檻 | 0 ～ 255；0 = 全部亮 | 編譯錯誤（`uint8_t`） |
+| `color(r, g, b)` | 0 ~ 255 each | — (the low bits are dropped: e.g. RGB565 keeps 5 bits of red and blue, 6 of green) |
+| `red/green/blue(c)`, `fromRGB565(c)` | any value | — (extra high bits are ignored) |
+| bits of each color of `Packed` | 1 ~ 8 | compile error |
+| threshold of `BW` | 0 ~ 255; 0 = all lit | compile error (`uint8_t`) |
 
-## 注意事項
+## Caveats
 
-| 情況 | 結果 | 做法 |
+| Situation | Result | What to do |
 |---|---|---|
-| 給 ST7789 一個它沒有的格式（RGB332、BW） | 編譯錯誤，說明能用哪些 | 換 RGB444 / RGB565 / RGB666 / RGB888 |
-| 給 SSD1306 彩色的格式 | 編譯錯誤 | 用 `color::BW<門檻>` |
-| OLED 上的照片暗部一整片黑 | `BW` 只用門檻判斷，沒有抖動 | 門檻調低，或轉換時就用 `--palette 2 --dither` |
-| 18 bit（RGB666、RGB888）的螢幕 | 畫圖約慢 1.5 倍；圖片、動畫的緩衝每個顏色 4 bytes | 不需要那麼細的顏色就用 RGB565 |
-| 以前寫 `namespace RGB565 = color::RGB565;` | 現在是型別，編譯錯誤 | 改成 `using RGB565 = color::RGB565;` |
+| giving the ST7789 a format it does not have (RGB332, BW) | a compile error listing the ones that work | use RGB444 / RGB565 / RGB666 / RGB888 |
+| giving the SSD1306 a color format | compile error | use `color::BW<threshold>` |
+| the dark parts of a photo on the OLED all black | `BW` uses only the threshold, no dithering | lower the threshold, or convert with `--palette 2 --dither` |
+| 18-bit screens (RGB666, RGB888) | drawing about 1.5 times slower; the buffers of pictures and animations take 4 bytes a color | use RGB565 when such fine colors are not needed |
+| old code writing `namespace RGB565 = color::RGB565;` | it is a type now: compile error | change it to `using RGB565 = color::RGB565;` |

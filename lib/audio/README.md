@@ -1,30 +1,32 @@
 # audio
 
-| 需要 | 得到 |
+English | [中文](讀我.md)
+
+| Needs | Gives |
 |---|---|
-| 播音符、節奏：`Sound`（[buzzer](../buzzer/README.md) 的模組） | `audio::Player`：嗶聲、旋律、滑音，播放時不會等 |
-| 播取樣：`SampleOut`（`Uno::UnoPcmOut<9>`） | `audio::SamplePlayer`：真正的波形（說話、音樂） |
-| 串流：再加一個 `Stream`（`stream::Puller<Uno::UnoSerial<BAUD>, CHUNK>`） | `audio::StreamPlayer`、`StreamSamplePlayer`：聲音留在電腦，播放時才送過來 |
-| 音檔（wav、mp3、m4a…） | `melody::*`：`MELODY("檔案")` 或 `source/convert.py` 轉出來的聲音 |
+| playing notes, rhythms: a `Sound` (the modules of [buzzer](../buzzer/README.md)) | `audio::Player`: beeps, melodies, slides, never waiting while playing |
+| playing samples: `SampleOut` (`Uno::UnoPcmOut<9>`) | `audio::SamplePlayer`: real waveforms (speech, music) |
+| streaming: also a `Stream` (`stream::Puller<Uno::UnoSerial<BAUD>, CHUNK>`) | `audio::StreamPlayer`, `StreamSamplePlayer`: the sound stays on the computer and is sent while playing |
+| sound files (wav, mp3, m4a…) | `melody::*`: sounds made by `MELODY("file")` or `source/convert.py` |
 
-「需要」是介面（duck typing），括號裡是這個專案現成的實作，換主板只要換它們。開發者看的細節（前提條件、介面需求、每個函式、參數、資源）在 [INTERFACE.md](INTERFACE.md)。
+"Needs" are interfaces (duck typing); in parentheses the ready implementations of this project, and another board only replaces them. The details for developers (prerequisites, interface requirements, every function, parameters, resources) are in [INTERFACE.md](INTERFACE.md).
 
-聲音和播放器，`namespace audio`（播放器、格式）和 `namespace melody`（產生的聲音）。聲音由 `source/convert.py` 從音檔（wav、flac、mp3、m4a、ogg、webm…）轉成三種交換格式之一，依**誰來播**（`--sound`）和**品質**（`--quality`）而不同，可以燒進 Flash（`--target flash`），也可以留在電腦、播放時從串口串流（`--target stream`）。
+Sounds and players, `namespace audio` (players, formats) and `namespace melody` (the sounds made). `source/convert.py` turns a sound file (wav, flac, mp3, m4a, ogg, webm…) into one of three exchange formats, depending on **who plays it** (`--sound`) and **the quality** (`--quality`); it can be burned into Flash (`--target flash`) or stay on the computer and be streamed over the serial while playing (`--target stream`).
 
-## 用法
+## Usage
 
 ```cpp
-#include "Uno_tone.h"        // 音符、節奏（Timer1）
-#include "Uno_pcm_out.h"     // 取樣（Timer1 + Timer2）
-#include "Uno_serial.h"      // 串流
+#include "Uno_tone.h"        // notes, rhythms (Timer1)
+#include "Uno_pcm_out.h"     // samples (Timer1 + Timer2)
+#include "Uno_serial.h"      // streaming
 #include "stream.h"
 #include "buzzer.h"
 #include "audio.h"
 
-constexpr uint8_t BUZZER_PIN = 9;                              // 無源蜂鳴器的 +（取樣只能 D9、D10）
-constexpr uint32_t BAUD = 1000000;                             // 跟 stream.py 的 --baud 一樣
-constexpr uint8_t NOTE_CHUNK = 32;                             // 音符：一次拉幾個 byte
-constexpr uint8_t PCM_CHUNK = 255;                             // 取樣：越大越快（16 kHz 要 255）
+constexpr uint8_t BUZZER_PIN = 9;                              // the passive buzzer's + (samples only on D9, D10)
+constexpr uint32_t BAUD = 1000000;                             // the same as --baud of stream.py
+constexpr uint8_t NOTE_CHUNK = 32;                             // notes: bytes pulled at a time
+constexpr uint8_t PCM_CHUNK = 255;                             // samples: the bigger the faster (16 kHz needs 255)
 
 using Speaker = buzzer::PassiveBuzzer2Pins<Uno::UnoTone<BUZZER_PIN>>;
 using Link = Uno::UnoSerial<BAUD>;
@@ -37,14 +39,14 @@ using StreamSamples = audio::StreamSamplePlayer<Uno::UnoPcmOut<BUZZER_PIN>, PcmL
 
 void setup() {
     speaker.init();
-    speaker.play<melody::ode_to_joy_flash_passive_medium>();             // Flash 的音符
-    // streamSpeaker.open<melody::twinkle_star_stream_passive_medium>();  // 電腦的音符
-    // Samples::play<melody::hello_flash_pcm_8000_adpcm>();              // Flash 的取樣
-    // StreamSamples::open<melody::ode_to_joy_stream_pcm_16000_u8>();     // 電腦的取樣
+    speaker.play<melody::ode_to_joy_flash_passive_medium>();             // notes from Flash
+    // streamSpeaker.open<melody::twinkle_star_stream_passive_medium>();  // notes from the computer
+    // Samples::play<melody::hello_flash_pcm_8000_adpcm>();              // samples from Flash
+    // StreamSamples::open<melody::ode_to_joy_stream_pcm_16000_u8>();     // samples from the computer
 }
 
 void loop() {
-    speaker.update();                                                  // 每次 loop 都要呼叫，不會等
+    speaker.update();                                                  // call it every loop, it never waits
 }
 ```
 
@@ -52,14 +54,14 @@ void loop() {
 cd lib/audio
 python source/convert.py assets/hello.aiff output --sound pcm --quality low --preview hello.wav
 python source/convert.py assets/ode_to_joy.flac output --target stream --sound pcm --quality high
-cd ../.. && python lib/stream/source/stream.py     # 串流時一直開著；燒錄時它會自己放開串口（lib/stream）
+cd ../.. && python lib/stream/source/stream.py     # keep it running while streaming; it lets go of the port by itself while uploading (lib/stream)
 ```
 
-完整的例子：`src/week_5_NEC/tests/2_sound_formats.cpp`（每種格式從 Flash 和電腦各播一次，把實測結果送給 `stream.py` 印出來）、`src/week_4_SSD1306_switch_buzzer_audio/tests/3_active_buzzer.cpp`（有源）、`src/week_4_SSD1306_switch_buzzer_audio/tests/4_passive_buzzer.cpp`（無源）。
+Complete examples: `src/week_5_NEC/tests/2_sound_formats.cpp` (each format played once from Flash and once from the computer, the measurements sent to `stream.py` to print), `src/week_4_SSD1306_switch_buzzer_audio/tests/3_active_buzzer.cpp` (active), `src/week_4_SSD1306_switch_buzzer_audio/tests/4_passive_buzzer.cpp` (passive).
 
-## 直接用檔案（推薦）
+## Using the files directly (recommended)
 
-程式裡寫 `MELODY("路徑", "選項")`，編譯前自動轉換，不用先跑 `convert.py`，檔案也不用放在 `assets/`：
+A program writes `MELODY("path", "options")` and it is converted before compiling: no need to run `convert.py` first, and the file need not be in `assets/`:
 
 ```cpp
 #include "audio.h"
@@ -67,19 +69,19 @@ using Chime = MELODY("sounds/chime.m4a", "--sound passive --quality high");
 speaker.play<Chime>();
 ```
 
-| 項目 | 說明 |
+| Item | Explanation |
 |---|---|
-| 路徑 | 絕對路徑、`~/…`、相對於寫它的 .cpp；找不到時再試專案資料夾、`lib/audio/assets/` |
-| 選項 | 一個字串，就是 `source/convert.py` 的選項：`--target`、`--sound`、`--quality`、`--start`、`--duration`…；全部省略時是轉換工具的預設（`--sound passive --quality medium`） |
-| 轉到哪 | `lib/audio/output/`，跟手動跑 `convert.py` 的一樣（`tools/assets.py` 每次編譯前找：同一個檔案、同樣的選項已經轉過就直接用，沒有才轉） |
-| 型態 | `MELODY(...)` 就是那個 `melody::` struct，跟手動轉換的一樣用 |
-| 限制 | 兩個參數都要是字串常數（不能是變數） |
+| Path | absolute, `~/…`, relative to the .cpp that writes it; if not found, the project folder, then `lib/audio/assets/` |
+| Options | one string, the options of `source/convert.py`: `--target`, `--sound`, `--quality`, `--start`, `--duration`…; all left out, the converter's defaults (`--sound passive --quality medium`) |
+| Where it goes | `lib/audio/output/`, the same as running `convert.py` by hand (`src/tools/assets.py` looks before every build: the same file with the same options already converted is used, only otherwise is it converted) |
+| Type | `MELODY(...)` is that `melody::` struct, used like one converted by hand |
+| Limits | both arguments must be string constants (no variables) |
 
-完整的說明：[lib/README.md](../README.md#字型圖片影片聲音直接用檔案)；例子：`src/week_4_SSD1306_switch_buzzer_audio/tests/5_files.cpp`（四種都有）。上面「用法」是手動轉換的方式，一樣能用。
+The full explanation: [lib/README.md](../README.md#fonts-pictures-videos-sounds-use-the-files-directly); example: `src/week_4_SSD1306_switch_buzzer_audio/tests/5_files.cpp` (all four kinds). "Usage" above is the way of converting by hand, which works just as well.
 
-## 手寫旋律
+## Hand-written melodies
 
-不想從音檔轉時，也可以直接寫：
+Without converting a sound file, a melody can also be written directly:
 
 ```cpp
 #include <avr/pgmspace.h>
@@ -92,69 +94,69 @@ speaker.play(MY_SONG, sizeof(MY_SONG) / sizeof(MY_SONG[0]) / 2);
 ```
 
 
-## 接線
+## Wiring
 
-| 播什麼 | 接法 |
+| What it plays | Wiring |
 |---|---|
-| 音符、節奏 | 蜂鳴器的接法，見 [buzzer](../buzzer/README.md#接線) |
-| 取樣（`Uno::UnoPcmOut`） | **D9 或 D10** → 100 Ω → 無源蜂鳴器 + / 小喇叭；- 接 GND。三隻腳的無源模組（PNP）：I/O 接 D9、用 `Uno::UnoPcmOut<9, true>` |
+| notes, rhythms | the buzzer's wiring, see [buzzer](../buzzer/README.md#wiring) |
+| samples (`Uno::UnoPcmOut`) | **D9 or D10** → 100 Ω → the passive buzzer's + / a small speaker; - to GND. 3-pin passive modules (PNP): I/O on D9, with `Uno::UnoPcmOut<9, true>` |
 
-- **取樣怎麼發聲**：Timer1 在 D9 / D10 送 62.5 kHz 的 PWM，工作週期就是取樣值；62.5 kHz 遠超過聽得到的範圍，蜂鳴器或喇叭只跟得上平均值，所以平均值變成聲音。
-- **小喇叭（8 Ω）**：不能直接接腳位（電流太大），串 100 ～ 220 Ω，或用電晶體推；再串一顆 10 µF 電容可以擋掉直流（取樣的中間值是一半的電壓）。
-- **蜂鳴器播取樣**：電磁式在 2 ～ 4 kHz 共振最大聲，低音很小、音色偏尖，但人聲聽得出來。
+- **How samples make sound**: Timer1 sends a 62.5 kHz PWM on D9 / D10 whose duty cycle is the sample value; 62.5 kHz is far beyond hearing, and the buzzer or speaker can only follow the average, so the average becomes the sound.
+- **Small speakers (8 Ω)**: never straight on a pin (too much current): 100 ~ 220 Ω in series, or a transistor; another 10 µF capacitor in series blocks the DC (the middle value of the samples is half the voltage).
+- **A buzzer playing samples**: magnetic ones are loudest at their 2 ~ 4 kHz resonance, the bass is very quiet and the tone sharp, but voices are clear enough.
 
-## 格式和品質
+## Formats and quality
 
-| `--sound` | 誰播 | 格式（`kind`） | `--quality low` | `medium`（預設） | `high` |
+| `--sound` | Who plays it | Format (`kind`) | `--quality low` | `medium` (default) | `high` |
 |---|---|---|---|---|---|
-| `passive` | 無源蜂鳴器（`Player`、`StreamPlayer`） | 音符：{ 音高, ms } | `NOTES_COMPACT`：半音編號 + 10 ms 為單位，**2 B / 音**，只能是準的半音 | `NOTES_HZ_MS`：Hz + ms，4 B / 音，對齊半音 | `NOTES_HZ_MS`，量到的頻率（滑音、顫音變成很多小步），最短 20 ms |
-| `active` | 有源蜂鳴器（同上） | 節奏：{ 響 / 停, ms }，`RHYTHM_MS`，2 B / 步 | 最短的音 80 ms、休止 60 ms | 50 / 40 ms | 20 / 20 ms |
-| `pcm` | 無源蜂鳴器或小喇叭，PWM（`SamplePlayer`、`StreamSamplePlayer`） | 取樣：真正的波形（人聲、樂器音色） | 8000 Hz、IMA ADPCM（4 bits）：4 KB / 秒 | 11025 Hz、8 bits：11 KB / 秒 | 16000 Hz、8 bits：16 KB / 秒 |
+| `passive` | a passive buzzer (`Player`, `StreamPlayer`) | notes: { pitch, ms } | `NOTES_COMPACT`: semitone number + units of 10 ms, **2 B a note**, exact semitones only | `NOTES_HZ_MS`: Hz + ms, 4 B a note, snapped to semitones | `NOTES_HZ_MS`, the frequencies measured (slides and vibrato become many small steps), shortest 20 ms |
+| `active` | an active buzzer (the same) | rhythm: { on / off, ms }, `RHYTHM_MS`, 2 B a step | shortest sound 80 ms, rest 60 ms | 50 / 40 ms | 20 / 20 ms |
+| `pcm` | a passive buzzer or small speaker, PWM (`SamplePlayer`, `StreamSamplePlayer`) | samples: the real waveform (voices, the tone of instruments) | 8000 Hz, IMA ADPCM (4 bits): 4 KB a second | 11025 Hz, 8 bits: 11 KB a second | 16000 Hz, 8 bits: 16 KB a second |
 
-- **單一參數可以蓋過 `--quality`**：音符有 `--quantize`、`--min-note`、`--min-rest`；節奏有 `--hz`（在無源上播時的音高）；取樣有 `--rate`（2000 ～ 32000）、`--encoding u8 / u4 / adpcm`、`--gain`。
-- **取樣的三種編碼**（同一段人聲、8 kHz 實測的訊號 / 誤差）：
+- **Single parameters override `--quality`**: notes have `--quantize`, `--min-note`, `--min-rest`; rhythms have `--hz` (the pitch when played on a passive one); samples have `--rate` (2000 ~ 32000), `--encoding u8 / u4 / adpcm`, `--gain`.
+- **The three encodings of samples** (signal / error measured on the same voice at 8 kHz):
 
-| `--encoding` | 每個取樣 | 訊號 / 誤差 | 說明 |
+| `--encoding` | A sample | Signal / error | Explanation |
 |---|---|---|---|
-| `u8` | 8 bits | 35.5 dB | 最清楚 |
-| `adpcm` | 4 bits | 17.5 dB | 只存「跟上一個的差」，跟 u4 一樣大但清楚很多；解碼約 100 個週期 |
-| `u4` | 4 bits | 9.2 dB | 很粗，有明顯的雜音 |
+| `u8` | 8 bits | 35.5 dB | the clearest |
+| `adpcm` | 4 bits | 17.5 dB | stores only "the difference from the one before": the same size as u4 but much clearer; decoding takes about 100 cycles |
+| `u4` | 4 bits | 9.2 dB | very coarse, with clear noise |
 
-- **節奏**：響的地方不管有沒有音高都算（鼓、拍手也收得到）；兩個相連的音之間自動留 30 ms 的停，不然有源蜂鳴器會連成一聲。
-- **放錯播放器**：取樣給 `Player`、音符給 `SamplePlayer`、`--target stream` 的給 Flash 的播放器，都是**編譯錯誤**；音符給有源蜂鳴器（`Sound::HAS_PITCH` 是 false）是**編譯警告**（只聽得到節奏）。
+- **Rhythms**: anything sounding counts, with a pitch or not (drums and claps come through too); two sounds in a row get a 30 ms stop between them automatically, or the active buzzer would join them into one.
+- **The wrong player**: samples given to `Player`, notes given to `SamplePlayer`, `--target stream` given to a Flash player are all **compile errors**; notes given to an active buzzer (`Sound::HAS_PITCH` is false) are a **compile warning** (only the rhythm is heard).
 
-## Flash 或串流
+## Flash or stream
 
 | | `--target flash` | `--target stream` | `--target flash stream` |
 |---|---|---|---|
-| 資料在哪 | `output/x.h`，燒進 Flash | `output/x.h` 的 `#if 0` 裡，留在電腦；板子只編譯前面的長度和路徑 | `output/x.h` |
-| 播放 | `Player`、`SamplePlayer` | `StreamPlayer`、`StreamSamplePlayer` + `stream.py` | 兩種都可以 |
-| 長度 | 受 Flash 限制：取樣 8 kHz ADPCM 約 6 秒、16 kHz 8 bits 約 1.5 秒 | 不限 | 受 Flash 限制 |
+| where the data is | `output/x.h`, burned into Flash | in the `#if 0` of `output/x.h`, staying on the computer; the board compiles only the length and path in front | `output/x.h` |
+| played by | `Player`, `SamplePlayer` | `StreamPlayer`, `StreamSamplePlayer` + `stream.py` | both |
+| length | limited by Flash: samples at 8 kHz ADPCM about 6 seconds, 16 kHz 8 bits about 1.5 seconds | unlimited | limited by Flash |
 
-## 輸入限制
+## Input limits
 
-| 項目 | 範圍 | 超出時 |
+| Item | Range | Beyond it |
 |---|---|---|
-| `hz` | Sound 能發的範圍（`UnoTone`：16 ～ 20000） | 夾到範圍內（Sound 做）；0 = 安靜 |
-| `ms`、`onMs`、`offMs` | 0 ～ 65535 | — |
-| `beeps` 的 `count` | 1 ～ 255 | 0：安靜 |
-| `Player` 的步數 | 1 ～ 65535（Flash 也有限制） | 編譯錯誤（`play<Melody>`）；`nullptr` 或 0：安靜 |
-| 取樣率 | 2000 ～ 32000（`UnoPcmOut`：1954 ～ 32000） | `convert.py` 報錯；板子夾到範圍內 |
-| 放錯播放器、`--target stream` 給 Flash 的播放器 | — | 編譯錯誤 |
-| 音符給有源蜂鳴器 | — | 編譯警告 |
-| `BUFFER`、`CHUNK` | 見參數 | 編譯錯誤 |
-| `noteHz` 的八度 | 0 ～ 8 | 回傳 0（休止） |
-| `update()` 的間隔 | 越常越好 | 音符：邊界晚，但節奏不飄；串流取樣：緩衝撐不住就 underrun |
-| `notes` 指標 | 必須指向 `PROGMEM` 的陣列 | 不檢查：播出亂七八糟的音 |
+| `hz` | the range the Sound can make (`UnoTone`: 16 ~ 20000) | clamped (by the Sound); 0 = silent |
+| `ms`, `onMs`, `offMs` | 0 ~ 65535 | — |
+| `count` of `beeps` | 1 ~ 255 | 0: silent |
+| steps of `Player` | 1 ~ 65535 (Flash is a limit too) | compile error (`play<Melody>`); `nullptr` or 0: silent |
+| sample rate | 2000 ~ 32000 (`UnoPcmOut`: 1954 ~ 32000) | `convert.py` error; clamped on the board |
+| the wrong player, `--target stream` given to a Flash player | — | compile error |
+| notes given to an active buzzer | — | compile warning |
+| `BUFFER`, `CHUNK` | see the parameters | compile error |
+| the octave of `noteHz` | 0 ~ 8 | returns 0 (a rest) |
+| interval of `update()` | the more often the better | notes: the edges come late, but the rhythm does not drift; streamed samples: underruns when the buffer runs out |
+| the `notes` pointer | must point to an array in Flash (UNO: `PROGMEM`) | not checked: plays garbled notes |
 
-## 注意事項
+## Caveats
 
-| 情況 | 結果 | 做法 |
+| Situation | Result | What to do |
 |---|---|---|
-| 和弦、兩個聲部 | 音符一次只有一個音 | 轉換時挑主旋律；要原本的聲音就用 `--sound pcm` |
-| 有源蜂鳴器播音符 | 只聽得到節奏（編譯警告） | 用 `--sound active` 轉成節奏 |
-| 很短的音（< 40 ms） | `GAP_MS` 讓它一半時間安靜 | `GAP_MS` 調小，或 `--min-note` 調大 |
-| 取樣和 `UnoTone`、D3 / D9 / D10 / D11 的 PWM（LED）一起用 | 搶 Timer1 / Timer2 | 一次只用一個；LED 改接 D5 / D6 |
-| 串流取樣時程式做很久的事（OLED 的 `display()` 64 ms） | 緩衝用完：underrun，喀喀聲 | `BUFFER` 加大（8 kHz 8 bits：64 ms 要 512 B），或降低取樣率、改 ADPCM |
-| 同時開 `pio device monitor`、Arduino 的 `Serial` | 搶同一個串口 | 串流時都不要開；`stream.py` 本身同時處理圖片、動畫、聲音 |
-| 播放中直接動腳位（`digitalWrite`、`analogWrite`） | 播放器不知道，狀態對不上 | 只透過播放器控制 |
+| chords, two voices | notes play only one at a time | pick the main melody when converting; for the original sound use `--sound pcm` |
+| an active buzzer playing notes | only the rhythm is heard (compile warning) | convert to a rhythm with `--sound active` |
+| very short notes (< 40 ms) | `GAP_MS` keeps them silent half the time | a smaller `GAP_MS`, or a bigger `--min-note` |
+| samples together with `UnoTone` or PWM on D3 / D9 / D10 / D11 (LEDs) | they fight over Timer1 / Timer2 | one at a time; move the LEDs to D5 / D6 |
+| the program doing something long while streaming samples (the OLED's `display()`, 64 ms) | the buffer runs out: an underrun, clicks | a bigger `BUFFER` (8 kHz 8 bits: 64 ms needs 512 B), or a lower sample rate, or ADPCM |
+| `pio device monitor` or Arduino's `Serial` open at the same time | they fight over the same serial port | keep both closed while streaming; `stream.py` itself handles pictures, animations and sounds together |
+| touching the pin directly while playing (`digitalWrite`, `analogWrite`) | the player does not know, its state no longer matches | control it only through the player |

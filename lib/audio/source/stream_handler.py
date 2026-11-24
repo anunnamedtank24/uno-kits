@@ -59,7 +59,7 @@ class Sound:
 
 
 def get_array(text: str, name: str) -> list[int]:
-    match = re.search(rf"\b{name}\[\] PROGMEM = \{{(.*?)\}};", text, re.DOTALL)
+    match = re.search(rf"\b{name}\[\][^=\n]*= \{{(.*?)\}};", text, re.DOTALL)
     if not match:
         raise ValueError(f"no array {name}[]")
     body = re.sub(r"//[^\n]*", "", match.group(1))

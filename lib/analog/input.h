@@ -40,7 +40,8 @@ namespace analog {
         // as its quantity rises); values outside are clipped
         inline void setRange(uint16_t low, uint16_t high);
 
-        // learns the range from what it sees (call it, then move the knob / light the sensor end to end)
+        // learns the range from what it sees (call it, then move the knob / light the sensor end to end);
+        // a reversed range (low > high, e.g. Photoresistor<..., false>) stays reversed
         inline void startLearning();
         inline void stopLearning();
         inline uint16_t rangeLow() const;
@@ -72,6 +73,7 @@ namespace analog {
         uint16_t _low = 0;
         uint16_t _high = AnalogPin::MAX;
         bool _learning = false;
+        bool _reversed = false;            // learning a reversed range: _low holds the highest value seen
         uint16_t _on = AnalogPin::MAX + 1;
         uint16_t _off = AnalogPin::MAX + 1;
         bool _state = false;
@@ -103,11 +105,13 @@ namespace analog {
         _sum = _sum - (_sum >> SMOOTHING) + _raw;
         if (_learning) {
             uint16_t v = value();
-            if (v < _low) {
-                _low = v;
+            uint16_t &lowest = _reversed ? _high : _low;
+            uint16_t &highest = _reversed ? _low : _high;
+            if (v < lowest) {
+                lowest = v;
             }
-            if (v > _high) {
-                _high = v;
+            if (v > highest) {
+                highest = v;
             }
         }
         return checkThreshold();
@@ -137,6 +141,9 @@ namespace analog {
 
     template <class AnalogPin, uint8_t SMOOTHING>
     inline void Input<AnalogPin, SMOOTHING>::startLearning() {
+        if (_low != _high) {
+            _reversed = _low > _high;      // low == high (learned nothing yet): the direction stays as it was
+        }
         _low = value();
         _high = value();
         _learning = true;

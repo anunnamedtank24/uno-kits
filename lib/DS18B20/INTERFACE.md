@@ -4,7 +4,7 @@
 |---|---|
 | 一個 `Wire`（1-Wire 匯流排）：`init()`、`reset()`、`write8()`、`read8()`…（`Uno::UnoOneWire<PIN>`） | `DS18B20::TO92`、`WaterproofProbe`、`KY001`：溫度（1/100 °C 或 float）、解析度 9 ～ 12 bits、不用等的轉換、錯誤碼 |
 
-給要寫新套件、換主板或換零件的人；用法、接線、注意事項見 [README.md](README.md)。
+給要寫新套件、換主板或換零件的人；用法、接線、注意事項見 [讀我.md](讀我.md)。
 
 ## 前提條件
 

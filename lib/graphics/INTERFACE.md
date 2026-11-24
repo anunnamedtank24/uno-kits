@@ -4,7 +4,7 @@
 |---|---|
 | 一個 `Screen`：`width()`、`height()`、`fillWindow(x, y, w, h, color)` 和它的顏色格式 `ColorFormat`（`ST7789::M130T<Bus, color::RGB565>`、`SSD1306::OLED128x64<Bus, color::BW<>>`） | `graphics::Canvas<Screen>`：點、線、矩形、三角形、圓（空心、實心），文字和數字（`drawTexts`） |
 
-給要寫新套件、換主板或換零件的人；用法、接線、注意事項見 [README.md](README.md)。
+給要寫新套件、換主板或換零件的人；用法、接線、注意事項見 [讀我.md](讀我.md)。
 
 ## 前提條件
 

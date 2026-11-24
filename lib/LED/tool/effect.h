@@ -183,6 +183,10 @@ namespace LED {
             return high;
         }
         uint32_t up = phase < half ? phase : period - phase;
+        // an odd period: its middle phase gives half + 1, which would go past high (and wrap around)
+        if (up > half) {
+            up = half;
+        }
         return (uint8_t)(low + ((int32_t)high - low) * (int32_t)up / (int32_t)half);
     }
 }

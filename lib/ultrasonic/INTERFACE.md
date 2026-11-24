@@ -4,7 +4,7 @@
 |---|---|
 | `Trigger`：輸出腳（`Uno::UnoOutputPin<PIN>`）；`Echo`：有中斷的輸入腳（`Uno::UnoInterruptPin<PIN>`） | `ultrasonic::HCSR04`：距離（mm），量的時候不會等，結果碼，溫度修正；`ultrasonic::Median`：比較穩的距離 |
 
-給要寫新套件、換主板或換零件的人；用法、接線、注意事項見 [README.md](README.md)。
+給要寫新套件、換主板或換零件的人；用法、接線、注意事項見 [讀我.md](讀我.md)。
 
 ## 前提條件
 
@@ -41,7 +41,7 @@ lib/ultrasonic/
 | `init()` | 設定兩隻腳和中斷；下一次 `update()` 開始第一次測量 |
 | `update()` | 時間到就送 Trig、檢查 Echo；量完一次回傳 true（不會等） |
 | `measure()` | 量一次並等它結束（最多約 40 ms，還要加上離上一次不到間隔的時間），回傳結果 |
-| `result()` | 上一次的結果（`RESULT_OK`、`RESULT_TOO_NEAR`…，見 [README 的結果](README.md#結果)） |
+| `result()` | 上一次的結果（`RESULT_OK`、`RESULT_TOO_NEAR`…，見 [讀我 的結果](讀我.md#結果)） |
 | `distanceMm()` | 上一次的距離，mm（`RESULT_OK` 時才對，其他是 0） |
 | `echoUs()` | 上一次 Echo 的 HIGH 有幾 µs（沒結束的是 0） |
 | `setIntervalMs(ms)`、`intervalMs()` | 兩次測量的間隔，預設和最小都是 60 ms |

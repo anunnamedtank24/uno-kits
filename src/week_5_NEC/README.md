@@ -1,60 +1,63 @@
 # week_5_NEC
 
-紅外線遙控器（[lib/NEC](../../lib/NEC/README.md)）的測試，以及四個用遙控器操作的作業：紅綠燈模組和一顆 LED（[lib/LED](../../lib/LED/README.md)）、OLED 上的方塊、五線譜和蜂鳴器、鋼琴。
+English | [中文](讀我.md)
 
-全部的檔案現在都是 `.bak`，要跑哪個就留下哪個：
+Tests of the infrared remote ([lib/NEC](../../lib/NEC/README.md)), and four assignments driven by the remote: a traffic light module and an LED ([lib/LED](../../lib/LED/README.md)), a square on the OLED, a staff and a buzzer, a piano.
+
+Every file is `.bak` now; keep the one to run:
 
 ```bash
-python src/hide.py week_5_NEC/tests/1_receiver     # 只留下這個（拿掉 .bak），其他改成 .bak
+python src/hide.py week_5_NEC/tests/1_receiver     # keep only this one (drop its .bak), the others become .bak
 pio run -t upload
 ```
 
-| 檔案 | 內容 | 需要的硬體 |
+| File | Contents | Hardware needed |
 |---|---|---|
-| `tests/1_receiver.cpp` | 把遙控器送的碼印到串口，找出你的遙控器是哪一種 | 紅外線接收器 + 遙控器 |
-| `tests/2_sound_formats.cpp` | 每種聲音格式（音符、節奏、取樣）從 Flash 和電腦各播一次，實測結果印在 `stream.py` | 無源蜂鳴器（D9） |
-| `tests/3_transmitter.cpp` | 紅外線**發射**：在串口按鍵，UNO 當 17 鍵遙控器送出；接收器同時收回來檢查 | 紅外線 LED（D3）+ 接收器（D2） |
-| `assignments/1_rgb_remote.cpp` | 作業一：數字鍵調紅、綠、藍（紅綠燈模組的紅和綠 + 一顆藍色 LED） | 接收器 + 紅綠燈模組 + LED |
-| `assignments/2_moving_square.cpp` | 作業二：方向鍵讓 OLED 上的小正方形移動 1 像素 | 接收器 + OLED |
-| `assignments/3_staff.cpp` | 作業三：在五線譜上寫二分音符，按 OK 播放 | 接收器 + OLED + 無源蜂鳴器 |
-| `assignments/4_piano.cpp` | 作業四：遙控器當鋼琴（0 ～ 9 = A3 ～ C5），記錄彈的，按 OK 重播 | 接收器 + 無源蜂鳴器 |
+| `tests/1_receiver.cpp` | prints the codes the remote sends to the serial, to find out which kind your remote is | infrared receiver + remote |
+| `tests/2_sound_formats.cpp` | each sound format (notes, rhythm, samples) played once from Flash and once from the computer, the measurements printed by `stream.py` | passive buzzer |
+| `tests/3_transmitter.cpp` | infrared **sending**: press keys on the serial, and the UNO sends them as a 17-key remote; the receiver gets them back for checking | infrared LED + receiver |
+| `assignments/1_rgb_remote.cpp` | assignment 1: number keys set red, green, blue (red and green of a traffic light module + a blue LED) | receiver + traffic light module + LED |
+| `assignments/2_moving_square.cpp` | assignment 2: the arrow keys move a small square on the OLED by 1 pixel | receiver + OLED |
+| `assignments/3_staff.cpp` | assignment 3: half notes written on a staff, OK plays them | receiver + OLED + passive buzzer |
+| `assignments/4_piano.cpp` | assignment 4: the remote as a piano (0 ~ 9 = A3 ~ C5), recording what is played, OK plays it again | receiver + passive buzzer |
 
-## 接線
+## Wiring
 
-| 零件 | 腳 | UNO | 哪些程式 |
+| Part | Pin | UNO | Which programs |
 |---|---|---|---|
-| 紅外線接收器（HX1838 / VS1838B / KY-022） | OUT（S） | **D2** | `tests/2_sound_formats` 以外全部 |
-| | GND（-） | GND | |
-| | VCC（+） | 5V | |
-| 紅綠燈模組（R、Y、G、GND） | R | **D3**（模組上有電阻，直接接） | `assignments/1_rgb_remote` |
-| | G | **D5** | |
-| | Y | 不接 | |
+| infrared receiver (HX1838 / VS1838B / KY-022) | OUT (S) | **`IR_PIN`** | all but `tests/2_sound_formats` |
+| | GND (-) | GND | |
+| | VCC (+) | 5V | |
+| traffic light module (R, Y, G, GND) | R | **`RED_PIN`** (resistors on the module, connect directly) | `assignments/1_rgb_remote` |
+| | G | **`GREEN_PIN`** | |
+| | Y | nothing | |
 | | GND | GND | |
-| 藍色 LED（2 隻腳） | 長腳（+） | 220 Ω → **D6** | `assignments/1_rgb_remote` |
-| | 短腳（-） | GND | |
-| OLED（128×64 I2C） | SCL | **D13** | `assignments/2_moving_square`、`assignments/3_staff` |
-| | SDA | **D11** | |
-| | VCC、GND | 5V、GND | |
-| 無源蜂鳴器 | + | 100 Ω → **D9** | `tests/2_sound_formats`、`assignments/3_staff`、`assignments/4_piano` |
+| blue LED (2 legs) | long leg (+) | 220 Ω → **`BLUE_PIN`** | `assignments/1_rgb_remote` |
+| | short leg (-) | GND | |
+| OLED (128×64 I2C) | SCL | **`SCL_PIN`** | `assignments/2_moving_square`, `assignments/3_staff` |
+| | SDA | **`SDA_PIN`** | |
+| | VCC, GND | 5V, GND | |
+| passive buzzer | + | 100 Ω → **`BUZZER_PIN`** | `tests/2_sound_formats`, `assignments/3_staff`, `assignments/4_piano` |
 | | - | GND | |
-| 紅外線 LED（940 nm） | 長腳（+） | 220 Ω → **D3** | `tests/3_transmitter`（跟紅綠燈的 R 同一隻腳，不要同時接） |
-| | 短腳（-） | GND | |
-| USB | D0、D1 | 串口 | `tests/1_receiver`、`tests/2_sound_formats`（`stream.py`）、`tests/3_transmitter`、`assignments/1_rgb_remote`、`assignments/4_piano`（印出狀態） |
+| infrared LED (940 nm) | long leg (+) | 220 Ω → **`IR_LED_PIN`** | `tests/3_transmitter` |
+| | short leg (-) | GND | |
+| USB | D0, D1 | serial | `tests/1_receiver`, `tests/2_sound_formats` (`stream.py`), `tests/3_transmitter`, `assignments/1_rgb_remote`, `assignments/4_piano` (print their state) |
 
-用到的腳：**D2、D3、D5、D6、D9、D11、D13**（加上串口的 D0、D1）。除了 D3（紅綠燈的 R 或紅外線 LED 二選一），全部接著也不會衝突：
+The pins are the `*_PIN` of each program's settings. To keep every part connected at once, they follow these rules (the infrared LED may share a pin with R of the traffic light, as long as both are not connected at once):
 
-| 腳 | 為什麼選它 |
+| Pin | The rule |
 |---|---|
-| D2 | 任何腳都能用腳位改變中斷；D2 跟其他零件不同組（D0 ～ D7 這組只有它用中斷） |
-| D3、D5、D6 | PWM 腳裡不用 Timer1 的（D9、D10 留給蜂鳴器），D11 被 OLED 用了 |
-| D9 | 無源蜂鳴器在 D9 由 Timer1 直接翻轉，不佔 CPU，`display()` 時聲音也不會斷 |
-| D13、D11 | 跟 week_4_SSD1306_switch_buzzer_audio 一樣的 OLED 接法 |
+| `IR_PIN` | any pin can use a pin change interrupt; but only one interrupt pin per group (D0 ~ D7, D8 ~ D13, A0 ~ A5), so not in a group another part uses for one |
+| `RED_PIN`, `GREEN_PIN`, `BLUE_PIN` | PWM pins not using Timer1 (D9, D10 are kept for the buzzer), and not `SDA_PIN` |
+| `IR_LED_PIN` | D3 or D11: Timer2 makes the 38 kHz there |
+| `BUZZER_PIN` | D9 or D10: Timer1 toggles the passive buzzer directly, with no CPU taken, so the sound does not break during `display()` (and `tests/2_sound_formats` needs D9 / D10 for PCM) |
+| `SCL_PIN`, `SDA_PIN` | any two pins, the same OLED wiring as week_4_SSD1306_switch_buzzer_audio |
 
-8 隻腳（SDA、SCK、MOSI、MISO、IRQ、GND、RST、3.3V）的那塊板子是 **RC522 RFID 讀卡模組**，不是紅外線接收器，這週用不到（見 [lib/NEC](../../lib/NEC/README.md#名稱)）。紅外線接收器只有 3 隻腳，前面一顆黑色圓頂：晶片本身圓頂面對自己、腳朝下時是 OUT、GND、VCC；焊在小板子上的（KY-022 等）照板子印的字接，順序常常不同。
+The board with 8 pins (SDA, SCK, MOSI, MISO, IRQ, GND, RST, 3.3V) is the **RC522 RFID reader module**, not an infrared receiver, and not used this week (see [lib/NEC](../../lib/NEC/README.md#names)). An infrared receiver has only 3 pins, with a black dome in front: the chip itself, with the dome facing you and the legs down, is OUT, GND, VCC; soldered on a small board (KY-022 and others), wire by what is printed on the board: the order is often different.
 
-# tests/1_receiver.cpp：紅外線接收
+# tests/1_receiver.cpp: infrared receiving
 
-每收到一個碼就印一行：
+A line for every code received:
 
 ```
 infrared receiver on D2: press keys on the remote
@@ -62,40 +65,40 @@ address 0x00  command 0x45  press     numbers top: 1      arrows top: *
 address 0x00  command 0x45  repeat 1  numbers top: 1      arrows top: *
 ```
 
-- **先跑這個**：17 鍵遙控器有兩種排法、指令不同（見 [lib/NEC](../../lib/NEC/README.md#遙控器)）。按幾個鍵，`numbers top` 和 `arrows top` 哪一欄跟你按的一樣，就把三個作業設定裡的 `using Remote = …` 改成那一個（現在是 `NEC::Remote17KeyNumbersTop`，另一種是 `NEC::Remote17KeyArrowsTop`）。
-- **兩欄都不對**：把印出來的 `command` 抄下來，照 `lib/NEC/module/remote_17_key.h` 加一個遙控器。
-- **按住**：先一行 `press`，接著每 108 ms 一行 `repeat`。
-- **收不到時的診斷**：
-  - 開機印 `D2 idle: HIGH (ok)` 或 `LOW`。沒收到光時應該是 HIGH；LOW 表示接收器沒電、腳接錯，或 OUT 沒接在 D2。
-  - 每一串脈衝印成 `pulses 67: L9010 H4470 L580 …`（L = 有光，H = 沒光，單位 µs）。好的 NEC 按鍵開頭是 L 約 9000、H 約 4500。
-  - 有變化卻解不出來時，每 2 秒印 `D2 changed N times, no NEC code`。按一下 NEC 的鍵約變化 68 次，只有個位數就是雜訊。
-  - D2 開了內部上拉：接收器沒接好時，D2 是安靜的 HIGH，不會讀到懸空的雜訊。
-- 串口監看：`pio device monitor`（1 Mbaud）。
+- **Run this first**: 17-key remotes come in two layouts with different commands (see [lib/NEC](../../lib/NEC/README.md#remotes)). Press a few keys; whichever column, `numbers top` or `arrows top`, matches what you pressed, set the `using Remote = …` in the settings of the three assignments to that one (now `NEC::Remote17KeyNumbersTop`; the other is `NEC::Remote17KeyArrowsTop`).
+- **Neither column matches**: write down the `command`s printed and add a remote following `lib/NEC/module/remote_17_key.h`.
+- **Held**: first a `press` line, then a `repeat` line every 108 ms.
+- **Diagnosing when nothing comes**:
+  - power-on prints `{IR_PIN} idle: HIGH (ok)` or `LOW`. Without light it should be HIGH; LOW means the receiver has no power, a pin is wrong, or OUT is not on `IR_PIN`.
+  - each burst of pulses is printed as `pulses 67: L9010 H4470 L580 …` (L = light, H = no light, in µs). A good NEC key starts with L about 9000, H about 4500.
+  - when there are changes but nothing decodes, every `CHECK_MS` it prints `{IR_PIN} changed N times, no NEC code`. One NEC key changes about 68 times; a single digit is noise.
+  - `IR_PIN` has the internal pull-up on (`IR_INTERNAL_PULLUP`): with the receiver badly connected, it is a quiet HIGH instead of floating noise.
+- The serial monitor: `pio device monitor` (at `BAUD`, = `monitor_speed` of platformio.ini).
 
-# tests/2_sound_formats.cpp：每種聲音格式
+# tests/2_sound_formats.cpp: each sound format
 
-無源蜂鳴器（+ 串 100 Ω 接 D9）。電腦上先開 `stream.py`（`python lib/stream/source/stream.py`），板子的報告會印成 `[BOARD] …`。
+A passive buzzer (+ through 100 Ω to `BUZZER_PIN`). Start `stream.py` on the computer first (`python lib/stream/source/stream.py`); the board's reports are printed as `[BOARD] …`.
 
-| 測試 | 格式 | 應該聽到 |
+| Test | Format | What you should hear |
 |---|---|---|
-| 0 | Flash 的音符，Hz + ms | 小星星，音準 |
-| 1 | Flash 的音符，compact（一半大小） | 一樣的小星星 |
-| 2 | Flash 的節奏（給有源的），在無源上播 | SOS，固定一個音高 |
-| 3 | Flash 的取樣，8 kHz ADPCM | 人聲「Hello! I am an Arduino.」；印出實際的取樣率、第一秒播了幾個取樣 |
-| 4 | 電腦的音符 | 小星星（要開 `stream.py`） |
-| 5 | 電腦的取樣，16 kHz 8 bits | 歡樂頌的真正聲音；印出花了多久、緩衝空掉幾次（underruns） |
+| 0 | notes from Flash, Hz + ms | Twinkle Twinkle Little Star, in tune |
+| 1 | notes from Flash, compact (half the size) | the same Twinkle Twinkle |
+| 2 | a rhythm from Flash (for active ones), played on the passive one | SOS, at one fixed pitch |
+| 3 | samples from Flash, 8 kHz ADPCM | the voice "Hello! I am an Arduino."; prints the real sample rate and how many samples played in the first second |
+| 4 | notes from the computer | Twinkle Twinkle (needs `stream.py`) |
+| 5 | samples from the computer, 16 kHz 8 bits | the real sound of Ode to Joy; prints how long it took and how many times the buffer ran empty (underruns) |
 
-跑完停 3 秒再從頭。沒開 `stream.py` 時 4、5 會印出（也不會被看到）錯誤 4，然後繼續。
+When done, it pauses `AGAIN_MS` and starts over. Without `stream.py`, 4 and 5 print error 4 (which nobody sees either) and go on.
 
-# tests/3_transmitter.cpp：紅外線發射
+# tests/3_transmitter.cpp: infrared sending
 
-| 零件 | 腳 | UNO |
+| Part | Pin | UNO |
 |---|---|---|
-| 紅外線 LED（或 KY-005） | 長腳（S） | 220 Ω → **D3** |
-| | 短腳（-） | GND |
-| 紅外線接收器（可以不接） | OUT、GND、VCC | **D2**、GND、5V |
+| infrared LED (or KY-005) | long leg (S) | 220 Ω → **`IR_LED_PIN`** |
+| | short leg (-) | GND |
+| infrared receiver (optional) | OUT, GND, VCC | **`IR_PIN`**, GND, 5V |
 
-`pio device monitor` 打開後直接按鍵（不用 Enter）：`0` ～ `9`、`*`、`#`、`w` `a` `s` `d`（方向）、`k`（OK）、`h`（按住 OK 1 秒）。
+Open `pio device monitor` and press keys (no Enter needed): `0` ~ `9`, `*`, `#`, `w` `a` `s` `d` (arrows), `k` (OK), `h` (OK held for `HOLD_MS`).
 
 ```
 sent 5 (command 0x40)
@@ -105,89 +108,89 @@ sent OK (command 0x1C) held 1 s
   heard OK (address 0, command 0x1C, repeat 1)
 ```
 
-- **自己收自己**：LED 對著接收器，或對著牆反射，`heard` 就是接收器收到的，可以確認發射是對的。
-- **D3**：38 kHz 由 Timer2 從 D3 直接輸出，所以 LED 一定要接 D3（或 D11：設定的 `IR_LED_PIN = 11`）。
-- **控制別的東西**：送的是 17 鍵遙控器的碼（位址 0），另一塊跑作業的 UNO 也收得到；要控制電視，改成那台電視的位址和指令（先用 `tests/1_receiver` 收它遙控器的碼）。
+- **Receiving itself**: with the LED aimed at the receiver, or reflected off a wall, `heard` is what the receiver got, which confirms the sending is right.
+- **`IR_LED_PIN` is D3 or D11**: Timer2 puts the 38 kHz straight out of those two pins only.
+- **Controlling other things**: it sends the codes of the 17-key remote (address 0), which another UNO running an assignment receives too; for a TV, change to that TV's address and commands (receive its remote's codes with `tests/1_receiver` first).
 
-# assignments/1_rgb_remote.cpp：遙控器調紅、綠、藍
+# assignments/1_rgb_remote.cpp: red, green, blue by remote
 
-| 鍵 | 紅 R | 綠 G | 藍 B |
+| Key | Red R | Green G | Blue B |
 |---|---|---|---|
 | -= 1 | 1 | 4 | 7 |
 | = 0 | 2 | 5 | 8 |
 | += 1 | 3 | 6 | 9 |
 
-`0`：R、G、B 全部歸 0。
+`0`: R, G, B all back to 0.
 
-- **一格多大**：R、G、B 是 0 ～ `LEVELS`（10）的整數，所以 `+= 1` 按 10 次從關到最亮。用 0 ～ 255 的話一次 `+= 1` 根本看不出來。
-- **看起來均勻**：每一格先換成眼睛的亮度（`LED::levelToBrightness`），再換成 PWM 的工作週期（`LED::toDuty`，平方）。直接用工作週期的話，前幾格變化很大、後面幾乎不變。
-- **按住**：1、3、4、6、7、9 按住約 0.3 秒後每秒走約 9 格；2、5、8、0 按住不重複。
-- 每次改變也會印到串口：`R 3  G 0  B 10`。
+- **How big a step is**: R, G, B are whole numbers 0 ~ `LEVELS`, so `LEVELS` presses of `+= 1` go from off to brightest. With 0 ~ 255, one `+= 1` would not even show.
+- **Looks even**: each step is first turned into the eye's brightness (`LED::levelToBrightness`), then into the PWM duty cycle (`LED::toDuty`, squared). With the duty cycle directly, the first steps change a lot and the later ones barely at all.
+- **Held**: 1, 3, 4, 6, 7, 9 held past `REPEAT_DELAY` repeat codes go about 9 steps a second (one per repeat code, 108 ms); 2, 5, 8, 0 do not repeat when held.
+- Each change is also printed to the serial: `R 3  G 0  B 10`.
 
-# assignments/2_moving_square.cpp：方向鍵移動方塊
+# assignments/2_moving_square.cpp: a square moved by the arrow keys
 
-- 6×6 的實心正方形，一開始在中間。
-- 上、下、左、右各移動 1 像素，碰到邊就停；`OK` 回到中間。
-- **按住**：約 0.3 秒後每秒移動約 9 像素（NEC 的重複碼每 108 ms 一個）。
-- **畫法**：擦掉舊的、畫新的，`display()` 只送改過的位元組（約 1 ms），不用整張重送。
+- A filled `SIZE` × `SIZE` square, in the middle at first.
+- Up, down, left, right move it by 1 pixel, stopping at the edges; `OK` brings it back to the middle.
+- **Held**: after `REPEAT_DELAY` repeat codes it moves about 9 pixels a second (NEC repeat codes come every 108 ms).
+- **Drawing**: erases the old one, draws the new one; `display()` sends only the changed bytes (about 1 ms), not the whole screen again.
 
-# assignments/3_staff.cpp：五線譜
+# assignments/3_staff.cpp: a staff
 
-高音譜記號、五線譜和 7 個二分音符；三角形指著正在寫的那一個。
+A treble clef, a staff and 7 half notes; a triangle points at the one being written.
 
-| 鍵 | 動作 |
+| Key | Action |
 |---|---|
-| 上 / 下 | 升高 / 降低一階（C D E F G A B），升降記號拿掉 |
-| `*` | 降半音，音符前面畫 ♭；本來是 ♯ 的變回本位 |
-| `#` | 升半音，音符前面畫 ♯；本來是 ♭ 的變回本位 |
-| `OK` | 換下一個；在最後一個按 OK 就一起播放，播完三角形回到第一個，可以再改 |
+| up / down | one step higher / lower (C D E F G A B), with the accidental removed |
+| `*` | a semitone lower, with a ♭ drawn in front of the note; a ♯ turns back to natural |
+| `#` | a semitone higher, with a ♯ drawn in front of the note; a ♭ turns back to natural |
+| `OK` | on to the next; OK on the last one plays them all, and afterwards the triangle goes back to the first, ready to change again |
 
-- **音域**：「中央 C5 到 B4」我理解成**中央 C（C4，262 Hz）到 B4（494 Hz）**，也就是 C4 開始的一個八度。科學音高記號的中央 C 是 C4；C5 比 B4 高，不會是「到 B4」的起點。中央 C 在五線譜下面加一條短線，B4 在第三線。
-- **一開始**：7 個都是中央 C。
-- **♭、♯ 的極端**：C♭4 播 B3（247 Hz），B♯4 播 C5（523 Hz）。
-- **播放**：`BPM` 120，二分音符 = 2 拍 = 1 秒；每個音最後 60 ms 安靜，兩個一樣的音才聽得出是兩個。播放時三角形跟著走，按鍵不理。
-- **為什麼 7 個**：每個音符要留升降記號的位置（5 px）和符桿，16 px 一個剛好放 7 個；8 個時記號會貼到前一個音符的符桿。改 `NOTE_COUNT` 時放不下會編譯錯誤。
-- **高音譜記號**：一張 15×40 的黑白圖（`picture::treble_clef_flash_15x40_palette_2`），用 macOS 字型 Apple Symbols 的 𝄞 畫的，漩渦對齊 G4 線（見 [lib/image/output](../../lib/image/output/README.md#目前的圖片)）。先畫它再畫五條線，線才會穿過去。
-- **在電腦上看過畫面**：把畫五線譜的程式碼拿到電腦上編譯、畫進假的 128×64 螢幕，確認線、記號、音符、短線的位置。
+- **Range**: "middle C5 to B4" I take as **middle C (C4, 262 Hz) to B4 (494 Hz)**, that is, the octave starting at C4. In scientific pitch notation middle C is C4; C5 is higher than B4 and cannot be the start of "to B4". Middle C has a short ledger line below the staff; B4 is on the third line.
+- **At first**: all 7 are middle C.
+- **The extremes of ♭, ♯**: C♭4 plays B3 (247 Hz), B♯4 plays C5 (523 Hz).
+- **Playing**: at `BPM`, a half note = 2 beats; the last `GAP_MS` of each note are silent, so two equal notes are heard as two. While playing, the triangle follows along and keys are ignored.
+- **Why 7**: each note needs room for an accidental (5 px) and a stem; 16 px a note fits exactly 7; with 8 the accidentals would touch the stem of the note before. Changing `NOTE_COUNT` to something that does not fit is a compile error.
+- **The treble clef**: a 15×40 black-and-white picture (`picture::treble_clef_flash_15x40_palette_2`), drawn from 𝄞 of the macOS font Apple Symbols, its curl lined up with the G4 line (see [lib/image/output](../../lib/image/output/README.md#the-current-pictures)). It is drawn before the five lines, so the lines go through it.
+- **The picture checked on the computer**: the code drawing the staff was compiled on the computer and drawn into a fake 128×64 screen, to check where the lines, accidentals, notes and ledger lines go.
 
-# assignments/4_piano.cpp：遙控器鋼琴
+# assignments/4_piano.cpp: a remote piano
 
-接線：紅外線接收器（S → D2）+ 無源蜂鳴器（+ 串 100 Ω → **D9**、- → GND）。
+Wiring: infrared receiver (S → `IR_PIN`) + passive buzzer (+ through 100 Ω → **`BUZZER_PIN`**, - → GND).
 
-| 鍵 | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 |
+| Key | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 |
 |---|---|---|---|---|---|---|---|---|---|---|
-| 音 | A3 | B3 | C4 | D4 | E4 | F4 | G4 | A4 | B4 | C5 |
+| Note | A3 | B3 | C4 | D4 | E4 | F4 | G4 | A4 | B4 | C5 |
 | Hz | 220 | 247 | 262 | 294 | 330 | 349 | 392 | 440 | 494 | 523 |
 
-- **按住就一直響**，放開就停；換一個鍵就換音。
-- **記錄**：第一次按下開始，記下每個音響了多久，以及兩個音之間沒按的時間（ms）。最後一個音之後到按 OK 之間的時間不記。
-- **OK**：重播剛才那一段（重播時按鍵不理），播完回到等待；下一次按下開始新的記錄，就這樣循環。
-- **最多 `MAX_STEPS`（120）步**（音和休止各算一步），滿了之後彈的不記，串口會印 `full`。
-- **串口**：每個音和長度都會印出來（`pio device monitor`），例如 `C4 412 ms`。
+- **Sounds as long as held**, stops on release; another key changes the note.
+- **Recording**: starts at the first press, recording how long each note sounded and the time between two notes with nothing pressed (ms). The time after the last note until OK is not recorded.
+- **OK**: plays back what was just played (keys ignored while playing back), then waits again; the next press starts a new recording, and so on.
+- **At most `MAX_STEPS` steps** (notes and rests each count as a step); when full, what is played is not recorded and the serial prints `full`.
+- **Serial**: each note and its length are printed (`pio device monitor`), e.g. `C4 412 ms`.
 
-**遙控器沒有「放開」的訊號**：按住時每 108 ms 送一次重複碼，重複碼停了才算放開（最後一個之後 150 ms）。所以：
+**A remote has no "released" signal**: while held it sends a repeat code every 108 ms, and released counts only when the repeat codes stop (150 ms after the last one). So:
 
-| 情況 | 結果 |
+| Situation | Result |
 |---|---|
-| 按一下就放 | 約響 150 ～ 250 ms，不會更短 |
-| 按住 | 比手指按的時間長約 0.1 秒 |
-| 剛按下 | 晚約 70 ms 才響（遙控器送完一個碼要 67.5 ms） |
-| 重播 | 記錄的是「聽到的長度」，所以重播跟你彈的時候聽起來一樣 |
+| a quick press | sounds about 150 ~ 250 ms, never shorter |
+| held | about 0.1 second longer than the finger pressed |
+| just pressed | sounds about 70 ms late (a remote takes 67.5 ms to send a code) |
+| playing back | what is recorded is "the length heard", so the playback sounds the same as when you played |
 
-- **音量**：設定的 `VOLUME`。
-- 已經燒進板子，開機會印 `remote piano: …`；彈的部分要你用遙控器試。
+- **Volume**: the setting `VOLUME`.
+- Already uploaded to the board, it prints `remote piano: …` at power-on; the playing is for you to try with the remote.
 
-## 資源
+## Resources
 
-| 程式 | Flash | RAM |
+| Program | Flash | RAM |
 |---|---|---|
-| `tests/1_receiver` | 2.6 KB | 390 B（按鍵名稱的字串） |
+| `tests/1_receiver` | 2.6 KB | 390 B (the strings of the key names) |
 | `assignments/1_rgb_remote` | 2.7 KB | 150 B |
-| `assignments/2_moving_square` | 3.6 KB | 1164 B（OLED 的畫面 1 KB） |
+| `assignments/2_moving_square` | 3.6 KB | 1164 B (the OLED's screen 1 KB) |
 | `assignments/3_staff` | 8.3 KB | 1277 B |
 | `assignments/4_piano` | 4.0 KB | 856 B |
 
-## 實測
+## Measured
 
-- `tests/1_receiver`：第一顆接收器接錯過、之後一直把 OUT 拉在 LOW（燈一直亮，D2 讀到 LOW）；換一顆之後就收得到了。
-- 遙控器、LED、方塊、五線譜**還沒有在板子上用遙控器試過**（我沒辦法按遙控器）。解碼在電腦上測過：256 個指令、±15% 的時序誤差、按住、雜訊、斷掉的一半都解對（見 [lib/NEC](../../lib/NEC/INTERFACE.md#nec-協定)）。
+- `tests/1_receiver`: the first receiver had been wired wrong once and afterwards kept OUT pulled LOW (the LED always on, D2 read LOW); after changing to another one, it received.
+- The remote, the LED, the square and the staff **have not been tried on the board with a remote yet** (I cannot press a remote). The decoding was tested on the computer: 256 commands, ±15% timing error, holding, noise and broken halves all decoded right (see [lib/NEC](../../lib/NEC/INTERFACE.md#nec-協定)).

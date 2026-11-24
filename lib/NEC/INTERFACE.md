@@ -6,7 +6,7 @@
 | 遙控器的指令表 | `NEC::Remote17KeyNumbersTop`、`Remote17KeyArrowsTop`：碼換成鍵（`KEY_1`、`KEY_UP`…） |
 | 發射：`Carrier`：38 kHz 開、關（`Uno::UnoIrCarrier<3>`） | `NEC::IRLED`：用紅外線 LED 當遙控器 |
 
-給要寫新套件、換主板或換零件的人；用法、接線、注意事項見 [README.md](README.md)。
+給要寫新套件、換主板或換零件的人；用法、接線、注意事項見 [讀我.md](讀我.md)。
 
 ## 前提條件
 

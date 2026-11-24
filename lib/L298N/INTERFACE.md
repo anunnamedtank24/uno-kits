@@ -2,17 +2,17 @@
 
 | 需要 | 得到 |
 |---|---|
-| EN 拔掉跳線帽：IN 用輸出腳（`Uno::UnoOutputPin<PIN>`）、EN 用 PWM 腳（`Uno::UnoPwmPin<PIN>`） | `L298N::L298NBoard`：兩個 H 橋 `Board::A`、`Board::B` |
-| EN 接著跳線帽：IN 用 PWM 腳（`Uno::UnoPwmPin<PIN>`），或 `L298N::Ground`（接 GND） | `L298N::L298NBoardJumpers`：同上，速度用 IN 的 PWM |
+| 每隻 IN、EN：PWM 腳（`Uno::UnoPwmPin<PIN>`）、輸出腳（`Uno::UnoOutputPin<PIN>`），或不接 UNO：`L298N::Ground`（接 GND）、`L298N::Supply`（接 +5V；EN 的跳線帽是 `L298N::EnableJumper`） | `L298N::L298NBoard`：兩個 H 橋 `Board::A`、`Board::B`，能做什麼由接線決定（編譯時）；`L298NBoardJumpers`（EN 跳線帽接著）、`L298NBoardParallel`（兩個通道並聯成一個） |
 | 上面的 `Board::A`、`Board::B` | `L298N::DCMotor`（速度、漸變、煞車、死區）、`Stepper`（步進馬達）、`TwoWheelCar`（兩輪車，動作排隊執行） |
 
-給要寫新套件、換主板或換零件的人；用法、接線、注意事項見 [README.md](README.md)。
+給要寫新套件、換主板或換零件的人；用法、接線、注意事項見 [讀我.md](讀我.md)。
 
 ## 前提條件
 
 | 項目 | 條件 |
 |---|---|
-| 腳位 | IN：輸出 `Pin`（或 `Ground`：接 GND）；EN：`Pwm`（或 `EnableJumper`：跳線帽接著） |
+| 腳位 | IN、EN：`Pwm`、輸出 `Pin`，或 `Ground`（接 GND，EN 不行）、`Supply` / `EnableJumper`（接 +5V）；至少一隻是真的腳 |
+| 電源 | 選填 `SUPPLY_MV`、`JUMPER_5V`：編譯時檢查電壓和 5V-EN 跳線 |
 | 電源 | 馬達電源的 GND 一定要跟 UNO 的 GND 接在一起 |
 | 呼叫 | `update()` 每次 loop 都要呼叫，或交給 `Uno::UnoBackground`；每個函式短暫關中斷，背景和 loop 不會互相干擾 |
 | PWM | EN 用 Timer0 的腳（D5、D6）不影響 `millis`；D9 / D10（Timer1）不能跟 `UnoTone`、`UnoPcmOut` 一起用 |
@@ -22,11 +22,12 @@
 ```
 lib/L298N/
 ├── L298N.h             入口：全部（程式只 include 它）
-├── bridge.h            一個 H 橋：Bridge<In1, In2, Enable>、InputPwmBridge<In1, In2>、EnableJumper、Ground
+├── bridge.h            一個 H 橋：Bridge<In1, In2, Enable>（任何接線）、Ground、Supply、EnableJumper、InputPwmBridge<In1, In2>
 ├── dc_motor.h          DCMotor<Bridge>：直流馬達，速度 -255 ～ 255、漸變、死區、反向、煞車 / 滑行
 ├── stepper.h           Stepper<BridgeA, BridgeB>：雙極步進馬達，WAVE / FULL / HALF、步數 / 秒、位置
 ├── module/             實際買到的零件
-│   └── L298N_board.h   L298NBoard<Ena, In1, In2, In3, In4, Enb>、L298NBoardJumpers<In1 ～ In4>：紅色模組
+│   └── L298N_board.h   L298NBoard<Ena, In1, In2, In3, In4, Enb, SUPPLY_MV, JUMPER_5V>、L298NBoardJumpers<In1 ～ In4, …>、
+│                       L298NBoardParallel<Enable, In1, In2, …>：紅色模組、每一種接線、5V-EN 跳線
 └── device/             用它做成的東西（一個 class = 一種接線方式，參數可以調）
     └── two_wheel_car.h TwoWheelCar<Board, IN12_SIDE, IN12_POSITIVE, IN34_POSITIVE>：兩輪車，直走、原地旋轉、單輪旋轉、速差，有時間、會排隊
 ```
@@ -37,10 +38,8 @@ lib/L298N/
 
 | 參數 | 需要的 static 函式 | 現成的實作 |
 |---|---|---|
-| `In1`、`In2`（`Bridge`） | `init()`、`write(bool)`、`nowMs()`、`nowUs()` | `Uno::UnoOutputPin`、`L298N::Ground`（接 GND） |
-| `Enable`（`Bridge`） | `init()`、`write(duty)` | `Uno::UnoPwmPin`、`L298N::EnableJumper` |
-| `In1`、`In2`（`InputPwmBridge`） | `init()`、`write(duty)`、`nowMs()`、`nowUs()` | `Uno::UnoPwmPin`、`L298N::Ground`（接 GND） |
-| `Bridge`（`DCMotor`、`Stepper`） | `init()`、`drive(duty)`、`brake(duty)`、`coast()`、`nowMs()`、`nowUs()`、`stopInterrupts()`、`restoreInterrupts()` | `L298N::Bridge`、`InputPwmBridge`；板子的 `Board::A`、`Board::B` |
+| `In1`、`In2`、`Enable`（`Bridge`） | 腳：`init()`、`write(bool)`；PWM 腳：`init()`、`write(duty)` 和 `IS_PWM_OUTPUT = true`；第一隻真的腳另外要 `nowMs()`、`nowUs()`、`stopInterrupts()`、`restoreInterrupts()` | `Uno::UnoOutputPin`、`Uno::UnoPwmPin`；不接 UNO：`L298N::Ground`（`IS_GROUND`）、`L298N::Supply` / `EnableJumper`（`IS_SUPPLY`） |
+| `Bridge`（`DCMotor`、`Stepper`） | `init()`、`drive(duty)`、`brake(duty)`、`coast()`、`nowMs()`、`nowUs()`、`stopInterrupts()`、`restoreInterrupts()` | `L298N::Bridge`；板子的 `Board::A`、`Board::B`、`Board::Motor` |
 
 ## 函式
 
@@ -49,10 +48,43 @@ lib/L298N/
 | 函式 | 說明 |
 |---|---|
 | `init()` | 設定腳位，滑行 |
-| `drive(duty)` | -255 ～ 255：> 0 正轉（OUT1 是 +）、< 0 反轉、0 滑行。先設 IN 再設 EN，不會有一瞬間轉錯方向 |
-| `brake(duty)` | 兩端短路煞車；duty 0 ～ 255 是煞多用力（PWM 煞車），預設 255 |
+| `drive(duty)` | -255 ～ 255：> 0 正轉（OUT1 是 +）、< 0 反轉、0 滑行。先把要變 LOW 的 IN 設好，換方向時只會經過煞車，不會有一瞬間轉錯方向；這個接線不能的方向會煞車（不能煞車時滑行） |
+| `brake(duty)` | 兩端短路煞車；duty 0 ～ 255 是煞多用力（只有 EN 是 PWM 腳時：煞車 / 滑行交替），預設 255；不能煞車的接線會滑行 |
 | `coast()` | 輸出斷開，馬達自己慢慢停；EN 一直開的接法會變成煞車 |
-| `nowMs()`、`nowUs()` | 時間，從 In1 來 |
+| `nowMs()`、`nowUs()` | 時間，從第一隻接到 UNO 的腳來（In1、In2、Enable 的順序） |
+
+| 常數（編譯時） | 說明 |
+|---|---|
+| `CAN_FORWARD`、`CAN_BACKWARD`、`BOTH_WAYS` | 能正轉（IN1 能 HIGH、IN2 能 LOW）、能反轉、兩個都能 |
+| `CAN_BRAKE` | IN1、IN2 能一樣（都 LOW 或都 HIGH） |
+| `CAN_COAST` | EN 能 LOW（不是 `Supply` / `EnableJumper`） |
+| `HAS_SPEED` | 有 PWM 腳能調速；false：只有全速 |
+| `HAS_BRAKE_DUTY` | `brake(duty)` 能小於 255（EN 是 PWM 腳） |
+| `PIN_COUNT` | 佔 UNO 幾隻腳（0 ～ 3） |
+
+| 調速用的腳（依序找） | 一個週期裡 | 說明 |
+|---|---|---|
+| EN 是 PWM 腳 | 驅動 / 滑行 | 最平順，也能滑行 |
+| 要變 HIGH 的 IN 是 PWM 腳 | 驅動 / 煞車（兩隻 LOW） | EN 一直開時（跳線帽） |
+| 要變 LOW 的 IN 是 PWM 腳 | 驅動 / 煞車（兩隻 HIGH），工作週期反過來（255 - duty） | 例如 IN1 接 +5V、IN2 接 PWM 腳 |
+| 沒有 | 全速 | 任何不是 0 的 duty 都是 255 |
+
+### 板子（module/L298N_board.h）
+
+| 型態 | 說明 |
+|---|---|
+| `L298NBoard<Ena, In1, In2, In3, In4, Enb, SUPPLY_MV = 0, JUMPER_5V = true>` | `A` = `Bridge<In1, In2, Ena>`（OUT1、OUT2），`B` = `Bridge<In3, In4, Enb>`（OUT3、OUT4） |
+| `L298NBoardJumpers<In1, In2, In3, In4, SUPPLY_MV = 0, JUMPER_5V = true>` | 同上，Ena、Enb 是 `EnableJumper` |
+| `L298NBoardParallel<Enable, In1, In2, SUPPLY_MV = 0, JUMPER_5V = true>` | 兩個通道並聯（OUT1 + OUT4、OUT2 + OUT3、IN1 + IN4、IN2 + IN3、ENA + ENB）：`Motor`（= `A`）一個 Bridge |
+| `SUPPLY_MILLIVOLTS`、`FIVE_V_IS_OUTPUT` | 上面三個都有：電壓、+5V 是不是輸出（5V-EN 跳線接著） |
+
+| 檢查 | 結果 |
+|---|---|
+| EN 接 GND、IN1 和 IN2 都接 GND 或都接 +5V、三隻都不接 UNO | 編譯錯誤（`L298N::Bridge: …`） |
+| `SUPPLY_MV` > 35000 | 編譯錯誤 |
+| 跳線接著、`SUPPLY_MV` > 12000 | 編譯警告 `L298N::warn::RegulatorHot` |
+| 跳線接著、0 < `SUPPLY_MV` < 7000 | 編譯警告 `L298N::warn::RegulatorLow` |
+| 0 < `SUPPLY_MV` < 5000 | 編譯警告 `L298N::warn::SupplyLow` |
 
 ### DCMotor：直流馬達
 
@@ -85,7 +117,7 @@ lib/L298N/
 | `update()` | 每次 loop 都要呼叫；剛走一步時回傳 true |
 | `isMoving()` | 還有步要走（或 `run` 中），以及最後一步之後的一個間隔（讓轉子到位） |
 | `position()`、`setPosition(p)`、`target()` | 現在的步數（往前 +）、把現在的位置叫做 p、目標 |
-| `setRunDuty(duty)` | 走的時候線圈的工作週期，預設 255。用來降低電流（見 [README 的步進馬達要注意](README.md#步進馬達要注意)） |
+| `setRunDuty(duty)` | 走的時候線圈的工作週期，預設 255。用來降低電流（見 [讀我 的步進馬達要注意](讀我.md#步進馬達要注意)） |
 | `setHoldDuty(duty)` | 停的時候線圈的工作週期，預設 0 = 不通電（不熱，但軸可以被轉動）；> 0 可以出力固定位置，但會熱 |
 | `release()` | 兩個線圈馬上斷電 |
 
@@ -101,7 +133,7 @@ lib/L298N/
 
 | 參數 | 值 | 意思 |
 |---|---|---|
-| `Board` | `L298NBoard<…>` 或 `L298NBoardJumpers<…>` | 板子和腳位；Board::A = IN1、IN2 → OUT1、OUT2，Board::B = IN3、IN4 → OUT3、OUT4 |
+| `Board` | `L298NBoard<…>` 或 `L298NBoardJumpers<…>`（任何接線） | 板子和腳位；Board::A = IN1、IN2 → OUT1、OUT2，Board::B = IN3、IN4 → OUT3、OUT4 |
 | `IN12_SIDE` | `L298N::LEFT`、`L298N::RIGHT` | IN1、IN2 接的是哪個輪子；IN3、IN4 就是另一個 |
 | `IN12_POSITIVE` | `L298N::FORWARD`、`L298N::BACKWARD` | IN1 - IN2 為正（IN1 HIGH、IN2 LOW）時，那個輪子往前還是往後 |
 | `IN34_POSITIVE` | `L298N::FORWARD`、`L298N::BACKWARD` | IN3 - IN4 為正時，另一個輪子往前還是往後 |
@@ -127,7 +159,7 @@ car.spin(180, 450);            // 接著原地右轉 0.45 秒（排隊，不用�
 | `pivotRight(speed, ms)` | 單輪旋轉：右輪煞住不動，左輪轉，車往右轉 | speed | 煞車 |
 | `arc(speed, difference, ms)` | 兩輪速差：difference > 0 往右彎、< 0 往左彎 | speed + difference / 2 | speed - difference / 2 |
 | `wheels(left, right, ms)` | 兩輪各自的速度 | left | right |
-| `brake(ms)`、`coast(ms)` | 停住 / 滑行一段時間（EN 跳線接著時滑行會變成煞車） | | |
+| `brake(ms)`、`coast(ms)` | 停住 / 滑行一段時間（EN 跳線接著時滑行會變成煞車；不能煞車的接線，煞車會變成滑行） | | |
 
 | 函式 | 說明 |
 |---|---|
@@ -140,11 +172,21 @@ car.spin(180, 450);            // 接著原地右轉 0.45 秒（排隊，不用�
 | `until(condition)` | 最後給的動作在 `condition()` 成立時提早結束 |
 | `setFailsafeMs(ms)` | 沒有時間的動作，超過 ms 沒有新動作就自動煞車（0 = 不會） |
 | `wait()` | 一直呼叫 `update()` 直到 `isBusy()` 是 false（會卡住） |
+| `LEFT_BOTH_WAYS`、`RIGHT_BOTH_WAYS`、`CAN_COAST`、`CAN_BRAKE`、`HAS_SPEED` | 常數：這個接線的輪子能不能反轉、滑行、煞車、調速 |
 | `queued()` | 排隊中的動作數 |
 | `leftSpeed()`、`rightSpeed()` | 現在兩輪的速度（+ = 往前） |
 | `setRampMs(ms)` | 兩輪的漸變；**漸變時間算在動作的時間裡** |
 | `setMinDuty(duty)` | 兩輪的死區 |
 | `setTrim(left%, right%)` | 一顆馬達比較快（直走會偏）：把快的那邊調成 90 % 之類 |
+
+- **接線**：`Board` 可以是任何接線，能做的動作跟著它：
+
+  | 接線 | 型態 | 腳位 | 能做的 |
+  |---|---|---|---|
+  | ENA、ENB 接 PWM 腳，IN1 ～ IN4 接腳（跳線帽拔掉） | `L298NBoard<UnoPwmPin, UnoOutputPin ×4, UnoPwmPin>` | 6 | 全部動作；EN 調速；`coast` 真的滑行（`src/week_7_L298N/tests/8_car_enable.cpp`） |
+  | ENA、ENB 接 PWM 腳，IN1、IN3 接 +5V，IN2、IN4 接 GND | `L298NBoard<UnoPwmPin, Supply, Ground, Supply, Ground, UnoPwmPin>` | 2 | 只能往前；EN 調速；不能煞車（停下來、單輪旋轉的那一輪都是滑行） |
+  | 跳線帽接著，IN1 ～ IN4 接 PWM 腳 | `L298NBoardJumpers<UnoPwmPin ×4>` | 4 | 全部動作；IN 調速；`coast` 會煞車（`tests/6_car`、`tests/7_background_remote`） |
+  | 跳線帽接著，IN1、IN3 接 PWM 腳，IN2、IN4 接 GND | `L298NBoardJumpers<UnoPwmPin, Ground, UnoPwmPin, Ground>` | 2 | 只能往前；IN 調速；`coast` 會煞車 |
 
 - **時間**：每個動作的 `ms` 到了就換下一個；最後一個計時的動作結束後兩輪煞車。
 - **沒有時間**（`car.forward(180)`）：一直做，直到下面任何一個發生，然後兩輪煞車（或換下一個動作）：
@@ -179,7 +221,9 @@ car.spin(180, 450);            // 接著原地右轉 0.45 秒（排隊，不用�
 | `setRampMs` | 0 ～ 65535 ms | — |
 | `Stepper::setSpeed` | 1 ～ 2000 步 / 秒 | 夾到範圍內 |
 | `Stepper` 的位置 | ±21 億步 | 之後繞回 |
-| EN 的腳位 | PWM 腳（3、5、6、9、10、11） | 編譯錯誤（`UnoPwmPin`） |
+| `UnoPwmPin` 的腳位 | PWM 腳（3、5、6、9、10、11） | 編譯錯誤 |
+| 接線 | EN 不能接 GND；IN1、IN2 不能都接 GND 或都接 +5V；至少一隻接 UNO | 編譯錯誤 |
+| `SUPPLY_MV` | 0 ～ 35000；跳線接著時建議 7000 ～ 12000 | 編譯錯誤；編譯警告 |
 | `update()` 的間隔 | 越常越好 | 步進馬達：比步的間隔久時會變慢（`delay` 會讓它停） |
 
 ## 資源
@@ -187,5 +231,5 @@ car.spin(180, 450);            // 接著原地右轉 0.45 秒（排隊，不用�
 | 項目 | 用量 |
 |---|---|
 | RAM | `DCMotor` 約 14 bytes、`Stepper` 約 26 bytes；`Bridge` 沒有 |
-| 硬體 | 每個通道 2 隻數位腳 + 1 隻 PWM 腳（或 0 隻，跳線帽接著）；不用中斷 |
+| 硬體 | 每個通道 0 ～ 3 隻腳（`PIN_COUNT`）：IN、EN 接 GND / +5V / 跳線帽的不佔腳；不用中斷 |
 | 時間 | 都不會等 |

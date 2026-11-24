@@ -5,7 +5,7 @@
 | 有源：一個 `Pin`：`init()`、`write(high)`…（`Uno::UnoOutputPin<PIN>`） | `buzzer::ActiveBuzzer2Pins`、`ActiveBuzzer3Pins`：開、關（音高固定） |
 | 無源：一個 `Tone`：`init()`、`start(hz)`、`stop()`…（`Uno::UnoTone<PIN>`） | `buzzer::PassiveBuzzer2Pins`、`PassiveBuzzer3Pins`：任意頻率、音量 |
 
-給要寫新套件、換主板或換零件的人；用法、接線、注意事項見 [README.md](README.md)。
+給要寫新套件、換主板或換零件的人；用法、接線、注意事項見 [讀我.md](讀我.md)。
 
 ## 前提條件
 
@@ -36,7 +36,7 @@ lib/buzzer/
 | `Pin`（有源） | `init()`、`write(high)`、`nowMs()`、`readFlash8(address)`、`readFlash16(address)` | `Uno::UnoOutputPin` |
 | `Tone`（無源） | `init()`、`start(hz)`（播放中呼叫就換頻率）、`stop()`（腳位回到安靜的電位）、`realHz()`、`nowMs()`、`readFlash8(address)`、`readFlash16(address)`；常數 `IDLE_LEVEL_HIGH`（安靜時是不是 HIGH，模組用它檢查） | `Uno::UnoTone<PIN, IDLE_HIGH>` |
 
-每個模組本身都是 `audio::Player`、`StreamPlayer` 要的 Sound（`HAS_PITCH`、`init`、`start`、`stop`、`nowMs`、`readFlash8/16`）：有源的 `HAS_PITCH` 是 false，給它音符會編譯警告（只聽得到節奏）。播取樣（PCM）不經過這裡，用 `Uno::UnoPcmOut`，見 [audio](../audio/README.md#接線)。
+每個模組本身都是 `audio::Player`、`StreamPlayer` 要的 Sound（`HAS_PITCH`、`init`、`start`、`stop`、`nowMs`、`readFlash8/16`）：有源的 `HAS_PITCH` 是 false，給它音符會編譯警告（只聽得到節奏）。播取樣（PCM）不經過這裡，用 `Uno::UnoPcmOut`，見 [audio](../audio/讀我.md#接線)。
 
 ## 函式
 
@@ -67,7 +67,7 @@ lib/buzzer/
 | 腳位 | 0 ～ 19；D0 / D1 編譯警告 | 編譯錯誤 |
 | 無源的 hz | 16 ～ 20000（`UnoTone`）；好聽的範圍約 200 ～ 5000，最大聲在共振頻率（常見 2 ～ 4 kHz） | 夾到範圍內 |
 | 有源的 hz | 任何 > 0 都一樣 | — |
-| 音量 | 無源 0 ～ 255、有源只能靜音（見[音量](README.md#音量)） | 255 以上不可能（已經是 50%） |
+| 音量 | 無源 0 ～ 255、有源只能靜音（見[音量](讀我.md#音量)） | 255 以上不可能（已經是 50%） |
 | 同時發幾個音 | 一個 Sound 一個音 | — |
 
 ## 資源

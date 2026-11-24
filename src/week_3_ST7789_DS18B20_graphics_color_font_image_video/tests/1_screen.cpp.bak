@@ -51,14 +51,14 @@ void clear() {
 // ---------- tests ----------
 
 // 0. solid colors: checks init, RGB/BGR order and inversion
-//    expected: red -> green -> blue -> white -> black
+//    expected: red -> green -> blue -> white -> black -> yellow
 void testColors() {
     const Color colors[] = {
-        ScreenColor::RED, 
-        ScreenColor::GREEN, 
-        ScreenColor::BLUE, 
-        ScreenColor::WHITE, 
-        ScreenColor::BLACK, 
+        ScreenColor::RED,
+        ScreenColor::GREEN,
+        ScreenColor::BLUE,
+        ScreenColor::WHITE,
+        ScreenColor::BLACK,
         ScreenColor::YELLOW,
     };
     for (uint8_t i = 0; i < sizeof(colors) / sizeof(colors[0]); i++) {
@@ -307,7 +307,7 @@ void testTextDefault() {
 //       white text over blue / red: background stays around every letter
 //       red "ABC" and green "ABC" 2 px apart: both visible
 //       "x=123" then a magenta bar right after it, then "(x)" with its value
-//       "empty ok", "fontHeight=23", "F() in flash false" 
+//       "empty ok", "fontHeight=23", "F() in flash false"
 //       "left edge" at x 0, "right edge" ending at x 239, "bottom" on the last text line (y 217)
 void testTextLayout() {
     screen.drawFilledRectSize(0, 0, 120, 30, ScreenColor::BLUE);

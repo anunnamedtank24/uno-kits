@@ -25,7 +25,6 @@ Usage:
 Output (struct animation::{name}, name = {file}_{target}_{w}x{h}_palette_{p}[_mono] or --name):
     --target flash / flash stream: output/{name}.h with the frames (FlashPlayer plays it, StreamPlayer can open it)
     --target stream:               output/{name}.h: size + path for the board, the frames after it in #if 0 (stream.py reads them)
-                            + output/{name}.h without frames: size, colors, duration, path of the frames
     every output/{name}.h is added to output/selected.h, then selected.h is checked (source/check.py)
     every setting is written at the top of the files, whatever the name says
     getPath(): where stream.py finds the frames, relative to lib/video
@@ -34,7 +33,7 @@ Files:
     .mp4 .mov .m4v .webm .mkv .avi   videos, decoded by ffmpeg (brew install ffmpeg): frames taken at the
                                 video's fps, at most EXTRACT_MAX_FPS (or --max-fps), shrunk to at most
                                 EXTRACT_MAX_SIZE px first; the sound is ignored
-    --start S --duration S      only this part, seconds (a video is long: the UNO's flash holds seconds)
+    --start S --duration S      only this part, seconds (a video is long: a board's flash holds seconds)
     a still picture (one frame) works too: it shows forever
 Ranges: source/config.json (per target, both targets: what both allow); hard limits stop with an error,
         recommended ranges warn
@@ -49,7 +48,8 @@ Size (all sizes are on the screen, after scale):
     --resample              nearest (pixel art) / bilinear / bicubic / lanczos (default)
 Colors:
     --palette 16            one palette of up to 16 colors, 1 byte per run
-    --palette 256           one palette of up to 256 colors, 2 bytes per run (flash only: palette stays in flash)
+    --palette 256           one palette of up to 256 colors, 2 bytes per run (flash: the palette stays in flash;
+                            stream: warns, the board keeps the palette in RAM)
     --palette 565           every pixel its own RGB565 color, 3 bytes per run
     --colors N              fewer colors in the palette (16 / 256 only), --dither for gradients
     --mono                  black and white only (palette 16 with 0x0000 / 0xFFFF), for OLEDs:
@@ -67,9 +67,7 @@ Frames:
 
 CONFIG_PATH = Path(__file__).resolve().parent/"config.json"
 CONFIG = json.loads(CONFIG_PATH.read_text())
-BOARD = CONFIG["board"]
 TARGETS = CONFIG["targets"]
-FLASH_BYTES = 32256 # UNO flash for the program
 TARGET_BITS = {"flash": 1, "stream": 2} # video::TARGET_FLASH / TARGET_STREAM
 
 PILLOW_SUFFIXES = (".gif", ".webp", ".png", ".apng")
@@ -434,10 +432,14 @@ def get_run_count(window_bytes: list[int], palette: int) -> int:
 
 def get_windows_cost(windows_bytes: list[list[int]], rects: list[tuple[int, int, int, int]],
                      scale_x: int, scale_y: int, palette: int, byte_cycles: float) -> float:
+    # the board's drawing cycles (--board: screenBus)
+    window_cycles = check.board_value("screenBus", "windowCycles")
+    pixel_cycles = check.board_value("screenBus", "pixelCycles")
+    run_cycles = check.board_value("screenBus", "runCycles")
     cost = 0
     for window_bytes, (_, _, w, h) in zip(windows_bytes, rects):
-        cost += BOARD["windowCycles"] + BOARD["pixelCycles"]*scale_x*scale_y*w*h
-        cost += BOARD["runCycles"]*get_run_count(window_bytes, palette) + byte_cycles*len(window_bytes)
+        cost += window_cycles + pixel_cycles*scale_x*scale_y*w*h
+        cost += run_cycles*get_run_count(window_bytes, palette) + byte_cycles*len(window_bytes)
     return cost
 
 
@@ -501,6 +503,8 @@ def get_bounding_rect(rects: list[tuple[int, int, int, int]]) -> tuple[int, int,
 def get_frame_bytes(previous: list[int] | None, current: list[int], width: int, height: int, delay: int,
                     scale_x: int, scale_y: int, palette: int, tile: int, byte_cycles: float) -> tuple[list[int], int, float]:
     # previous None: I frame; returns (bytes, type, cost in cycles)
+    # the delay is a uint16_t of the frame (a GIF frame can say up to 655 s): longer is shown 65.5 s
+    delay = min(delay, 0xFFFF)
     full_rects = [(0, 0, width, height)]
     options = [full_rects]
     if previous is not None:
@@ -568,7 +572,7 @@ def get_decoded_frame(frame_bytes: list[int], previous: list[int] | None, width:
 # ---------- estimates ----------
 
 def get_frame_ms(frame_cost: float) -> float:
-    return frame_cost*1000/BOARD["cpuHz"]
+    return frame_cost*1000/check.board_value("cpuHz")
 
 
 def get_reachable_fps(all_frame_bytes: list[tuple[list[int], int, float]], delays: list[int]) -> float:
@@ -588,7 +592,7 @@ def get_c_table_str(type_: str, name: str, values: list, values_per_line: int = 
 
 def get_c_list_str(type_: str, name: str, content_str: str) -> str:
     c_list_str = ""
-    c_list_str += f"static const {type_} {name}[] PROGMEM = {{\n"
+    c_list_str += check.get_array_start_str(type_, name) + "{\n"
     c_list_str += indent(content_str.rstrip("\n")) + "\n"
     c_list_str += "};\n"
     return c_list_str
@@ -670,15 +674,11 @@ def get_c_start_str(name: str, command: str, video_path: Path, settings_str: str
     c_str += "// generated by convert.py, do not edit\n"
     c_str += command
     c_str += check.get_format_str()
+    c_str += check.get_board_str()
     c_str += check.get_source_str(video_path)
     c_str += settings_str + "\n"
     c_str += "#include <stdint.h>\n"
-    c_str += "#if defined(__AVR__)\n"
-    c_str += "#include <avr/pgmspace.h>\n"
-    c_str += "#endif\n"
-    c_str += "#ifndef PROGMEM\n"
-    c_str += "#define PROGMEM\n"
-    c_str += "#endif\n\n"
+    c_str += check.get_flash_include_str() + "\n"
     c_str += "namespace animation {\n"
     return c_str
 
@@ -708,7 +708,7 @@ def get_c_info_str(settings: Settings, palette: list[int], all_frame_bytes: list
     c_info_str += f"static constexpr uint32_t durationMs = {sum(delays)};\n"
     c_info_str += "\n"
     c_info_str += get_c_getter_str("where stream.py finds the frames, relative to lib/video (video::StreamPlayer sends it)",
-                                   "char", "getPath", f'static const char path[] PROGMEM = "{path}";\n', "path")
+                                   "char", "getPath", check.get_array_start_str("char", "path") + f'"{path}";\n', "path")
     return c_info_str
 
 
@@ -884,7 +884,21 @@ def get_parser() -> argparse.ArgumentParser:
     frame_group.add_argument("--reduce", choices=("fps", "size"), default="size", help="what --max-bytes lowers first (default size)")
     frame_group.add_argument("--keyframe", type=get_non_negative_int, default=0, help="flash: I frame every N frames, to catch up when late (default 0)")
     frame_group.add_argument("--tile", type=get_positive_int, default=8, help="tile size in px for finding changed areas (default 8)")
+    check.add_board_argument(parser)
     return parser
+
+
+def get_byte_cycles(targets: list[str]) -> float:
+    # what a byte of data costs the board: read from flash, or over the serial (stream only); the board's numbers
+    if "flash" in targets:
+        return check.board_value("flash", "byteCycles")
+    return check.get_stream_byte_cycles()
+
+
+def get_recommended_max_bytes(target: dict) -> int | None:
+    # config.json gives a share of the board's flash (null: no limit)
+    share = target["recommendedMaxFlashShare"]
+    return None if share is None else round(share*check.board_value("flash", "bytes"))
 
 
 def check_args(parser: argparse.ArgumentParser, args: argparse.Namespace) -> list[str]:
@@ -965,8 +979,7 @@ def get_target_config(targets: list[str]) -> dict:
         "palettes": palettes,
         "recommendedPalettes": [palette for palette in flash["recommendedPalettes"] if palette in stream["recommendedPalettes"]],
         "defaultPalette": default_palette,
-        "byteCycles": flash["byteCycles"],
-        "recommendedMaxBytes": flash["recommendedMaxBytes"],
+        "recommendedMaxFlashShare": flash["recommendedMaxFlashShare"],
         "useKeyframe": flash["useKeyframe"],
     }
 
@@ -978,7 +991,7 @@ def get_settings(args: argparse.Namespace, video_size: tuple[int, int], size_fac
     scale_x, scale_y = args.scale
     stored_width, stored_height = get_stored_size(screen_width, screen_height, scale_x, scale_y)
     return Settings(
-        targets=args.target, byte_cycles=get_target_config(args.target)["byteCycles"],
+        targets=args.target, byte_cycles=get_byte_cycles(args.target),
         palette=args.palette, colors=args.colors, dither=args.dither, mono=args.mono, threshold=args.threshold,
         invert=args.invert, background=args.background,
         screen_width=screen_width, screen_height=screen_height, crop=crop, scale_x=scale_x, scale_y=scale_y,
@@ -1054,8 +1067,9 @@ def convert_video_to_h(args: argparse.Namespace, command: str, warnings: list[st
             raise ValueError(f"cannot fit --max-bytes {args.max_bytes}: smallest try is {data_bytes} bytes "
                              f"(--min-fps {args.min_fps} and size {MIN_STORED_SIZE} px reached)")
     warnings += size_warnings
-    if "flash" in args.target and data_bytes > FLASH_BYTES:
-        raise ValueError(f"{data_bytes} bytes: more than the UNO's flash ({FLASH_BYTES}); make it smaller "
+    if "flash" in args.target and data_bytes > check.board_value("flash", "bytes"):
+        raise ValueError(f"{data_bytes} bytes: more than the flash of {check.board_value('name')} "
+                         f"({check.board_value('flash', 'bytes')}); make it smaller "
                          f"(--max-bytes, a smaller size or palette) or use --target stream")
 
     reachable_fps = get_reachable_fps(all_frame_bytes, delays)
@@ -1065,8 +1079,10 @@ def convert_video_to_h(args: argparse.Namespace, command: str, warnings: list[st
         warnings.append(f"the board reaches ~{reachable_fps:.1f} fps of {fps:.1f} ({way})")
     if args.min_fps is not None and reachable_fps < args.min_fps:
         warnings.append(f"the board reaches ~{reachable_fps:.1f} fps, below --min-fps {args.min_fps}")
-    if target["recommendedMaxBytes"] is not None and data_bytes > target["recommendedMaxBytes"]:
-        warnings.append(f"{data_bytes} bytes is above {target['recommendedMaxBytes']} (config.json) for --target {' '.join(args.target)}")
+    recommended_max_bytes = get_recommended_max_bytes(target)
+    if recommended_max_bytes is not None and data_bytes > recommended_max_bytes:
+        warnings.append(f"{data_bytes} bytes is above {recommended_max_bytes} (config.json: a share of the board's flash) "
+                        f"for --target {' '.join(args.target)}")
 
     name = args.name or check.get_free_name(output_dir_path, get_name(video_path, settings), video_path, command)
     output_file_path = output_dir_path/(name + ".h")
@@ -1103,6 +1119,10 @@ def convert_video_to_h(args: argparse.Namespace, command: str, warnings: list[st
 def main():
     parser = get_parser()
     args = parser.parse_args()
+    try:
+        check.load_board(args.board)
+    except ValueError as e:
+        parser.error(str(e))
     warnings = check_args(parser, args)
     command = check.get_options_str(check.get_options(sys.argv[1:], [args.video_path, args.output_dir_path]))
     try:
